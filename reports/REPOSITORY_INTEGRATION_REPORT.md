@@ -76,5 +76,5 @@ main (a021460) Merge PR #1 Phase 1 infrastructure foundation
 
 ## Exact PR Status
 - PR #1: merged into `main` via GitHub merge commit `a021460acab976f0efb3ab834667c24e87b57077`
-- PR #2: open on `feature/phase2-localization` after the cumulative history rewrite, targeting `main`
+- PR #2: open on `feature/phase2-localization` after the cumulative history rewrite, targeting `main`, with mergeability still reported as `false` during GitHub re-evaluation
 - No new branch was introduced for Phase 3, and Phase 3 has not started
