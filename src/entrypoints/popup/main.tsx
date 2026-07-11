@@ -148,6 +148,7 @@ function Popup() {
 
     const { bytes, fileName, fileSize, mimeType } = validation.file;
     const byteArray = Array.from(new Uint8Array(bytes));
+    const recordId = SELECTED_PDF_RECORD_ID;
 
     try {
       await ensureOffscreenDocument();
@@ -155,36 +156,43 @@ function Popup() {
       const storeResponse = await sendMessage<PdfStoreResponse>({
         type: "pdf:store",
         record: {
-          recordId: SELECTED_PDF_RECORD_ID,
-          fileName,
-          fileSize,
-          mimeType: mimeType || null,
-          bytes: byteArray,
+          id: recordId,
+          name: fileName,
+          size: fileSize,
+          type: mimeType || null,
+          lastModified: file.lastModified,
+          data: byteArray,
         },
       });
       const readBack = await sendMessage<PdfReadResponse>({
         type: "pdf:read",
-        recordId: SELECTED_PDF_RECORD_ID,
+        recordId,
+      });
+
+      console.info("[pdf-compressor] PDF record persistence debug", {
+        writtenRecordId: recordId,
+        readRecordId: readBack.recordId,
+        found: readBack.record !== null,
       });
 
       if (!readBack.record) {
-        throw new Error("Local PDF record was not returned after persistence");
+        throw new Error(`Local PDF record was not returned after persistence (recordId=${recordId})`);
       }
 
-      const storedBytes = new Uint8Array(readBack.record.bytes).buffer;
+      const storedBytes = new Uint8Array(readBack.record.data).buffer;
 
       if (readBack.byteLength !== byteArray.length || !bytesEqual(bytes, storedBytes)) {
         throw new Error(
-          `Local PDF verification failed: wrote ${byteArray.length} bytes, read ${readBack.byteLength} bytes`,
+          `Local PDF verification failed: wrote ${byteArray.length} bytes, read ${readBack.byteLength} bytes (recordId=${recordId})`,
         );
       }
 
       setPdf({
         status: "ready",
         selected: true,
-        fileName: readBack.record.fileName,
-        fileSize: readBack.record.fileSize,
-        mimeType: readBack.record.mimeType,
+        fileName: readBack.record.name,
+        fileSize: readBack.record.size,
+        mimeType: readBack.record.type,
         recordId: storeResponse.recordId,
         storedByteLength: storeResponse.byteLength,
         readBackByteLength: readBack.byteLength,
@@ -200,7 +208,7 @@ function Popup() {
       try {
         await sendMessage<PdfDeleteResponse>({
           type: "pdf:delete",
-          recordId: SELECTED_PDF_RECORD_ID,
+          recordId,
         });
       } catch {
         // Best effort cleanup only.
@@ -225,6 +233,11 @@ function Popup() {
         recordId: SELECTED_PDF_RECORD_ID,
       });
 
+      console.info("[pdf-compressor] PDF restore debug", {
+        requestedRecordId: SELECTED_PDF_RECORD_ID,
+        found: readBack.record !== null,
+      });
+
       if (!readBack.record) {
         return;
       }
@@ -232,16 +245,16 @@ function Popup() {
       setPdf({
         status: "ready",
         selected: true,
-        fileName: readBack.record.fileName,
-        fileSize: readBack.record.fileSize,
-        mimeType: readBack.record.mimeType,
-        recordId: readBack.record.recordId,
+        fileName: readBack.record.name,
+        fileSize: readBack.record.size,
+        mimeType: readBack.record.type,
+        recordId: readBack.record.id,
         storedByteLength: readBack.byteLength,
         readBackByteLength: readBack.byteLength,
         error: "",
       });
       console.info("[pdf-compressor] Selected PDF restored locally", {
-        recordId: readBack.record.recordId,
+        recordId: readBack.record.id,
         byteLength: readBack.byteLength,
         status: "ready",
       });

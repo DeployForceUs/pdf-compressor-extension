@@ -42,11 +42,12 @@ export type PdfDeleteRequest = {
 };
 
 export type PdfRecord = {
-  recordId: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string | null;
-  bytes: number[];
+  id: string;
+  name: string;
+  size: number;
+  type: string | null;
+  lastModified: number;
+  data: number[];
 };
 
 export type OffscreenRequest =

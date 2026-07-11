@@ -4,7 +4,7 @@ import type { OffscreenRequest, OffscreenResponse, PdfRecord } from "../messagin
 
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
@@ -19,9 +19,10 @@ function openDatabase(): Promise<DatabaseHandle> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(RECORD_STORE)) {
-        db.createObjectStore(RECORD_STORE);
+      if (db.objectStoreNames.contains(RECORD_STORE)) {
+        db.deleteObjectStore(RECORD_STORE);
       }
+      db.createObjectStore(RECORD_STORE, { keyPath: "id" });
     };
 
     request.onsuccess = () => {
@@ -70,10 +71,10 @@ async function putBytes(key: string, bytes: number[]) {
 async function putPdf(record: PdfRecord) {
   const stored: PdfRecord = {
     ...record,
-    bytes: [...record.bytes],
+    data: [...record.data],
   };
-  await withStore("readwrite", (store) => requestToPromise(store.put(stored, record.recordId)));
-  return { ok: true as const, recordId: record.recordId, byteLength: record.bytes.length };
+  await withStore("readwrite", (store) => requestToPromise(store.put(stored)));
+  return { ok: true as const, recordId: record.id, byteLength: record.data.length };
 }
 
 async function readBytes(key: string) {
@@ -83,7 +84,7 @@ async function readBytes(key: string) {
 
 async function readPdf(recordId: string) {
   const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as PdfRecord | undefined;
-  return { ok: true as const, recordId, record: value ?? null, byteLength: value?.bytes.length ?? 0 };
+  return { ok: true as const, recordId, record: value ?? null, byteLength: value?.data.length ?? 0 };
 }
 
 async function deleteBytes(key: string) {
@@ -126,9 +127,24 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | nu
     case "storage:test-compare":
       return compareBytes(message.key, message.bytes);
     case "pdf:store":
+      logger.info("Persisting PDF record", {
+        recordId: message.record.id,
+        size: message.record.size,
+        type: message.record.type,
+        found: true,
+      });
       return putPdf(message.record);
     case "pdf:read":
-      return readPdf(message.recordId);
+      logger.info("Reading PDF record", {
+        recordId: message.recordId,
+      });
+      return readPdf(message.recordId).then((response) => {
+        logger.info("Read PDF record result", {
+          recordId: response.recordId,
+          found: response.record !== null,
+        });
+        return response;
+      });
     case "pdf:delete":
       return deletePdf(message.recordId);
     default:

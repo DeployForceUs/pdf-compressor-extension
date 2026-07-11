@@ -28,6 +28,7 @@
 - Extended popup state with `idle`, `validating`, `ready`, and `error`
 - Kept the approved Phase 2 visual language and localization
 - Moved diagnostics into a compact collapsible section to keep the popup height under control
+- Fixed the persistence contract to use a deterministic `id`-keyed record shape with local metadata and byte payload
 
 ## Architecture Decisions
 - Reused the existing offscreen document as the local binary bridge
@@ -35,6 +36,7 @@
 - Kept the PDF validation step in the popup before persistence
 - Used Zustand only for popup state orchestration
 - Kept diagnostics and storage smoke tests intact rather than replacing them
+- Bumped the IndexedDB schema version and migrated the PDF store to an explicit `id` keyPath
 
 ## PDF Validation Rules
 - Accept only non-empty files
@@ -48,6 +50,19 @@
 - No PDF bytes are sent to any remote endpoint
 - No PDF contents, raw bytes, or local path data are logged
 - Only privacy-safe status and size metadata are exposed in the UI
+- Temporary development diagnostics only report record identifiers and record-found state
+
+## Persistence Contract
+- Deterministic record ID: `selected-pdf`
+- Stored record shape:
+  - `id`
+  - `name`
+  - `size`
+  - `type`
+  - `lastModified`
+  - `data`
+- Write and read-back both use the same deterministic record ID
+- The offscreen handler stores and reads the same record object in IndexedDB
 
 ## Files Changed
 - `package.json`
@@ -65,6 +80,7 @@
 - `npm run check`: PASS
 - `npm run build`: PASS
 - Build artifacts were generated successfully for the MV3 extension
+- Code-level persistence contract validation completed after the schema fix
 
 ## Static Visual Preview
 - Preview kept the approved dark navy and glass UI
@@ -85,10 +101,10 @@ Pending manual verification in the actual unpacked Chrome extension:
 - diagnostics
 
 ## Remaining Issues
-- Real Chrome popup interaction was not fully re-verified in this run
-- The current acceptance state for the new PDF input flow is therefore pending manual browser confirmation
+- Real Chrome popup interaction still needs one fresh manual pass after the persistence schema fix
+- If storage still fails, the new development diagnostics will expose the written and read record IDs and whether the record was found
 
 ## Final Phase 3 Status
 - Phase 3 implementation is complete in code
 - Automated validation passes
-- Real Chrome acceptance remains pending manual verification
+- Real Chrome acceptance remains pending manual verification after the persistence fix
