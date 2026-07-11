@@ -63,7 +63,7 @@ main (c64eaaa) chore: initialize repository
 ## Final Branch Graph
 ```text
 main (a021460) Merge PR #1 Phase 1 infrastructure foundation
-└─ feature/phase2-localization (911520f, to be force-updated to the rebased Phase 2 tip)
+└─ feature/phase2-localization (76b6861) Normalize Phase 1 and Phase 2 history
    └─ PR #2: Phase 2: localization only
 ```
 
@@ -76,5 +76,5 @@ main (a021460) Merge PR #1 Phase 1 infrastructure foundation
 
 ## Exact PR Status
 - PR #1: merged into `main` via GitHub merge commit `a021460acab976f0efb3ab834667c24e87b57077`
-- PR #2: open, with the head branch being rewritten to the rebased cumulative Phase 2 history before final push
+- PR #2: open on `feature/phase2-localization` at `76b68616fadf4c06a801f2813236ade2b775ed59`, with `main` at `a021460acab976f0efb3ab834667c24e87b57077`
 - No new branch was introduced for Phase 3, and Phase 3 has not started
