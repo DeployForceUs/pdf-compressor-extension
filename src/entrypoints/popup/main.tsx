@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
-import { formatBytes, formatDuration, formatPercent, normalizeLocale } from "../../lib/i18n/helpers";
+import { formatBytes, formatDuration, normalizeLocale } from "../../lib/i18n/helpers";
 import type {
   BackgroundHealthResponse,
   OffscreenControlResponse,
@@ -214,55 +214,90 @@ function Popup() {
     ? state.background.error
     : !state.background.checked
       ? t("status.checking")
-      : state.background.durationMs !== null
-        ? `${t("messages.backgroundHealthOk")} · ${formatDuration(state.background.durationMs, locale)}`
-        : t("common.responsive");
+      : t("status.ready");
+  const backgroundMetric = state.background.durationMs !== null ? formatDuration(state.background.durationMs, locale) : "";
 
   const offscreenValue = state.offscreen.error
     ? state.offscreen.error
     : !state.offscreen.checked
       ? t("status.notYetChecked")
-      : state.offscreen.durationMs !== null
-        ? `${t("messages.offscreenHealthOk")} · ${formatDuration(state.offscreen.durationMs, locale)}`
-        : t("common.responsive");
+      : t("status.ready");
+  const offscreenMetric = state.offscreen.durationMs !== null ? formatDuration(state.offscreen.durationMs, locale) : "";
 
   const storageValue = state.storage.error
     ? state.storage.error
     : !state.storage.checked || !state.storage.summary
       ? t("status.notRun")
-      : t("messages.storageSummary", {
-          savedBytes: formatBytes(state.storage.summary.savedBytes, locale),
-          readBytes: formatBytes(state.storage.summary.readBytes, locale),
+      : t("messages.storageStatus", {
           compareStatus: state.storage.summary.compareEqual ? t("compare.match") : t("compare.mismatch"),
           deleteStatus: t("common.ok"),
           missingRecordStatus: t("common.verified"),
         });
+  const storageMetric =
+    state.storage.checked && state.storage.summary
+      ? `${formatBytes(state.storage.summary.savedBytes, locale)} / ${formatBytes(state.storage.summary.readBytes, locale)}`
+      : "";
 
   return (
     <main className="app">
-      <section className="panel">
+      <section className="shell">
         <header className="hero">
-          <p className="eyebrow">{t("app.eyebrow")}</p>
-          <h1>{t("app.title")}</h1>
-          <p>{t("app.subtitle")}</p>
+          <div className="hero__brand">
+            <div className="hero__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <path
+                  d="M7 2.75h6.7l3.8 3.8V20a1.25 1.25 0 0 1-1.25 1.25H7A1.25 1.25 0 0 1 5.75 20V4A1.25 1.25 0 0 1 7 2.75Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path d="M13.5 2.9V7h4.1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M8.25 10.25h7.5M8.25 13h7.5M8.25 15.75h5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="hero__copy">
+              <p className="eyebrow">{t("app.eyebrow")}</p>
+              <h1>{t("app.title")}</h1>
+              <p className="subtitle">{t("app.subtitle")}</p>
+            </div>
+          </div>
+          <LanguageSwitcher />
         </header>
 
         <div className="body">
-          <LanguageSwitcher />
-
           <div className="status-grid">
-            <div className="status-row">
-              <span className="status-label">{t("status.background")}</span>
-              <span className="status-value">{backgroundValue}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">{t("status.offscreen")}</span>
-              <span className="status-value">{offscreenValue}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">{t("status.storage")}</span>
-              <span className="status-value">{storageValue}</span>
-            </div>
+            <article className="status-card">
+              <div className="status-card__header">
+                <div className="status-card__title">
+                  <span className="status-dot" />
+                  <span>{t("status.background")}</span>
+                </div>
+                {backgroundMetric ? <span className="status-badge">{backgroundMetric}</span> : null}
+              </div>
+              <div className="status-card__message">{backgroundValue}</div>
+            </article>
+
+            <article className="status-card">
+              <div className="status-card__header">
+                <div className="status-card__title">
+                  <span className="status-dot" />
+                  <span>{t("status.offscreen")}</span>
+                </div>
+                {offscreenMetric ? <span className="status-badge">{offscreenMetric}</span> : null}
+              </div>
+              <div className="status-card__message">{offscreenValue}</div>
+            </article>
+
+            <article className="status-card">
+              <div className="status-card__header">
+                <div className="status-card__title">
+                  <span className="status-dot" />
+                  <span>{t("status.storage")}</span>
+                </div>
+                {storageMetric ? <span className="status-badge">{storageMetric}</span> : null}
+              </div>
+              <div className="status-card__message">{storageValue}</div>
+            </article>
           </div>
 
           <div className="actions">
@@ -277,11 +312,6 @@ function Popup() {
             </button>
           </div>
 
-          <div className="footnote">
-            {t("app.localOnly", {
-              percent: formatPercent(1, locale),
-            })}
-          </div>
           <div className="footnote">{t("footnote.localOnly")}</div>
         </div>
       </section>

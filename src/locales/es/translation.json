@@ -2,8 +2,7 @@
   "app": {
     "eyebrow": "Fundamento de la fase 1",
     "title": "Compresor de PDF",
-    "subtitle": "Panel localizado con comprobaciones de salud de la fase 1",
-    "localOnly": "Este panel solo realiza comprobaciones locales. {{percent}} del trabajo se queda en el dispositivo.",
+    "subtitle": "Procesamiento local • Privado • Sin conexión",
     "documentTitle": "Compresor de PDF"
   },
   "language": {
@@ -28,6 +27,7 @@
   "messages": {
     "backgroundHealthOk": "El service worker del fondo responde",
     "offscreenHealthOk": "El documento offscreen responde",
+    "storageStatus": "comparación={{compareStatus}} · borrado={{deleteStatus}} · faltante={{missingRecordStatus}}",
     "storageSummary": "guardado {{savedBytes}}, leído {{readBytes}}, comparación={{compareStatus}}, borrado={{deleteStatus}}, registro-faltante={{missingRecordStatus}}"
   },
   "compare": {
@@ -46,6 +46,6 @@
     "storage": "Error desconocido de almacenamiento"
   },
   "footnote": {
-    "localOnly": "No se transmiten bytes de PDF ni contenido del usuario."
+    "localOnly": "100% local. Tus archivos nunca salen de tu dispositivo."
   }
 }

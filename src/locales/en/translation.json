@@ -2,8 +2,7 @@
   "app": {
     "eyebrow": "Phase 1 foundation",
     "title": "PDF Compressor",
-    "subtitle": "Localized popup with Phase 1 health checks",
-    "localOnly": "This popup only performs local health checks. {{percent}} of the work stays on-device.",
+    "subtitle": "Local Processing • Private • Offline",
     "documentTitle": "PDF Compressor"
   },
   "language": {
@@ -28,6 +27,7 @@
   "messages": {
     "backgroundHealthOk": "Background service worker is responsive",
     "offscreenHealthOk": "Offscreen document is responsive",
+    "storageStatus": "compare={{compareStatus}} · delete={{deleteStatus}} · missing-record={{missingRecordStatus}}",
     "storageSummary": "saved {{savedBytes}}, read {{readBytes}}, compare={{compareStatus}}, delete={{deleteStatus}}, missing-record={{missingRecordStatus}}"
   },
   "compare": {
@@ -46,6 +46,6 @@
     "storage": "Unknown storage error"
   },
   "footnote": {
-    "localOnly": "No PDF bytes or user content are transmitted."
+    "localOnly": "100% local. Your files never leave your device."
   }
 }

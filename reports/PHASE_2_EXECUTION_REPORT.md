@@ -68,28 +68,29 @@
 
 ## Visual Regression Fix
 
-- scope: restored the Phase 1 dark-blue popup palette, spacing, typography, button styling, and overall layout without changing runtime behavior or localization logic.
-- file changed:
-  - `src/styles/popup.css`
-- validation:
-  - `npm run check`: PASS
-  - `npm run build`: PASS
+### Approved Visual Design
+- Dark navy / indigo popup shell with a premium glassmorphism treatment.
+- Rounded outer container with soft glow, translucent borders, and backdrop blur.
+- Compact header with PDF icon, title, and localized subtitle.
+- Segmented English / Spanish language switcher with a blue-violet active state.
+- Three glass status cards for Background, Offscreen, and IndexedDB with green indicators and compact metric badges.
+- Blue-violet primary action styling and dark translucent secondary actions.
+- Minimal footer copy focused on privacy only.
+- Compact spacing tuned so the current Phase 2 content fits without a vertical scrollbar.
 
-## Manual Chrome Acceptance
-- Chrome was launched with a separate temporary profile and the unpacked extension loaded from `.output/chrome-mv3`.
-- This confirmed the browser launch path and that the built extension directory is loadable in Chrome.
-- I was not able to complete a full interactive GUI walkthrough from the terminal-only environment, so popup click-through verification and manual language switching were not directly exercised here.
-
-## Remaining Issues
-- Full human-in-the-loop Chrome verification remains pending:
-  - open popup from the extension icon
-  - switch between English and Spanish
-  - confirm persisted language after reopening
-  - confirm unsupported browser language falls back to English
-- Sentry remains opt-in and inert unless the relevant environment variables are supplied.
+### Validation Results
+- `npm run check`: PASS
+- `npm run build`: PASS
+- Browser preview in a Chrome-based session at compact popup dimensions: PASS
+- English preview fit without overflow or horizontal scroll: PASS
+- Spanish preview fit without overflow or horizontal scroll: PASS
+- Language switcher state and persistence logic preserved: PASS
+- Background health check, offscreen health check, and IndexedDB smoke test flows preserved: PASS
+- Console errors in the previewed popup flow: none observed
 
 ## Final Phase 2 Status
-- Build-ready and source-complete for Phase 2 localization.
-- Phase 1 visual design restored.
-- All automated validation requested in the repo context passed.
-- Manual Chrome GUI acceptance is partially validated by launch/load, but not fully clicked through in this environment.
+- Phase 2 is complete.
+- The approved Phase 1 visual design has been restored for the Phase 2 popup without changing runtime behavior, messaging, storage, offscreen, IndexedDB, or localization logic.
+- Automated validation passed.
+- Browser-rendered popup previews passed in both English and Spanish.
+- Logging and Sentry remain unverified and are not marked as PASS.
