@@ -4,7 +4,7 @@
 
 Phase 1 infrastructure has been scaffolded as a WXT + React + TypeScript browser extension foundation with popup, background, offscreen document, typed messaging, IndexedDB storage, logging, and optional Sentry bootstrap.
 
-Validation is partially complete. `npm install`, `npm run dev`, and `npm run build` all pass, but the live Chrome smoke harness could not open the popup page directly because Chrome returned `ERR_FILE_NOT_FOUND` for `chrome-extension://.../popup.html`. As a result, the runtime popup/offscreen/message flow is not fully verified yet.
+Validation is now split across build verification, manual Chrome acceptance, and still-unverified monitoring paths. `npm run build` passes, and manual Chrome verification confirms installation, Manifest V3 validity, popup rendering, background runtime, typed Popup ↔ Background messaging, offscreen runtime, and IndexedDB runtime. Logging and Sentry remain unverified.
 
 ## Repository Inspection
 - current repository structure
@@ -137,53 +137,43 @@ For every completed task include:
 
 ## Validation
 
-Include results of:
+Build verification:
 
-- npm install
-- npm run dev
-- npm run build
-
-Popup
-Background
-Typed Messaging
-Offscreen
-IndexedDB
-Logging
-Sentry
-
-Each item must contain:
-PASS / FAIL
-short explanation
-
-- `npm install`: PASS - dependencies installed successfully after aligning the WXT module versions with npm registry metadata.
-- `npm run dev`: PASS - WXT dev server started and built the dev bundle when the local listener was allowed.
+- `npm install`: PASS - previously verified during scaffold setup; not rerun for this narrow IndexedDB popup fix.
+- `npm run dev`: PASS - previously verified during scaffold validation; not rerun for this narrow IndexedDB popup fix.
 - `npm run build`: PASS - production build completed and emitted `.output/chrome-mv3/`.
-- `Popup`: FAIL - live Chrome smoke could not open the popup page directly; `chrome-extension://.../popup.html` returned `ERR_FILE_NOT_FOUND`.
-- `Background`: FAIL - background code compiles and is bundled, but the live popup harness could not reach the extension runtime to verify it.
-- `Typed Messaging`: FAIL - message handlers compile, but end-to-end popup-to-background message flow was not reachable in the live smoke.
-- `Offscreen`: FAIL - offscreen entrypoint compiles, but it was not reached through the live popup harness.
-- `IndexedDB`: FAIL - idb-backed helpers compile, but the storage smoke could not be executed end to end.
-- `Logging`: FAIL - logger/sentry wrappers compile, but runtime capture could not be validated in the blocked smoke path.
-- `Sentry`: FAIL - optional bootstrap is implemented and disabled by default in development, but no live runtime assertion was completed.
+- `npm run check`: FAIL - TypeScript could not resolve the `wxt/client` type library from `tsconfig.json`; this is a repo-level typing issue unrelated to the IndexedDB popup fix.
+
+Manual Chrome verification:
+
+- `Chrome extension installation`: PASS - extension loaded successfully through `chrome://extensions`.
+- `Manifest`: PASS - Manifest V3 validated successfully.
+- `Popup`: PASS - popup opened successfully.
+- `Background`: PASS - background health check passed.
+- `Typed Messaging`: PASS - typed Popup ↔ Background messaging worked.
+- `Offscreen`: PASS - offscreen document health check passed.
+- `IndexedDB`: PASS - IndexedDB smoke test reached `compare=match` and completed write, read, compare, delete, and missing-record verification.
+- `Logging`: UNVERIFIED - not manually exercised in the current Chrome acceptance pass.
+- `Sentry`: UNVERIFIED - not manually exercised in the current Chrome acceptance pass.
 
 ## Smoke Test
 
 Describe every executed smoke test and its result.
 
-- `npm install`: succeeded and generated `package-lock.json`.
-- `npm run build`: passed twice after the WXT scaffold was corrected.
-- `npm run dev`: passed after pinning the dev server host/port and allowing local binding.
-- Live Chrome smoke attempt 1: launched a temporary Chrome profile with the built extension loaded, discovered the extension ID in the profile, but direct navigation to `chrome-extension://fignfifoniblkonapihmkfakmlgkbkcf/popup.html` returned a Chrome error page with `ERR_FILE_NOT_FOUND`.
-- Live Chrome smoke attempt 2: repeated the smoke against a fresh Chrome profile after the runtime polyfill import fix; the popup URL still resolved to `ERR_FILE_NOT_FOUND`, and Chrome logged a content-verification failure for `popup.html`.
-- Because the popup page could not be opened in this harness, no button-driven popup, offscreen, or IndexedDB smoke steps could be completed.
+- `npm run build`: passed and produced the Chrome MV3 bundle.
+- `npm run check`: failed on the existing `wxt/client` type-resolution issue.
+- Manual Chrome smoke: extension installed, popup opened, background runtime responded, offscreen document responded, and the IndexedDB smoke path completed `write -> read -> byte-for-byte compare -> delete -> missing-record verification`.
+- Manual IndexedDB status text: now reports the deterministic written/read byte count instead of `undefined`.
+- Logging: not verified in the current acceptance pass.
+- Sentry: not verified in the current acceptance pass.
 
 ## Remaining Issues
 
 List every known issue.
 
-- The live Chrome smoke harness cannot open `chrome-extension://.../popup.html` directly in the temporary profile.
-- Chrome logs a content-verification failure for `popup.html` in the temporary profile.
-- Because the popup page is blocked in the smoke harness, runtime verification of popup rendering, typed messaging, offscreen creation/close/reopen, IndexedDB read/write/delete, logging capture, and Sentry initialization remains incomplete.
+- `npm run check` currently fails because `tsconfig.json` references a `wxt/client` type library that is not present in the installed WXT package layout.
+- Logging remains unverified in a live Chrome acceptance pass.
+- Sentry remains unverified in a live Chrome acceptance pass.
 - `npm audit` reported vulnerabilities in transitive dependencies from the installed package set; they were not addressed because Phase 1 scope did not include dependency hardening.
 
 ## Out of Scope

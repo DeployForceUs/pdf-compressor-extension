@@ -58,18 +58,27 @@ function App() {
       await sendTypedMessage({ type: "offscreen:open" });
       const writeResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-write", key, bytes });
       if (!writeResponse.ok) throw new Error(writeResponse.error);
+      const writtenByteLength = writeResponse.byteLength ?? bytes.length;
 
       const compareResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-compare", key, bytes });
       if (!compareResponse.ok) throw new Error(compareResponse.error);
 
       const readResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-read", key });
       if (!readResponse.ok) throw new Error(readResponse.error);
-
-      const value = readResponse.ok ? readResponse.value ?? null : null;
-      setStorage(value ? `saved ${value.byteLength} bytes, compare=${compareResponse.equal === true ? "match" : "mismatch"}` : "missing record");
+      const readByteLength = readResponse.byteLength ?? (readResponse.value instanceof ArrayBuffer ? readResponse.value.byteLength : 0);
 
       const deleteResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-delete", key });
       if (!deleteResponse.ok) throw new Error(deleteResponse.error);
+
+      const missingResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-read", key });
+      if (!missingResponse.ok) throw new Error(missingResponse.error);
+      if (missingResponse.value !== null && missingResponse.value !== undefined) {
+        throw new Error("Deleted IndexedDB record still present");
+      }
+
+      setStorage(
+        `saved ${writtenByteLength} bytes, read ${readByteLength} bytes, compare=${compareResponse.equal === true ? "match" : "mismatch"}, delete=ok, missing-record=verified`,
+      );
     } catch (error) {
       captureException(error, "popup");
       setError(error instanceof Error ? error.message : "Unknown storage error");

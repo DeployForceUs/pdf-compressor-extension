@@ -56,7 +56,7 @@ export type HealthCheckResponse = {
 };
 
 export type StorageResponse =
-  | { ok: true; value?: ArrayBuffer | null; equal?: boolean }
+  | { ok: true; value?: ArrayBuffer | null; equal?: boolean; byteLength?: number }
   | { ok: false; error: string };
 
 export type AppResponse =

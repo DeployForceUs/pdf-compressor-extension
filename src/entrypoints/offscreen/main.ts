@@ -18,12 +18,12 @@ void initSentry("offscreen");
 
 async function handleStorageWrite(message: StorageWriteMessage): Promise<AppResponse> {
   await writeTestBuffer(message.key, message.bytes);
-  return { ok: true };
+  return { ok: true, byteLength: message.bytes.length };
 }
 
 async function handleStorageRead(message: StorageReadMessage): Promise<AppResponse> {
   const value = await readTestBuffer(message.key);
-  return { ok: true, value };
+  return { ok: true, value, byteLength: value?.byteLength ?? 0 };
 }
 
 async function handleStorageDelete(message: StorageDeleteMessage): Promise<AppResponse> {
@@ -33,7 +33,7 @@ async function handleStorageDelete(message: StorageDeleteMessage): Promise<AppRe
 
 async function handleStorageCompare(message: StorageCompareMessage): Promise<AppResponse> {
   const result = await compareTestBuffer(message.key, message.bytes);
-  return { ok: true, equal: result.equal, value: result.value };
+  return { ok: true, equal: result.equal, value: result.value, byteLength: result.value?.byteLength ?? 0 };
 }
 
 async function handleMessage(message: AppMessage): Promise<AppResponse | null> {
