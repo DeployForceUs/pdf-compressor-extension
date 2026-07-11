@@ -20,6 +20,7 @@
   - `src/lib/i18n/helpers.ts`
 - Initialized i18n before popup render and wired a `LanguageSwitcher` component.
 - Replaced popup strings with translation keys and made the visible numeric output locale-aware with `Intl.NumberFormat` helpers for bytes, percentages, and durations.
+- Restored the original Phase 1 dark-blue popup visual design while preserving the Phase 2 localization behavior.
 - Preserved Phase 1 runtime behavior:
   - background health check
   - typed messaging
@@ -61,9 +62,18 @@
   - `.output/chrome-mv3/_locales/en/messages.json`
   - `.output/chrome-mv3/_locales/es/messages.json`
 - The generated manifest contains:
-  - `default_locale: "en"`
+- `default_locale: "en"`
   - localized `name` and `description` placeholders via `__MSG_*__`
   - localized `action.default_title` placeholder via `__MSG_extensionTitle__`
+
+## Visual Regression Fix
+
+- scope: restored the Phase 1 dark-blue popup palette, spacing, typography, button styling, and overall layout without changing runtime behavior or localization logic.
+- file changed:
+  - `src/styles/popup.css`
+- validation:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
 
 ## Manual Chrome Acceptance
 - Chrome was launched with a separate temporary profile and the unpacked extension loaded from `.output/chrome-mv3`.
@@ -80,5 +90,6 @@
 
 ## Final Phase 2 Status
 - Build-ready and source-complete for Phase 2 localization.
+- Phase 1 visual design restored.
 - All automated validation requested in the repo context passed.
 - Manual Chrome GUI acceptance is partially validated by launch/load, but not fully clicked through in this environment.
