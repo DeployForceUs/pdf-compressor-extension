@@ -16,20 +16,14 @@
 html,
 body,
 #root {
+  width: 396px;
+  min-width: 396px;
   margin: 0;
   overflow: hidden;
 }
 
-html,
 body {
-  width: auto;
   height: auto;
-}
-
-body {
-  width: 392px;
-  min-width: 392px;
-  max-width: 392px;
   max-height: 640px;
 }
 
@@ -38,8 +32,8 @@ button {
 }
 
 .app {
-  width: 100%;
-  min-width: 392px;
+  width: 396px;
+  min-width: 396px;
   height: auto;
   padding: 12px;
 }
@@ -48,7 +42,7 @@ button {
   position: relative;
   display: grid;
   gap: 10px;
-  min-height: 100%;
+  min-height: 0;
   padding: 12px;
   border: 1px solid rgba(185, 198, 255, 0.14);
   border-radius: 24px;
@@ -312,14 +306,8 @@ button {
 }
 
 @media (max-width: 420px) {
-  body {
-    width: 100vw;
-    min-width: 100vw;
-    max-width: 100vw;
-  }
-
   .app {
-    width: 100%;
+    width: 396px;
     min-width: 0;
     padding: 10px;
     height: auto;

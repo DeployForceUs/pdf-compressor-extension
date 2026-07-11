@@ -69,8 +69,8 @@
 ## Visual Regression Fix
 
 ### Popup Sizing Regression Fix
-- Root cause: the popup shell still depended on viewport-style sizing (`width: 100%`, `height: 100%`, and `height: 100vh`) in the popup document root, which is fragile in Chrome extension popups and can collapse the window to a tiny intrinsic size.
-- Fix: replaced the popup shell with explicit Chrome-friendly intrinsic sizing using a fixed compact width, removed height-viewport dependency, and kept the content flow auto-sized with a safe max-height.
+- Root cause: the popup width was still allowed to collapse because the real root chain did not carry a single explicit fixed width through `html`, `body`, `#root`, and `.app`.
+- Fix: pinned the popup root chain to a Chrome-safe intrinsic width of `396px`, removed the remaining percentage-width dependencies from the real popup shell, and kept height content-driven with no `100vh` or percentage-height chain.
 
 ### Approved Visual Design
 - Dark navy / indigo popup shell with a premium glassmorphism treatment.
@@ -85,7 +85,7 @@
 ### Validation Results
 - `npm run check`: PASS
 - `npm run build`: PASS
-- Popup sizing change keeps the popup shell on explicit dimensions suitable for Chrome extension intrinsic sizing: PASS
+- Built popup CSS now carries `396px` width through `html`, `body`, `#root`, and `.app`: PASS
 - Dark glass visual treatment preserved: PASS
 - English / Spanish localization behavior preserved: PASS
 - Background health check, offscreen health check, and IndexedDB smoke test flows preserved: PASS
@@ -94,6 +94,6 @@
 ## Final Phase 2 Status
 - Phase 2 is complete.
 - The approved Phase 1 visual design has been restored for the Phase 2 popup without changing runtime behavior, messaging, storage, offscreen, IndexedDB, or localization logic.
-- The Chrome popup sizing regression has been corrected by removing viewport-height dependence from the popup root.
+- The Chrome popup width-collapse regression has been corrected by pinning the popup root chain to `396px`.
 - Automated validation passed.
 - Logging and Sentry remain unverified and are not marked as PASS.
