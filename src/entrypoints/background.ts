@@ -49,8 +49,8 @@ export default defineBackground(() => {
     }
   }
 
-  browser.runtime.onMessage.addListener((message: AppMessage, _sender, sendResponse) => {
-    void handleMessage(message).then((response) => {
+  browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    void handleMessage(message as AppMessage).then((response) => {
       if (response) sendResponse(response);
     });
     return true;

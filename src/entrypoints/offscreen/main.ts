@@ -53,10 +53,10 @@ async function handleMessage(message: AppMessage): Promise<AppResponse | null> {
   }
 }
 
-browser.runtime.onMessage.addListener((message: AppMessage, _sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   const handler = async () => {
     try {
-      const response = await handleMessage(message);
+      const response = await handleMessage(message as AppMessage);
       if (response) sendResponse(response);
       return true;
     } catch (error) {

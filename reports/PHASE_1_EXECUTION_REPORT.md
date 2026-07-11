@@ -4,7 +4,7 @@
 
 Phase 1 infrastructure has been scaffolded as a WXT + React + TypeScript browser extension foundation with popup, background, offscreen document, typed messaging, IndexedDB storage, logging, and optional Sentry bootstrap.
 
-Validation is now split across build verification, manual Chrome acceptance, and still-unverified monitoring paths. `npm run build` passes, and manual Chrome verification confirms installation, Manifest V3 validity, popup rendering, background runtime, typed Popup ↔ Background messaging, offscreen runtime, and IndexedDB runtime. Logging and Sentry remain unverified.
+Validation is now split across build verification, manual Chrome acceptance, and still-unverified monitoring paths. `npm run build` and `npm run check` pass, and manual Chrome verification confirms installation, Manifest V3 validity, popup rendering, background runtime, typed Popup ↔ Background messaging, offscreen runtime, and IndexedDB runtime. Logging and Sentry remain unverified.
 
 ## Repository Inspection
 - current repository structure
@@ -142,7 +142,7 @@ Build verification:
 - `npm install`: PASS - previously verified during scaffold setup; not rerun for this narrow IndexedDB popup fix.
 - `npm run dev`: PASS - previously verified during scaffold validation; not rerun for this narrow IndexedDB popup fix.
 - `npm run build`: PASS - production build completed and emitted `.output/chrome-mv3/`.
-- `npm run check`: FAIL - TypeScript could not resolve the `wxt/client` type library from `tsconfig.json`; this is a repo-level typing issue unrelated to the IndexedDB popup fix.
+- `npm run check`: PASS - the stale `wxt/client` type reference was removed from `tsconfig.json`, and the remaining TypeScript issues were resolved with strict boundary typing at the runtime message handlers and popup response sites.
 
 Manual Chrome verification:
 
@@ -161,17 +161,30 @@ Manual Chrome verification:
 Describe every executed smoke test and its result.
 
 - `npm run build`: passed and produced the Chrome MV3 bundle.
-- `npm run check`: failed on the existing `wxt/client` type-resolution issue.
+- `npm run check`: passed after removing the obsolete `wxt/client` type reference and tightening the message handler and popup response typings.
 - Manual Chrome smoke: extension installed, popup opened, background runtime responded, offscreen document responded, and the IndexedDB smoke path completed `write -> read -> byte-for-byte compare -> delete -> missing-record verification`.
 - Manual IndexedDB status text: now reports the deterministic written/read byte count instead of `undefined`.
 - Logging: not verified in the current acceptance pass.
 - Sentry: not verified in the current acceptance pass.
 
+## Check Fix
+
+- exact root cause: `tsconfig.json` referenced the obsolete `wxt/client` type library, which is not present in the installed WXT 0.20.27 package layout; once removed, TypeScript then exposed a few real strict typing issues at the runtime message boundary and popup union handling sites.
+- files changed:
+  - `tsconfig.json`
+  - `src/lib/messaging.ts`
+  - `src/entrypoints/background.ts`
+  - `src/entrypoints/offscreen/main.ts`
+  - `src/entrypoints/popup/main.tsx`
+- validation results:
+  - `npm run check`: PASS
+  - `npm run build`: PASS
+  - manual Chrome acceptance from the previous pass remains valid
+
 ## Remaining Issues
 
 List every known issue.
 
-- `npm run check` currently fails because `tsconfig.json` references a `wxt/client` type library that is not present in the installed WXT package layout.
 - Logging remains unverified in a live Chrome acceptance pass.
 - Sentry remains unverified in a live Chrome acceptance pass.
 - `npm audit` reported vulnerabilities in transitive dependencies from the installed package set; they were not addressed because Phase 1 scope did not include dependency hardening.

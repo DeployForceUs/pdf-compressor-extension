@@ -55,14 +55,18 @@ export type HealthCheckResponse = {
   details?: string;
 };
 
+export type InfoResponse =
+  | { ok: true; details?: string; source?: "background" | "offscreen"; offscreen?: boolean }
+  | { ok: false; error: string };
+
 export type StorageResponse =
   | { ok: true; value?: ArrayBuffer | null; equal?: boolean; byteLength?: number }
   | { ok: false; error: string };
 
 export type AppResponse =
   | HealthCheckResponse
+  | InfoResponse
   | StorageResponse
-  | { ok: true; details?: string; source?: "background" | "offscreen"; offscreen?: boolean }
   | { ok: false; error: string };
 
 export function toUint8Array(bytes: number[]) {

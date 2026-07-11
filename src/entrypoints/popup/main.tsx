@@ -7,6 +7,7 @@ import { captureException, initSentry } from "../../lib/monitoring/sentry";
 import {
   type AppResponse,
   type HealthCheckResponse,
+  type InfoResponse,
   type StorageResponse,
   sendTypedMessage,
 } from "../../lib/messaging";
@@ -22,8 +23,8 @@ function App() {
     setLoading(true);
     setError("");
     try {
-      const response = await sendTypedMessage<AppResponse>({ type: "health:check" });
-      setBackground(response.ok ? response.details ?? "background ok" : response.error ?? "background error");
+      const response = await sendTypedMessage<HealthCheckResponse>({ type: "health:check" });
+      setBackground(response.details ?? "background ok");
       setOffscreen(response.offscreen ? "reported available" : "not yet checked");
       logger.info("Popup health check completed", response);
     } catch (error) {
@@ -39,7 +40,7 @@ function App() {
     setError("");
     try {
       await sendTypedMessage({ type: "offscreen:open" });
-      const response = await sendTypedMessage<AppResponse>({ type: "offscreen:health" });
+      const response = await sendTypedMessage<InfoResponse>({ type: "offscreen:health" });
       setOffscreen(response.ok ? response.details ?? "offscreen ok" : response.error ?? "offscreen error");
     } catch (error) {
       captureException(error, "popup");
