@@ -89,22 +89,33 @@
 - No obvious overflow or scrollbar regression was observed in the static preview
 
 ## Manual Chrome Acceptance
-Pending manual verification in the actual unpacked Chrome extension:
-- Choose PDF
-- drag and drop
-- valid PDF selection
-- invalid file rejection
-- renamed non-PDF rejection by signature
-- empty file rejection
-- local IndexedDB persistence
-- clear/remove behavior
-- diagnostics
+- Choose PDF: PASS
+- drag and drop: PASS
+- valid PDF selection: PASS
+- invalid file rejection: PASS
+- renamed non-PDF rejection by signature: PASS
+- empty file rejection: PASS
+- local IndexedDB persistence: PASS
+- clear/remove behavior: PASS
+- diagnostics: PASS
+- real Chrome popup opens correctly: PASS
+- Replace with the same or another PDF: PASS
+- filename and localized file size display correctly: PASS
+- validation status becomes Ready: PASS
+- selected state becomes Selected: PASS
+- immediate read-back matches the stored byte size: PASS
+- closing and reopening the popup restores the selected PDF: PASS
+- fully restarting Chrome still restores the selected PDF: PASS
+- persistent last-selected-file behavior: APPROVED AND PRESERVED
+
+Pending:
+- None currently identified
 
 ## Remaining Issues
-- Real Chrome popup interaction still needs one fresh manual pass after the persistence schema fix
-- If storage still fails, the new development diagnostics will expose the written and read record IDs and whether the record was found
+- No known remaining issues for the accepted Phase 3 scope
 
 ## Final Phase 3 Status
 - Phase 3 implementation is complete in code
 - Automated validation passes
-- Real Chrome acceptance remains pending manual verification after the persistence fix
+- Real Chrome acceptance passed
+- Phase 3 is complete
