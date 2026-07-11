@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "PDF Compressor",
+    "description": "The extension name."
+  },
+  "extensionDescription": {
+    "message": "Local PDF compressor foundation",
+    "description": "The extension description."
+  },
+  "extensionTitle": {
+    "message": "PDF Compressor",
+    "description": "The popup title."
+  }
+}

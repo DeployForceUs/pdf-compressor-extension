@@ -1,0 +1,51 @@
+{
+  "app": {
+    "eyebrow": "Phase 1 foundation",
+    "title": "PDF Compressor",
+    "subtitle": "Localized popup with Phase 1 health checks",
+    "localOnly": "This popup only performs local health checks. {{percent}} of the work stays on-device.",
+    "documentTitle": "PDF Compressor"
+  },
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "spanish": "Spanish"
+  },
+  "status": {
+    "background": "Background",
+    "offscreen": "Offscreen",
+    "storage": "IndexedDB",
+    "checking": "Checking...",
+    "notRun": "not run",
+    "notYetChecked": "not yet checked",
+    "ready": "ready"
+  },
+  "actions": {
+    "rerunBackground": "Re-run background health check",
+    "validateOffscreen": "Validate offscreen document",
+    "runStorage": "Run IndexedDB smoke test"
+  },
+  "messages": {
+    "backgroundHealthOk": "Background service worker is responsive",
+    "offscreenHealthOk": "Offscreen document is responsive",
+    "storageSummary": "saved {{savedBytes}}, read {{readBytes}}, compare={{compareStatus}}, delete={{deleteStatus}}, missing-record={{missingRecordStatus}}"
+  },
+  "compare": {
+    "match": "match",
+    "mismatch": "mismatch"
+  },
+  "common": {
+    "ok": "ok",
+    "verified": "verified",
+    "available": "available",
+    "responsive": "responsive"
+  },
+  "errors": {
+    "popup": "Unknown popup error",
+    "offscreen": "Unknown offscreen error",
+    "storage": "Unknown storage error"
+  },
+  "footnote": {
+    "localOnly": "No PDF bytes or user content are transmitted."
+  }
+}

@@ -1,5 +1,5 @@
-node_modules
-.output
-.wxt
-dist
-.DS_Store
+node_modules/
+.output/
+.wxt/
+reports/*.md
+!reports/PHASE_2_EXECUTION_REPORT.md

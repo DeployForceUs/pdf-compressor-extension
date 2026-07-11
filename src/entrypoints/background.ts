@@ -1,23 +1,80 @@
 import { defineBackground } from "wxt/utils/define-background";
 import browser from "webextension-polyfill";
-import { captureException, initSentry } from "../lib/monitoring/sentry";
-import { logger } from "../lib/monitoring/logger";
-import { type AppMessage, type AppResponse, type HealthCheckResponse } from "../lib/messaging";
-import { closeOffscreenDocument, ensureOffscreenDocument, hasOffscreenDocument } from "../lib/offscreen-manager";
+import { createLogger, initTelemetry } from "../lib/bootstrap";
+import type { BackgroundRequest, BackgroundResponse } from "../lib/messaging";
+
+const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
+const OFFSCREEN_REASON = "BLOBS";
+
+async function hasOffscreenDocument() {
+  const offscreen = browser as typeof browser & {
+    offscreen?: {
+      hasDocument?: () => Promise<boolean>;
+    };
+  };
+
+  if (!offscreen.offscreen?.hasDocument) {
+    return false;
+  }
+
+  return offscreen.offscreen.hasDocument();
+}
+
+async function ensureOffscreenDocument() {
+  const offscreen = browser as typeof browser & {
+    offscreen?: {
+      createDocument?: (options: { url: string; reasons: string[]; justification: string }) => Promise<void>;
+    };
+  };
+
+  if (!offscreen.offscreen?.createDocument) {
+    return { supported: false, created: false };
+  }
+
+  if (await hasOffscreenDocument()) {
+    return { supported: true, created: false };
+  }
+
+  await offscreen.offscreen.createDocument({
+    url: OFFSCREEN_URL,
+    reasons: [OFFSCREEN_REASON],
+    justification: "Provide local IndexedDB-backed smoke tests for Phase 1",
+  });
+
+  return { supported: true, created: true };
+}
+
+async function closeOffscreenDocument() {
+  const offscreen = browser as typeof browser & {
+    offscreen?: {
+      closeDocument?: () => Promise<void>;
+    };
+  };
+
+  if (!offscreen.offscreen?.closeDocument) {
+    return { supported: false, closed: false };
+  }
+
+  if (!(await hasOffscreenDocument())) {
+    return { supported: true, closed: false };
+  }
+
+  await offscreen.offscreen.closeDocument();
+  return { supported: true, closed: true };
+}
 
 export default defineBackground(() => {
-  logger.info("Background service worker starting");
-  void initSentry("background");
+  const logger = createLogger("background");
+  void initTelemetry("background");
 
-  async function handleMessage(message: AppMessage): Promise<AppResponse | null> {
+  async function handle(message: BackgroundRequest): Promise<BackgroundResponse | null> {
     try {
       switch (message.type) {
         case "health:check": {
-          const offscreen = await hasOffscreenDocument();
-          const response: HealthCheckResponse = {
+          const response: BackgroundResponse = {
             ok: true,
             source: "background",
-            offscreen,
+            offscreen: await hasOffscreenDocument(),
             details: "Background service worker is responsive",
           };
           logger.info("Processed background health check", response);
@@ -25,23 +82,23 @@ export default defineBackground(() => {
         }
         case "offscreen:open": {
           const result = await ensureOffscreenDocument();
-          return { ok: true, details: result.created ? "Offscreen created" : "Offscreen already open" };
+          return {
+            ok: true,
+            details: result.created ? "Offscreen created" : "Offscreen already open",
+          };
         }
         case "offscreen:close": {
           const result = await closeOffscreenDocument();
-          return { ok: true, details: result.closed ? "Offscreen closed" : "Offscreen already closed" };
+          return {
+            ok: true,
+            details: result.closed ? "Offscreen closed" : "Offscreen already closed",
+          };
         }
-        case "offscreen:health":
-        case "storage:test-write":
-        case "storage:test-read":
-        case "storage:test-delete":
-        case "storage:test-compare":
-          return null;
         default:
-          return { ok: false, error: "Unsupported message type" };
+          return null;
       }
     } catch (error) {
-      captureException(error, "background");
+      logger.error("Captured exception in background", error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : "Unknown background error",
@@ -50,8 +107,10 @@ export default defineBackground(() => {
   }
 
   browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-    void handleMessage(message as AppMessage).then((response) => {
-      if (response) sendResponse(response);
+    void handle(message as BackgroundRequest).then((response) => {
+      if (response) {
+        sendResponse(response);
+      }
     });
     return true;
   });
