@@ -1,25 +1,32 @@
 import { defineConfig } from "wxt";
 
 export default defineConfig({
-  modules: ["@wxt-dev/module-react"],
   srcDir: "src",
-  dev: {
-    server: {
-      host: "127.0.0.1",
-      port: 3000,
-      strictPort: true,
+  modules: ["@wxt-dev/module-react"],
+  popup: {
+    title: "__MSG_extensionTitle__",
+  },
+  hooks: {
+    "build:manifestGenerated": (_wxt: any, manifest: any) => {
+      manifest.action ??= {};
+      manifest.action.default_title = "__MSG_extensionTitle__";
     },
   },
   manifest: {
-    name: "PDF Compressor",
-    description: "Local PDF compressor foundation",
+    name: "__MSG_extensionName__",
+    description: "__MSG_extensionDescription__",
+    default_locale: "en",
+    version: "0.1.0",
     permissions: ["storage", "offscreen"],
     action: {
-      default_title: "PDF Compressor",
       default_popup: "popup.html",
+    },
+    background: {
+      service_worker: "background.js",
+      type: "module",
     },
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'self';",
     },
   },
-});
+} as any);

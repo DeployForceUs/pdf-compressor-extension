@@ -1,0 +1,51 @@
+{
+  "app": {
+    "eyebrow": "Fundamento de la fase 1",
+    "title": "Compresor de PDF",
+    "subtitle": "Procesamiento local • Privado • Sin conexión",
+    "documentTitle": "Compresor de PDF"
+  },
+  "language": {
+    "label": "Idioma",
+    "english": "Inglés",
+    "spanish": "Español"
+  },
+  "status": {
+    "background": "Fondo",
+    "offscreen": "Offscreen",
+    "storage": "IndexedDB",
+    "checking": "Comprobando...",
+    "notRun": "sin ejecutar",
+    "notYetChecked": "aún no comprobado",
+    "ready": "listo"
+  },
+  "actions": {
+    "rerunBackground": "Volver a ejecutar la comprobación del fondo",
+    "validateOffscreen": "Validar el documento offscreen",
+    "runStorage": "Ejecutar prueba de humo de IndexedDB"
+  },
+  "messages": {
+    "backgroundHealthOk": "El service worker del fondo responde",
+    "offscreenHealthOk": "El documento offscreen responde",
+    "storageStatus": "comparación={{compareStatus}} · borrado={{deleteStatus}} · faltante={{missingRecordStatus}}",
+    "storageSummary": "guardado {{savedBytes}}, leído {{readBytes}}, comparación={{compareStatus}}, borrado={{deleteStatus}}, registro-faltante={{missingRecordStatus}}"
+  },
+  "compare": {
+    "match": "coincide",
+    "mismatch": "no coincide"
+  },
+  "common": {
+    "ok": "ok",
+    "verified": "verificado",
+    "available": "disponible",
+    "responsive": "responde"
+  },
+  "errors": {
+    "popup": "Error desconocido del panel",
+    "offscreen": "Error desconocido de offscreen",
+    "storage": "Error desconocido de almacenamiento"
+  },
+  "footnote": {
+    "localOnly": "100% local. Tus archivos nunca salen de tu dispositivo."
+  }
+}

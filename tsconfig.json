@@ -5,12 +5,16 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowJs": false,
+    "checkJs": false,
     "strict": true,
-    "jsx": "react-jsx",
     "noEmit": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "types": ["webextension-polyfill"]
+    "types": ["vite/client"]
   },
-  "include": ["src", "wxt.config.ts"],
-  "exclude": ["dist", "node_modules"]
+  "include": ["src", "wxt.config.ts"]
 }

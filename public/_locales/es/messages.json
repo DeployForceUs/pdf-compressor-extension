@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "Compresor de PDF",
+    "description": "Nombre de la extensión."
+  },
+  "extensionDescription": {
+    "message": "Base local para comprimir PDF",
+    "description": "Descripción de la extensión."
+  },
+  "extensionTitle": {
+    "message": "Compresor de PDF",
+    "description": "Título emergente de la extensión."
+  }
+}

@@ -1,0 +1,336 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #edf3ff;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(112, 98, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(54, 125, 255, 0.16), transparent 28%),
+    linear-gradient(180deg, #08101f 0%, #0b1327 48%, #0f1730 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 396px;
+  min-width: 396px;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  height: auto;
+  max-height: 640px;
+}
+
+button {
+  font: inherit;
+}
+
+.app {
+  width: 396px;
+  min-width: 396px;
+  height: auto;
+  padding: 12px;
+}
+
+.shell {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid rgba(185, 198, 255, 0.14);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(19, 26, 51, 0.84), rgba(10, 16, 34, 0.86)),
+    radial-gradient(circle at top, rgba(120, 102, 255, 0.24), transparent 42%);
+  box-shadow:
+    0 24px 60px rgba(2, 6, 18, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+.shell::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 23px;
+  background:
+    linear-gradient(135deg, rgba(124, 139, 255, 0.12), transparent 24%),
+    linear-gradient(315deg, rgba(112, 98, 255, 0.08), transparent 30%);
+  pointer-events: none;
+}
+
+.hero,
+.body {
+  position: relative;
+  z-index: 1;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hero__brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hero__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  color: #cfe0ff;
+  background:
+    linear-gradient(180deg, rgba(106, 123, 255, 0.28), rgba(28, 39, 82, 0.92)),
+    rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(181, 194, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.hero__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.hero__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(160, 177, 255, 0.9);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.subtitle {
+  margin: 0;
+  color: rgba(225, 234, 255, 0.76);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(185, 198, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.language-switcher__label {
+  display: none;
+}
+
+.language-switcher__options {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.language-switcher__option {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(236, 241, 255, 0.84);
+  background: transparent;
+  cursor: pointer;
+}
+
+.language-switcher__option--active {
+  color: #eff3ff;
+  background: linear-gradient(135deg, #556aff 0%, #8a63ff 100%);
+  box-shadow:
+    0 8px 18px rgba(80, 92, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.status-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.status-card {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(10, 16, 34, 0.54);
+  border: 1px solid rgba(193, 205, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 24px rgba(3, 8, 22, 0.18);
+}
+
+.status-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.status-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f3f7ff;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7affac 0%, #31d176 100%);
+  box-shadow: 0 0 0 4px rgba(49, 209, 118, 0.14);
+}
+
+.status-badge {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #dce7ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(185, 198, 255, 0.14);
+  white-space: nowrap;
+}
+
+.status-card__message {
+  min-width: 0;
+  color: rgba(225, 234, 255, 0.8);
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.actions {
+  display: grid;
+  gap: 7px;
+}
+
+.actions button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: #eff3ff;
+  background:
+    linear-gradient(135deg, rgba(89, 109, 255, 1), rgba(127, 82, 255, 1));
+  box-shadow:
+    0 14px 30px rgba(74, 86, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+
+.actions button.secondary {
+  color: #eef3ff;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.03);
+  border-color: rgba(185, 198, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #ffdbe3;
+  background: rgba(255, 111, 138, 0.12);
+  border: 1px solid rgba(255, 111, 138, 0.18);
+}
+
+.footnote {
+  padding-top: 1px;
+  color: rgba(225, 234, 255, 0.68);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+@media (max-width: 420px) {
+  .app {
+    width: 396px;
+    min-width: 0;
+    padding: 10px;
+    height: auto;
+  }
+
+  .shell {
+    padding: 11px;
+    min-height: 0;
+  }
+
+  .hero {
+    gap: 8px;
+  }
+
+  .hero h1 {
+    font-size: 19px;
+  }
+
+  .subtitle {
+    white-space: normal;
+  }
+
+  .language-switcher {
+    align-self: flex-end;
+  }
+}
