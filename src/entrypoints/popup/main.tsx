@@ -34,6 +34,18 @@ function fileNameFallback(name: string | null) {
   return name ?? "—";
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  return fallback;
+}
+
 function formatPdfStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string, error: string) {
   if (status === "idle") {
     return t("pdfInput.idle");
@@ -76,6 +88,10 @@ function Popup() {
 
   useEffect(() => {
     void runBackgroundHealthCheck();
+  }, []);
+
+  useEffect(() => {
+    void restoreSelectedPdf();
   }, []);
 
   function resetFileInput() {
@@ -131,34 +147,44 @@ function Popup() {
     }
 
     const { bytes, fileName, fileSize, mimeType } = validation.file;
+    const byteArray = Array.from(new Uint8Array(bytes));
 
     try {
       await ensureOffscreenDocument();
 
       const storeResponse = await sendMessage<PdfStoreResponse>({
         type: "pdf:store",
-        recordId: SELECTED_PDF_RECORD_ID,
-        bytes,
+        record: {
+          recordId: SELECTED_PDF_RECORD_ID,
+          fileName,
+          fileSize,
+          mimeType: mimeType || null,
+          bytes: byteArray,
+        },
       });
       const readBack = await sendMessage<PdfReadResponse>({
         type: "pdf:read",
         recordId: SELECTED_PDF_RECORD_ID,
       });
 
-      if (!readBack.value) {
-        throw new Error(t("errors.storage"));
+      if (!readBack.record) {
+        throw new Error("Local PDF record was not returned after persistence");
       }
 
-      if (readBack.byteLength !== bytes.byteLength || !bytesEqual(bytes, readBack.value)) {
-        throw new Error(t("errors.storage"));
+      const storedBytes = new Uint8Array(readBack.record.bytes).buffer;
+
+      if (readBack.byteLength !== byteArray.length || !bytesEqual(bytes, storedBytes)) {
+        throw new Error(
+          `Local PDF verification failed: wrote ${byteArray.length} bytes, read ${readBack.byteLength} bytes`,
+        );
       }
 
       setPdf({
         status: "ready",
         selected: true,
-        fileName,
-        fileSize,
-        mimeType: mimeType || null,
+        fileName: readBack.record.fileName,
+        fileSize: readBack.record.fileSize,
+        mimeType: readBack.record.mimeType,
         recordId: storeResponse.recordId,
         storedByteLength: storeResponse.byteLength,
         readBackByteLength: readBack.byteLength,
@@ -183,11 +209,48 @@ function Popup() {
       setPdf({
         status: "error",
         selected: false,
-        error: error instanceof Error ? error.message : t("errors.storage"),
+        error: errorMessage(error, t("errors.storage")),
       });
     } finally {
       resetFileInput();
       setDragActive(false);
+    }
+  }
+
+  async function restoreSelectedPdf() {
+    try {
+      await ensureOffscreenDocument();
+      const readBack = await sendMessage<PdfReadResponse>({
+        type: "pdf:read",
+        recordId: SELECTED_PDF_RECORD_ID,
+      });
+
+      if (!readBack.record) {
+        return;
+      }
+
+      setPdf({
+        status: "ready",
+        selected: true,
+        fileName: readBack.record.fileName,
+        fileSize: readBack.record.fileSize,
+        mimeType: readBack.record.mimeType,
+        recordId: readBack.record.recordId,
+        storedByteLength: readBack.byteLength,
+        readBackByteLength: readBack.byteLength,
+        error: "",
+      });
+      console.info("[pdf-compressor] Selected PDF restored locally", {
+        recordId: readBack.record.recordId,
+        byteLength: readBack.byteLength,
+        status: "ready",
+      });
+    } catch (error) {
+      setPdf({
+        status: "error",
+        selected: false,
+        error: errorMessage(error, t("errors.storage")),
+      });
     }
   }
 
@@ -333,7 +396,7 @@ function Popup() {
         checked: true,
         durationMs: performance.now() - started,
         summary: null,
-        error: error instanceof Error ? error.message : t("errors.storage"),
+        error: errorMessage(error, t("errors.storage")),
       });
     }
   }

@@ -28,8 +28,7 @@ export type StorageCompareRequest = {
 
 export type PdfStoreRequest = {
   type: "pdf:store";
-  recordId: string;
-  bytes: ArrayBuffer;
+  record: PdfRecord;
 };
 
 export type PdfReadRequest = {
@@ -40,6 +39,14 @@ export type PdfReadRequest = {
 export type PdfDeleteRequest = {
   type: "pdf:delete";
   recordId: string;
+};
+
+export type PdfRecord = {
+  recordId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string | null;
+  bytes: number[];
 };
 
 export type OffscreenRequest =
@@ -89,7 +96,7 @@ export type PdfStoreResponse = {
 export type PdfReadResponse = {
   ok: true;
   recordId: string;
-  value: ArrayBuffer | null;
+  record: PdfRecord | null;
   byteLength: number;
 };
 

@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../bootstrap";
-import type { OffscreenRequest, OffscreenResponse } from "../messaging";
+import type { OffscreenRequest, OffscreenResponse, PdfRecord } from "../messaging";
 
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
@@ -67,9 +67,13 @@ async function putBytes(key: string, bytes: number[]) {
   return { ok: true as const, byteLength: bytes.length };
 }
 
-async function putPdf(recordId: string, bytes: ArrayBuffer) {
-  await withStore("readwrite", (store) => requestToPromise(store.put(bytes, recordId)));
-  return { ok: true as const, recordId, byteLength: bytes.byteLength };
+async function putPdf(record: PdfRecord) {
+  const stored: PdfRecord = {
+    ...record,
+    bytes: [...record.bytes],
+  };
+  await withStore("readwrite", (store) => requestToPromise(store.put(stored, record.recordId)));
+  return { ok: true as const, recordId: record.recordId, byteLength: record.bytes.length };
 }
 
 async function readBytes(key: string) {
@@ -78,8 +82,8 @@ async function readBytes(key: string) {
 }
 
 async function readPdf(recordId: string) {
-  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as ArrayBuffer | undefined;
-  return { ok: true as const, recordId, value: value ?? null, byteLength: value?.byteLength ?? 0 };
+  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as PdfRecord | undefined;
+  return { ok: true as const, recordId, record: value ?? null, byteLength: value?.bytes.length ?? 0 };
 }
 
 async function deleteBytes(key: string) {
@@ -122,7 +126,7 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | nu
     case "storage:test-compare":
       return compareBytes(message.key, message.bytes);
     case "pdf:store":
-      return putPdf(message.recordId, message.bytes);
+      return putPdf(message.record);
     case "pdf:read":
       return readPdf(message.recordId);
     case "pdf:delete":
