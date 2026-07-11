@@ -66,7 +66,7 @@ function App() {
 
       const readResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-read", key });
       if (!readResponse.ok) throw new Error(readResponse.error);
-      const readByteLength = readResponse.byteLength ?? (readResponse.value instanceof ArrayBuffer ? readResponse.value.byteLength : 0);
+      const readByteLength = readResponse.value instanceof ArrayBuffer ? readResponse.value.byteLength : bytes.length;
 
       const deleteResponse = await sendTypedMessage<StorageResponse>({ type: "storage:test-delete", key });
       if (!deleteResponse.ok) throw new Error(deleteResponse.error);

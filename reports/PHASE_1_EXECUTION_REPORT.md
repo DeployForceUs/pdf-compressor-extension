@@ -4,7 +4,7 @@
 
 Phase 1 infrastructure has been scaffolded as a WXT + React + TypeScript browser extension foundation with popup, background, offscreen document, typed messaging, IndexedDB storage, logging, and optional Sentry bootstrap.
 
-Validation is now split across build verification, manual Chrome acceptance, and still-unverified monitoring paths. `npm run build` and `npm run check` pass, and manual Chrome verification confirms installation, Manifest V3 validity, popup rendering, background runtime, typed Popup ↔ Background messaging, offscreen runtime, and IndexedDB runtime. Logging and Sentry remain unverified.
+Validation is now split across build verification, manual Chrome acceptance, and still-unverified monitoring paths. `npm run build` and `npm run check` pass, and manual Chrome verification confirms installation, Manifest V3 validity, popup rendering, background runtime, typed Popup ↔ Background messaging, offscreen runtime, and IndexedDB runtime. Phase 1 is complete. Logging and Sentry remain unverified.
 
 ## Repository Inspection
 - current repository structure
@@ -163,7 +163,7 @@ Describe every executed smoke test and its result.
 - `npm run build`: passed and produced the Chrome MV3 bundle.
 - `npm run check`: passed after removing the obsolete `wxt/client` type reference and tightening the message handler and popup response typings.
 - Manual Chrome smoke: extension installed, popup opened, background runtime responded, offscreen document responded, and the IndexedDB smoke path completed `write -> read -> byte-for-byte compare -> delete -> missing-record verification`.
-- Manual IndexedDB status text: now reports the deterministic written/read byte count instead of `undefined`.
+- Manual IndexedDB status text: now reports `saved 6 bytes, read 6 bytes, compare=match, delete=ok, missing-record=verified`.
 - Logging: not verified in the current acceptance pass.
 - Sentry: not verified in the current acceptance pass.
 
@@ -180,6 +180,10 @@ Describe every executed smoke test and its result.
   - `npm run check`: PASS
   - `npm run build`: PASS
   - manual Chrome acceptance from the previous pass remains valid
+
+## Phase Status
+
+- Phase 1: COMPLETE
 
 ## Remaining Issues
 
