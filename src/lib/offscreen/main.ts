@@ -1,10 +1,10 @@
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../bootstrap";
-import type { OffscreenRequest, OffscreenResponse } from "../messaging";
+import type { OffscreenRequest, OffscreenResponse, PdfRecord } from "../messaging";
 
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
@@ -19,9 +19,10 @@ function openDatabase(): Promise<DatabaseHandle> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(RECORD_STORE)) {
-        db.createObjectStore(RECORD_STORE);
+      if (db.objectStoreNames.contains(RECORD_STORE)) {
+        db.deleteObjectStore(RECORD_STORE);
       }
+      db.createObjectStore(RECORD_STORE, { keyPath: "id" });
     };
 
     request.onsuccess = () => {
@@ -67,14 +68,34 @@ async function putBytes(key: string, bytes: number[]) {
   return { ok: true as const, byteLength: bytes.length };
 }
 
+async function putPdf(record: PdfRecord) {
+  const stored: PdfRecord = {
+    ...record,
+    data: [...record.data],
+  };
+  await withStore("readwrite", (store) => requestToPromise(store.put(stored)));
+  return { ok: true as const, recordId: record.id, byteLength: record.data.length };
+}
+
 async function readBytes(key: string) {
   const value = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
   return { ok: true as const, value: value ?? null, byteLength: value?.byteLength ?? 0 };
 }
 
+async function readPdf(recordId: string) {
+  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as PdfRecord | undefined;
+  return { ok: true as const, recordId, record: value ?? null, byteLength: value?.data.length ?? 0 };
+}
+
 async function deleteBytes(key: string) {
   await withStore("readwrite", (store) => requestToPromise(store.delete(key)));
   return { ok: true as const };
+}
+
+async function deletePdf(recordId: string) {
+  const existing = await withStore("readonly", (store) => requestToPromise(store.get(recordId)));
+  await withStore("readwrite", (store) => requestToPromise(store.delete(recordId)));
+  return { ok: true as const, recordId, deleted: existing !== undefined };
 }
 
 async function compareBytes(key: string, bytes: number[]) {
@@ -105,6 +126,27 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | nu
       return deleteBytes(message.key);
     case "storage:test-compare":
       return compareBytes(message.key, message.bytes);
+    case "pdf:store":
+      logger.info("Persisting PDF record", {
+        recordId: message.record.id,
+        size: message.record.size,
+        type: message.record.type,
+        found: true,
+      });
+      return putPdf(message.record);
+    case "pdf:read":
+      logger.info("Reading PDF record", {
+        recordId: message.recordId,
+      });
+      return readPdf(message.recordId).then((response) => {
+        logger.info("Read PDF record result", {
+          recordId: response.recordId,
+          found: response.record !== null,
+        });
+        return response;
+      });
+    case "pdf:delete":
+      return deletePdf(message.recordId);
     default:
       return null;
   }
