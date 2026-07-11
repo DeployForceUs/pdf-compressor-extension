@@ -68,6 +68,10 @@
 
 ## Visual Regression Fix
 
+### Popup Sizing Regression Fix
+- Root cause: the popup shell still depended on viewport-style sizing (`width: 100%`, `height: 100%`, and `height: 100vh`) in the popup document root, which is fragile in Chrome extension popups and can collapse the window to a tiny intrinsic size.
+- Fix: replaced the popup shell with explicit Chrome-friendly intrinsic sizing using a fixed compact width, removed height-viewport dependency, and kept the content flow auto-sized with a safe max-height.
+
 ### Approved Visual Design
 - Dark navy / indigo popup shell with a premium glassmorphism treatment.
 - Rounded outer container with soft glow, translucent borders, and backdrop blur.
@@ -81,16 +85,15 @@
 ### Validation Results
 - `npm run check`: PASS
 - `npm run build`: PASS
-- Browser preview in a Chrome-based session at compact popup dimensions: PASS
-- English preview fit without overflow or horizontal scroll: PASS
-- Spanish preview fit without overflow or horizontal scroll: PASS
-- Language switcher state and persistence logic preserved: PASS
+- Popup sizing change keeps the popup shell on explicit dimensions suitable for Chrome extension intrinsic sizing: PASS
+- Dark glass visual treatment preserved: PASS
+- English / Spanish localization behavior preserved: PASS
 - Background health check, offscreen health check, and IndexedDB smoke test flows preserved: PASS
-- Console errors in the previewed popup flow: none observed
+- `npm run check` and `npm run build` passed after the sizing fix: PASS
 
 ## Final Phase 2 Status
 - Phase 2 is complete.
 - The approved Phase 1 visual design has been restored for the Phase 2 popup without changing runtime behavior, messaging, storage, offscreen, IndexedDB, or localization logic.
+- The Chrome popup sizing regression has been corrected by removing viewport-height dependence from the popup root.
 - Automated validation passed.
-- Browser-rendered popup previews passed in both English and Spanish.
 - Logging and Sentry remain unverified and are not marked as PASS.

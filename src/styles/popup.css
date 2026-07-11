@@ -16,14 +16,21 @@
 html,
 body,
 #root {
-  width: 100%;
-  height: 100%;
   margin: 0;
   overflow: hidden;
 }
 
+html,
 body {
-  min-width: 372px;
+  width: auto;
+  height: auto;
+}
+
+body {
+  width: 392px;
+  min-width: 392px;
+  max-width: 392px;
+  max-height: 640px;
 }
 
 button {
@@ -31,8 +38,9 @@ button {
 }
 
 .app {
-  width: min(396px, 100vw);
-  height: 100vh;
+  width: 100%;
+  min-width: 392px;
+  height: auto;
   padding: 12px;
 }
 
@@ -305,16 +313,21 @@ button {
 
 @media (max-width: 420px) {
   body {
+    width: 100vw;
     min-width: 100vw;
+    max-width: 100vw;
   }
 
   .app {
-    width: 100vw;
+    width: 100%;
+    min-width: 0;
     padding: 10px;
+    height: auto;
   }
 
   .shell {
     padding: 11px;
+    min-height: 0;
   }
 
   .hero {
