@@ -67,14 +67,30 @@ async function putBytes(key: string, bytes: number[]) {
   return { ok: true as const, byteLength: bytes.length };
 }
 
+async function putPdf(recordId: string, bytes: ArrayBuffer) {
+  await withStore("readwrite", (store) => requestToPromise(store.put(bytes, recordId)));
+  return { ok: true as const, recordId, byteLength: bytes.byteLength };
+}
+
 async function readBytes(key: string) {
   const value = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
   return { ok: true as const, value: value ?? null, byteLength: value?.byteLength ?? 0 };
 }
 
+async function readPdf(recordId: string) {
+  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as ArrayBuffer | undefined;
+  return { ok: true as const, recordId, value: value ?? null, byteLength: value?.byteLength ?? 0 };
+}
+
 async function deleteBytes(key: string) {
   await withStore("readwrite", (store) => requestToPromise(store.delete(key)));
   return { ok: true as const };
+}
+
+async function deletePdf(recordId: string) {
+  const existing = await withStore("readonly", (store) => requestToPromise(store.get(recordId)));
+  await withStore("readwrite", (store) => requestToPromise(store.delete(recordId)));
+  return { ok: true as const, recordId, deleted: existing !== undefined };
 }
 
 async function compareBytes(key: string, bytes: number[]) {
@@ -105,6 +121,12 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | nu
       return deleteBytes(message.key);
     case "storage:test-compare":
       return compareBytes(message.key, message.bytes);
+    case "pdf:store":
+      return putPdf(message.recordId, message.bytes);
+    case "pdf:read":
+      return readPdf(message.recordId);
+    case "pdf:delete":
+      return deletePdf(message.recordId);
     default:
       return null;
   }

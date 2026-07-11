@@ -26,12 +26,31 @@ export type StorageCompareRequest = {
   bytes: number[];
 };
 
+export type PdfStoreRequest = {
+  type: "pdf:store";
+  recordId: string;
+  bytes: ArrayBuffer;
+};
+
+export type PdfReadRequest = {
+  type: "pdf:read";
+  recordId: string;
+};
+
+export type PdfDeleteRequest = {
+  type: "pdf:delete";
+  recordId: string;
+};
+
 export type OffscreenRequest =
   | OffscreenHealthRequest
   | StorageWriteRequest
   | StorageReadRequest
   | StorageDeleteRequest
-  | StorageCompareRequest;
+  | StorageCompareRequest
+  | PdfStoreRequest
+  | PdfReadRequest
+  | PdfDeleteRequest;
 
 export type OffscreenHealthResponse = {
   ok: true;
@@ -61,12 +80,34 @@ export type StorageCompareResponse = {
   byteLength: number;
 };
 
+export type PdfStoreResponse = {
+  ok: true;
+  recordId: string;
+  byteLength: number;
+};
+
+export type PdfReadResponse = {
+  ok: true;
+  recordId: string;
+  value: ArrayBuffer | null;
+  byteLength: number;
+};
+
+export type PdfDeleteResponse = {
+  ok: true;
+  recordId: string;
+  deleted: boolean;
+};
+
 export type OffscreenResponse =
   | OffscreenHealthResponse
   | StorageWriteResponse
   | StorageReadResponse
   | StorageDeleteResponse
-  | StorageCompareResponse;
+  | StorageCompareResponse
+  | PdfStoreResponse
+  | PdfReadResponse
+  | PdfDeleteResponse;
 
 export type BackgroundHealthRequest = {
   type: "health:check";
