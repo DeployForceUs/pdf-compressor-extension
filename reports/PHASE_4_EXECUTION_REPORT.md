@@ -33,6 +33,13 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Fix applied: `ensureOffscreenDocument()` now keeps a shared in-flight creation promise and reuses the existing document instead of issuing a second `createDocument()` call.
 - Result: repeated popup opens and repeated compression requests reuse the same offscreen document, and Diagnostics can reach Engine Ready without the single-document error.
 
+## MuPDF Startup Fix
+- Root cause: `src/lib/pdf/compressor.ts` used a runtime-path fallback that the worker bundle reduced to a bare specifier when `globalThis.runtime` was undefined in the worker context.
+- Exact bad emitted expression in the generated worker:
+  - `globalThis.runtime?.getURL ? ... : "vendor/mupdf/mupdf.js"`
+- Fix applied: `browser.runtime.getURL("vendor/mupdf/mupdf.js")` is now used directly, with no bare-specifier fallback.
+- Result: the worker imports MuPDF through an absolute `chrome-extension://...` URL, which preserves local asset loading and keeps the WASM path intact.
+
 ## IndexedDB Smoke Test Fix
 - Root cause of the diagnostics regression: the smoke-test path had drifted away from the current array-backed record schema used by popup persistence, which caused the popup to misread byte counts and report `NaN B / 0 B`.
 - Fix applied:

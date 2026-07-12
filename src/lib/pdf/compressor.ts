@@ -1,3 +1,4 @@
+import browser from "webextension-polyfill";
 import type {
   CompressionErrorCode,
   CompressionHealthResponse,
@@ -19,11 +20,6 @@ const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 type CompressionProgressCallback = (event: CompressionProgressEvent) => void | Promise<void>;
 
 type AbortChecker = () => boolean | Promise<boolean>;
-type ChromeRuntime = {
-  runtime?: {
-    getURL(path: string): string;
-  };
-};
 
 export type CompressionRequest = {
   input: ArrayBuffer;
@@ -81,11 +77,7 @@ function createTinyPdfBytes() {
 }
 
 async function loadMuPdf() {
-  const chromeRuntime = globalThis as typeof globalThis & ChromeRuntime;
-  const runtimeUrl =
-    chromeRuntime.runtime?.getURL
-      ? chromeRuntime.runtime.getURL(MUPDF_RUNTIME_PATH)
-      : MUPDF_RUNTIME_PATH;
+  const runtimeUrl = browser.runtime.getURL(MUPDF_RUNTIME_PATH);
 
   mupdfModulePromise ??= import(/* @vite-ignore */ runtimeUrl).then((module: MuPdfModule) => module.default);
   return mupdfModulePromise;
