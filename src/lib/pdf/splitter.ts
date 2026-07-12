@@ -43,7 +43,7 @@ function sanitizeDocumentStem(documentName: string | undefined) {
   return sanitized || "document";
 }
 
-function formatSplitFilename(documentName: string | undefined, partNumber: number, range: SplitPageRange) {
+export function formatSplitFilename(documentName: string | undefined, partNumber: number, range: SplitPageRange) {
   const stem = sanitizeDocumentStem(documentName);
   const paddedPartNumber = String(partNumber).padStart(3, "0");
 
@@ -76,7 +76,7 @@ async function validatePartBytes(bytes: Uint8Array, expectedPageCount: number, r
   }
 }
 
-async function splitPdfByRanges(
+export async function splitPdfPartsFromRanges(
   sourceDocument: PDFDocument,
   ranges: SplitPageRange[],
   documentName: string | undefined,
@@ -118,7 +118,7 @@ export async function splitPdfByPages(request: SplitByPagesRequest): Promise<Spl
     throw new Error("splitPdfByPages requires a resolved by-pages plan");
   }
 
-  const parts = await splitPdfByRanges(sourceDocument, plan.parts.map((part) => part.range), request.documentName);
+  const parts = await splitPdfPartsFromRanges(sourceDocument, plan.parts.map((part) => part.range), request.documentName);
 
   return {
     sourcePageCount,
@@ -132,7 +132,7 @@ export async function splitPdfByManualRanges(request: SplitByManualRangesRequest
   const sourcePageCount = sourceDocument.getPageCount();
   const parsedRanges = parsePageRangeExpression(request.ranges);
   const validatedRanges = validatePageRangesInInputOrder(parsedRanges, sourcePageCount);
-  const parts = await splitPdfByRanges(sourceDocument, validatedRanges, request.documentName);
+  const parts = await splitPdfPartsFromRanges(sourceDocument, validatedRanges, request.documentName);
 
   return {
     sourcePageCount,

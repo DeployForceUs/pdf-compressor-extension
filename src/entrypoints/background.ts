@@ -9,6 +9,14 @@ import type {
   BackgroundCompressionStartRequest,
   BackgroundRequest,
   BackgroundResponse,
+  OffscreenSplitCancelRequest,
+  OffscreenSplitRequest,
+  OffscreenSplitResultDeleteRequest,
+  OffscreenSplitResultReadRequest,
+  SplitCancelRequest,
+  SplitLocalRequest,
+  SplitResultDeleteRequest,
+  SplitResultReadRequest,
 } from "../lib/messaging";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
@@ -140,6 +148,22 @@ export default defineBackground(() => {
         case "background:compression-result-delete": {
           await ensureOffscreenDocument();
           return forwardToOffscreen({ type: "offscreen:compression-result-delete" });
+        }
+        case "split:local": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen<BackgroundResponse>({ type: "offscreen:split", strategy: message.strategy, compressAfter: message.compressAfter } as OffscreenSplitRequest);
+        }
+        case "split:cancel": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen<BackgroundResponse>({ type: "offscreen:split-cancel" } as OffscreenSplitCancelRequest);
+        }
+        case "split:result-read": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen<BackgroundResponse>({ type: "offscreen:split-result-read", recordId: message.recordId } as OffscreenSplitResultReadRequest);
+        }
+        case "split:result-delete": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen<BackgroundResponse>({ type: "offscreen:split-result-delete", recordId: message.recordId } as OffscreenSplitResultDeleteRequest);
         }
         default:
           return null;

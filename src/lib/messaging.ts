@@ -1,4 +1,6 @@
 import browser from "webextension-polyfill";
+import type { SplitStrategy } from "./pdf/split-strategies";
+import type { SplitErrorCode } from "./pdf/split-errors";
 
 export type OffscreenHealthRequest = {
   type: "offscreen:health";
@@ -63,7 +65,11 @@ export type OffscreenRequest =
   | OffscreenCompressionStartRequest
   | OffscreenCompressionCancelRequest
   | OffscreenCompressionResultReadRequest
-  | OffscreenCompressionResultDeleteRequest;
+  | OffscreenCompressionResultDeleteRequest
+  | OffscreenSplitRequest
+  | OffscreenSplitCancelRequest
+  | OffscreenSplitResultReadRequest
+  | OffscreenSplitResultDeleteRequest;
 
 export type OffscreenHealthResponse = {
   ok: true;
@@ -139,6 +145,156 @@ export type CompressionResultRecord = {
 
 export type CompressionResultMetadata = Omit<CompressionResultRecord, "data"> & {
   status: "complete";
+};
+
+export type SplitProgressStage =
+  | "validating"
+  | "planning-parts"
+  | "creating-part"
+  | "validating-part"
+  | "creating-zip"
+  | "persisting"
+  | "complete";
+
+export type SplitResultRecord = {
+  id: string;
+  sourceRecordId: string;
+  fileName: string;
+  mimeType: string | null;
+  originalSize: number;
+  totalPartsSize: number;
+  partsCount: number;
+  strategy: SplitStrategy;
+  data: ArrayBuffer;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type SplitResultMetadata = {
+  zipBlobId: string;
+  fileName: string;
+  mimeType: string | null;
+  size: number;
+  originalSize: number;
+  totalPartsSize: number;
+  partsCount: number;
+  strategy: SplitStrategy;
+  status: "complete";
+};
+
+export type SplitLocalRequest = {
+  type: "split:local";
+  strategy: SplitStrategy;
+  compressAfter?: boolean;
+};
+
+export type SplitCancelRequest = {
+  type: "split:cancel";
+};
+
+export type SplitResultReadRequest = {
+  type: "split:result-read";
+  recordId?: string;
+};
+
+export type SplitResultDeleteRequest = {
+  type: "split:result-delete";
+  recordId?: string;
+};
+
+export type BackgroundSplitStartRequest = {
+  type: "background:split-start";
+  strategy: SplitStrategy;
+  compressAfter?: boolean;
+};
+
+export type BackgroundSplitCancelRequest = {
+  type: "background:split-cancel";
+};
+
+export type BackgroundSplitResultReadRequest = {
+  type: "background:split-result-read";
+  recordId?: string;
+};
+
+export type BackgroundSplitResultDeleteRequest = {
+  type: "background:split-result-delete";
+  recordId?: string;
+};
+
+export type OffscreenSplitRequest = {
+  type: "offscreen:split";
+  strategy: SplitStrategy;
+  compressAfter?: boolean;
+};
+
+export type OffscreenSplitCancelRequest = {
+  type: "offscreen:split-cancel";
+};
+
+export type OffscreenSplitResultReadRequest = {
+  type: "offscreen:split-result-read";
+  recordId?: string;
+};
+
+export type OffscreenSplitResultDeleteRequest = {
+  type: "offscreen:split-result-delete";
+  recordId?: string;
+};
+
+export type SplitProgressEvent = {
+  type: "split:progress";
+  recordId: string;
+  stage: SplitProgressStage;
+  progress: number;
+  partsCount: number;
+  currentPart: number;
+  message: string;
+};
+
+export type SplitResultEvent = {
+  type: "split:result";
+  result: SplitResultMetadata;
+};
+
+export type SplitErrorEvent = {
+  type: "split:error";
+  recordId: string | null;
+  code: SplitErrorCode;
+  message: string;
+};
+
+export type SplitHealthRequest = {
+  type: "split:health";
+};
+
+export type SplitHealthResponse = {
+  ok: true;
+  source: "split";
+  details: string;
+};
+
+export type SplitStartResponse = {
+  ok: true;
+  zipBlobId: string;
+  result: SplitResultMetadata;
+  details: string;
+};
+
+export type SplitCancelResponse = {
+  ok: true;
+  cancelled: boolean;
+  details: string;
+};
+
+export type SplitResultReadResponse = {
+  ok: true;
+  result: SplitResultMetadata | null;
+};
+
+export type SplitResultDeleteResponse = {
+  ok: true;
+  deleted: boolean;
 };
 
 export type CompressionHealthRequest = {
@@ -272,7 +428,12 @@ export type OffscreenResponse =
   | CompressionStartResponse
   | CompressionCancelResponse
   | CompressionResultReadResponse
-  | CompressionResultDeleteResponse;
+  | CompressionResultDeleteResponse
+  | SplitHealthResponse
+  | SplitStartResponse
+  | SplitCancelResponse
+  | SplitResultReadResponse
+  | SplitResultDeleteResponse;
 
 export type BackgroundHealthRequest = {
   type: "health:check";
@@ -294,7 +455,11 @@ export type BackgroundRequest =
   | BackgroundCompressionStartRequest
   | BackgroundCompressionCancelRequest
   | BackgroundCompressionResultReadRequest
-  | BackgroundCompressionResultDeleteRequest;
+  | BackgroundCompressionResultDeleteRequest
+  | SplitLocalRequest
+  | SplitCancelRequest
+  | SplitResultReadRequest
+  | SplitResultDeleteRequest;
 
 export type BackgroundHealthResponse = {
   ok: true;
@@ -321,6 +486,11 @@ export type BackgroundResponse =
   | CompressionCancelResponse
   | CompressionResultReadResponse
   | CompressionResultDeleteResponse
+  | SplitHealthResponse
+  | SplitStartResponse
+  | SplitCancelResponse
+  | SplitResultReadResponse
+  | SplitResultDeleteResponse
   | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {
