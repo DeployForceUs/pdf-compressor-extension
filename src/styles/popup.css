@@ -19,12 +19,13 @@ body,
   width: 396px;
   min-width: 396px;
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 body {
   height: auto;
-  max-height: 640px;
+  min-height: 100%;
+  overflow-y: auto;
 }
 
 button {
@@ -36,6 +37,7 @@ button {
   min-width: 396px;
   height: auto;
   padding: 12px;
+  overflow: visible;
 }
 
 .shell {
@@ -53,7 +55,7 @@ button {
     0 24px 60px rgba(2, 6, 18, 0.48),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .shell::before {
@@ -463,7 +465,7 @@ button {
 .diagnostics {
   gap: 8px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .diagnostics__summary {

@@ -23,6 +23,11 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - The official MuPDF bundle contains top-level `await`, which is not supported in the generated IIFE output format.
 - Fix: the app now loads MuPDF from an extension-local vendored copy at runtime instead of importing the package directly into the bundle.
 
+## Popup Layout Fix
+- Root cause of clipping: the popup scroll chain was being constrained by `html, body, #root { overflow: hidden; }` plus `body { max-height: 640px; }` and `overflow: hidden` on `.shell`.
+- Fix applied: the popup now uses one vertical scrollable document flow with `overflow-y: auto` on `body`, no content clamp on `body`, and no overflow clipping on the shell container.
+- Result: the Compression section remains reachable, the Compress button is inside the scroll range, and horizontal overflow remains suppressed.
+
 ## Implementation Summary
 - Added a local MuPDF runtime path under `public/vendor/mupdf/`
 - Added a prebuild copy step to move the official package distribution into the extension runtime
