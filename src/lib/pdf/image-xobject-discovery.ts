@@ -14,6 +14,9 @@ export type PdfImageXObjectCandidate = {
   filterEncoding: string | null;
   estimatedStreamSize: number | null;
   sharedReferenceCount: number | null;
+  imageMask: boolean | null;
+  softMask: boolean | null;
+  explicitMask: boolean | null;
 };
 
 export type PdfImageXObjectDiscovery = {
@@ -35,12 +38,27 @@ function readNumber(obj: MuPdfPdfObject | null | undefined): number | null {
   return isFiniteNumber(value) ? value : null;
 }
 
+function readBoolean(obj: MuPdfPdfObject | null | undefined): boolean | null {
+  if (!obj || obj.isNull() || !obj.isBoolean()) {
+    return null;
+  }
+
+  return obj.asBoolean();
+}
+
 function describeObject(obj: MuPdfPdfObject | null | undefined): string | null {
   if (!obj || obj.isNull()) {
     return null;
   }
 
   try {
+    if (obj.isIndirect()) {
+      const resolved = obj.resolve();
+      if (resolved && resolved !== obj) {
+        return describeObject(resolved);
+      }
+    }
+
     return obj.toString(true, true);
   } catch {
     return null;
@@ -93,6 +111,9 @@ function getOrCreateCandidate(
     filterEncoding: describeObject(resolved.get("Filter")),
     estimatedStreamSize: readNumber(resolved.get("Length")) ?? getRawStreamSize(resolved),
     sharedReferenceCount: sharedCount,
+    imageMask: readBoolean(resolved.get("ImageMask")),
+    softMask: resolved.get("SMask") && !resolved.get("SMask").isNull() ? true : null,
+    explicitMask: resolved.get("Mask") && !resolved.get("Mask").isNull() ? true : null,
   };
 
   candidatesByReference.set(objectReference, candidate);
@@ -205,6 +226,9 @@ export function formatImageXObjectDiagnostics(discovery: PdfImageXObjectDiscover
       filterEncoding: candidate.filterEncoding,
       estimatedStreamSize: candidate.estimatedStreamSize,
       sharedReferenceCount: candidate.sharedReferenceCount,
+      imageMask: candidate.imageMask,
+      softMask: candidate.softMask,
+      explicitMask: candidate.explicitMask,
     })),
   };
 }

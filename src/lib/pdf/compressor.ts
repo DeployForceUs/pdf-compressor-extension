@@ -6,7 +6,8 @@ import type {
   CompressionResultRecord,
 } from "../messaging";
 import { createLogger } from "../bootstrap";
-import { discoverImageXObjects, formatImageXObjectDiagnostics } from "./image-xobject-discovery";
+import { classifyImageCandidates, formatImageCandidateClassificationDiagnostics } from "./image-xobject-classifier";
+import { discoverImageXObjects } from "./image-xobject-discovery";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
@@ -238,8 +239,9 @@ export async function compressBalancedPdf(
     }
 
     const imageDiscovery = discoverImageXObjects(pdfDocument);
+    const imageClassification = classifyImageCandidates(imageDiscovery);
     if (import.meta.env.DEV) {
-      logger.info("Image XObject discovery", formatImageXObjectDiagnostics(imageDiscovery));
+      logger.info("Image candidate classification", formatImageCandidateClassificationDiagnostics(imageClassification));
     }
 
     await throwIfCancelled(isCancelled);
