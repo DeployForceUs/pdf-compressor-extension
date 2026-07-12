@@ -2,9 +2,9 @@
 
 ## Scope
 
-Implemented the read-only image candidate classification layer on top of existing image XObject discovery.
+Implemented the read-only image candidate classification layer on top of existing image XObject discovery, then validated a controlled single-image recompression spike on the scan PDF.
 
-No PDF objects were modified. No images were decoded or recompressed. No streams were replaced. `saveToBuffer()` behavior is unchanged.
+The normal extension runtime still does not modify PDF objects. The spike path decoded one image, recompressed it to JPEG, replaced that one stream in place, and saved the output with the existing `saveToBuffer({ garbage: 4 })` flow.
 
 ## Implementation Summary
 
@@ -41,6 +41,26 @@ No PDF objects were modified. No images were decoded or recompressed. No streams
 - largest safe candidate:
   - page 1, object `2 0 R`, `1653x2338`, `1985585` bytes, `0.5138` bytes/pixel
 
+## Controlled Spike Result
+
+Validated a single safe image XObject recompression spike against `Downloads/Scan_20251024 (2).pdf`.
+
+- target image: page 1, object `2 0 R`
+- input size: `1,986,416` bytes
+- output size: `472,323` bytes
+- saved bytes: `1,514,093`
+- saved percent: `76.22%`
+- output header: `%PDF-`
+- input page count: `1`
+- output page count: `1`
+- rewritten image remained loadable after save
+- manual page render showed no visible corruption
+
+Implementation note:
+
+- the rewrite path must operate on the indirect PDF stream reference, not the resolved stream dictionary
+- `saveToBuffer({ garbage: 4 })` preserved document structure for the tested file
+
 ## Phase 4 Requirement Mapping
 
 - `Интеграция mupdf.js (WASM) для in-place замены изображений`:
@@ -51,6 +71,8 @@ No PDF objects were modified. No images were decoded or recompressed. No streams
   - not implemented yet; classification isolates the safe candidates that will feed that work.
 - `Таймаут для длительных операций` and `Scrubbing метаданных`:
   - unchanged in the current branch.
+- controlled single-image recompression spike:
+  - one safe candidate was decoded, JPEG re-encoded at quality 75, written back in place, and saved successfully without changing page count or visible output integrity.
 
 ## Commit
 
