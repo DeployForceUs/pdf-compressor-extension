@@ -5,6 +5,8 @@ import type {
   CompressionProgressEvent,
   CompressionResultRecord,
 } from "../messaging";
+import { createLogger } from "../bootstrap";
+import { discoverImageXObjects, formatImageXObjectDiagnostics } from "./image-xobject-discovery";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
@@ -14,6 +16,7 @@ type MuPdfBuffer = InstanceType<MuPdfNamespace["Buffer"]>;
 
 const TINY_PDF_BYTES = createTinyPdfBytes();
 let mupdfModulePromise: Promise<MuPdfNamespace> | null = null;
+const logger = createLogger("pdf-compressor");
 
 type CompressionProgressCallback = (event: CompressionProgressEvent) => void | Promise<void>;
 
@@ -232,6 +235,11 @@ export async function compressBalancedPdf(
 
     if (!pdfDocument) {
       throw compressionFailure("INVALID_PDF", "The selected file is not a valid PDF document");
+    }
+
+    const imageDiscovery = discoverImageXObjects(pdfDocument);
+    if (import.meta.env.DEV) {
+      logger.info("Image XObject discovery", formatImageXObjectDiagnostics(imageDiscovery));
     }
 
     await throwIfCancelled(isCancelled);
