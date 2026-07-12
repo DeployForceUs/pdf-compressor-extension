@@ -11,7 +11,7 @@ type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: CompressionProgressEvent) => void | Promise<void>;
 
 export type CompressionWorkerApi = {
-  health: () => Promise<Awaited<ReturnType<typeof checkMuPdfHealth>>>;
+  health: (mupdfRuntimeUrl: string) => Promise<Awaited<ReturnType<typeof checkMuPdfHealth>>>;
   compress: (
     request: CompressionRequest,
     isCancelled: CancellationChecker,
@@ -20,8 +20,8 @@ export type CompressionWorkerApi = {
 };
 
 const api: CompressionWorkerApi = {
-  async health() {
-    return checkMuPdfHealth();
+  async health(mupdfRuntimeUrl: string) {
+    return checkMuPdfHealth(mupdfRuntimeUrl);
   },
 
   async compress(request: CompressionRequest, isCancelled: CancellationChecker, onProgress: ProgressReporter) {

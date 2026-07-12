@@ -26,6 +26,7 @@ const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
 const DB_VERSION = 2;
 const COMPRESSION_TIMEOUT_MS = 30_000;
+const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
@@ -194,6 +195,10 @@ function getCompressionWorker() {
   return workerApi;
 }
 
+function getMuPdfRuntimeUrl() {
+  return browser.runtime.getURL(MUPDF_RUNTIME_PATH);
+}
+
 function resetCompressionState() {
   if (activeCompression?.timeoutId) {
     clearTimeout(activeCompression.timeoutId);
@@ -230,7 +235,7 @@ function compressionProgressFromMessage(
 
 async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
   const api = getCompressionWorker();
-  return api.health();
+  return api.health(getMuPdfRuntimeUrl());
 }
 
 async function readCompressionState() {
@@ -319,6 +324,7 @@ async function startCompression(
       transfer(
         {
           input: inputBuffer,
+          mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
           recordId: COMPRESSED_PDF_RECORD_ID,
           sourceRecordId: selected.id,
           fileName: selected.name,

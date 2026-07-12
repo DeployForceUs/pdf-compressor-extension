@@ -1,4 +1,3 @@
-import browser from "webextension-polyfill";
 import type {
   CompressionErrorCode,
   CompressionHealthResponse,
@@ -15,7 +14,6 @@ type MuPdfBuffer = InstanceType<MuPdfNamespace["Buffer"]>;
 
 const TINY_PDF_BYTES = createTinyPdfBytes();
 let mupdfModulePromise: Promise<MuPdfNamespace> | null = null;
-const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 
 type CompressionProgressCallback = (event: CompressionProgressEvent) => void | Promise<void>;
 
@@ -23,6 +21,7 @@ type AbortChecker = () => boolean | Promise<boolean>;
 
 export type CompressionRequest = {
   input: ArrayBuffer;
+  mupdfRuntimeUrl: string;
   recordId: string;
   sourceRecordId: string;
   fileName: string;
@@ -76,10 +75,16 @@ function createTinyPdfBytes() {
   return encoder.encode(body + xref);
 }
 
-async function loadMuPdf() {
-  const runtimeUrl = browser.runtime.getURL(MUPDF_RUNTIME_PATH);
+function validateMuPdfRuntimeUrl(mupdfRuntimeUrl: string) {
+  if (!mupdfRuntimeUrl.startsWith("chrome-extension://")) {
+    throw compressionFailure("WASM_LOAD_FAILED", "MuPDF runtime URL must be an absolute extension URL");
+  }
+}
 
-  mupdfModulePromise ??= import(/* @vite-ignore */ runtimeUrl).then((module: MuPdfModule) => module.default);
+async function loadMuPdf(mupdfRuntimeUrl: string) {
+  validateMuPdfRuntimeUrl(mupdfRuntimeUrl);
+
+  mupdfModulePromise ??= import(/* @vite-ignore */ mupdfRuntimeUrl).then((module: MuPdfModule) => module.default);
   return mupdfModulePromise;
 }
 
@@ -142,7 +147,7 @@ function getHeaderPreview(bytes: Uint8Array) {
   return new TextDecoder().decode(bytes.slice(0, 5));
 }
 
-export async function checkMuPdfHealth(): Promise<CompressionHealthResponse> {
+export async function checkMuPdfHealth(mupdfRuntimeUrl: string): Promise<CompressionHealthResponse> {
   if (typeof WebAssembly === "undefined") {
     return {
       ok: true,
@@ -153,7 +158,7 @@ export async function checkMuPdfHealth(): Promise<CompressionHealthResponse> {
     };
   }
 
-  const mupdf = await loadMuPdf();
+  const mupdf = await loadMuPdf(mupdfRuntimeUrl);
   const document = mupdf.Document.openDocument(TINY_PDF_BYTES);
   const pdfDocument = document.asPDF();
 
@@ -190,7 +195,7 @@ export async function compressBalancedPdf(
 ): Promise<CompressionOutcome> {
   const started = performance.now();
   const originalBytes = request.input.byteLength;
-  const mupdf = await loadMuPdf();
+  const mupdf = await loadMuPdf(request.mupdfRuntimeUrl);
 
   if (request.mode !== "Balanced") {
     throw compressionFailure("UNKNOWN", `Unsupported compression mode: ${request.mode}`);

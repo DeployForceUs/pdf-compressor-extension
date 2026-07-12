@@ -34,11 +34,15 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Result: repeated popup opens and repeated compression requests reuse the same offscreen document, and Diagnostics can reach Engine Ready without the single-document error.
 
 ## MuPDF Startup Fix
-- Root cause: `src/lib/pdf/compressor.ts` used a runtime-path fallback that the worker bundle reduced to a bare specifier when `globalThis.runtime` was undefined in the worker context.
-- Exact bad emitted expression in the generated worker:
-  - `globalThis.runtime?.getURL ? ... : "vendor/mupdf/mupdf.js"`
-- Fix applied: `browser.runtime.getURL("vendor/mupdf/mupdf.js")` is now used directly, with no bare-specifier fallback.
-- Result: the worker imports MuPDF through an absolute `chrome-extension://...` URL, which preserves local asset loading and keeps the WASM path intact.
+- Root cause: `src/lib/pdf/compressor.ts` imported `webextension-polyfill`, and `compressor.ts` is bundled into the Offscreen module Worker. The Worker global scope does not expose `chrome.runtime`, so the polyfill threw at top level before `Worker.health()` could run:
+  - `This script should only be loaded in a browser extension.`
+- Fix applied:
+  - removed `webextension-polyfill` from `src/lib/pdf/compressor.ts`
+  - kept `compressor.ts` Worker-safe and runtime-agnostic
+  - resolved `browser.runtime.getURL("vendor/mupdf/mupdf.js")` in the Offscreen document, where extension APIs are available
+  - passed the absolute `chrome-extension://.../vendor/mupdf/mupdf.js` URL into the Worker through explicit Comlink method arguments
+  - imported only that passed absolute URL inside the Worker
+- Result: the generated Worker bundle no longer contains `webextension-polyfill`, the polyfill environment throw, or any `chrome.runtime` / `browser.runtime` dependency.
 
 ## Disabled Button Investigation
 - Instrumentation was added at the two popup restore boundaries:
@@ -165,6 +169,15 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - `npm run check`: PASS
 - `npm run build`: PASS
 - Build output includes the vendored MuPDF runtime and WASM assets under the extension bundle
+- Built Worker inspection:
+  - `webextension-polyfill`: ABSENT
+  - `This script should only be loaded in a browser extension`: ABSENT
+  - `chrome.runtime`: ABSENT
+  - `browser.runtime`: ABSENT
+  - `runtime.getURL`: ABSENT
+- Offscreen bundle inspection:
+  - resolves MuPDF with `browser.runtime.getURL("vendor/mupdf/mupdf.js")`
+  - passes the resolved runtime URL into Worker health and compression calls
 
 ## Manual Chrome Acceptance
 - Pending manual verification
