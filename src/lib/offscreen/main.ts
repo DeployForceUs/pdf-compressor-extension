@@ -94,10 +94,38 @@ function requestToPromise<T>(request: IDBRequest<T>) {
   });
 }
 
+function normalizeSmokeBytes(record: unknown, key: string) {
+  if (!record || typeof record !== "object") {
+    throw new Error(`IndexedDB smoke test record shape is invalid for key ${key}`);
+  }
+
+  const candidate = record as { id?: unknown; data?: unknown; byteLength?: unknown };
+  if (candidate.id !== key) {
+    throw new Error(`IndexedDB smoke test record id mismatch for key ${key}`);
+  }
+
+  if (!Array.isArray(candidate.data) || !candidate.data.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)) {
+    throw new Error(`IndexedDB smoke test record data is invalid for key ${key}`);
+  }
+
+  return {
+    id: key,
+    data: candidate.data as number[],
+    byteLength:
+      typeof candidate.byteLength === "number" && Number.isFinite(candidate.byteLength)
+        ? candidate.byteLength
+        : (candidate.data as number[]).length,
+  };
+}
+
 async function putBytes(key: string, bytes: number[]) {
-  const buffer = new Uint8Array(bytes).buffer;
-  await withStore("readwrite", (store) => requestToPromise(store.put(buffer, key)));
-  return { ok: true as const, byteLength: bytes.length };
+  const record = {
+    id: key,
+    data: [...bytes],
+    byteLength: bytes.length,
+  };
+  await withStore("readwrite", (store) => requestToPromise(store.put(record)));
+  return { ok: true as const, byteLength: record.byteLength };
 }
 
 async function putPdf(record: PdfRecord) {
@@ -110,8 +138,13 @@ async function putPdf(record: PdfRecord) {
 }
 
 async function readBytes(key: string) {
-  const value = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
-  return { ok: true as const, value: value ?? null, byteLength: value?.byteLength ?? 0 };
+  const value = await withStore("readonly", (store) => requestToPromise(store.get(key)));
+  if (value === undefined) {
+    return { ok: true as const, value: null, byteLength: 0 };
+  }
+
+  const record = normalizeSmokeBytes(value, key);
+  return { ok: true as const, value: record.data, byteLength: record.byteLength };
 }
 
 async function readPdf(recordId: string) {
@@ -131,15 +164,15 @@ async function deletePdf(recordId: string) {
 }
 
 async function compareBytes(key: string, bytes: number[]) {
-  const current = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
-  if (!current) {
+  const current = await withStore("readonly", (store) => requestToPromise(store.get(key)));
+  if (current === undefined) {
     return { ok: true as const, equal: false, value: null, byteLength: 0 };
   }
 
-  const left = new Uint8Array(current);
-  const right = new Uint8Array(bytes);
-  const equal = left.length === right.length && left.every((value, index) => value === right[index]);
-  return { ok: true as const, equal, value: current, byteLength: current.byteLength };
+  const record = normalizeSmokeBytes(current, key);
+  const equal =
+    record.data.length === bytes.length && record.data.every((value, index) => value === bytes[index]);
+  return { ok: true as const, equal, value: record.data, byteLength: record.byteLength };
 }
 
 function broadcast<T extends { type: string }>(message: T) {

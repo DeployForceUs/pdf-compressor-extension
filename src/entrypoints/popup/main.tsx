@@ -43,6 +43,34 @@ function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
   return leftBytes.every((value, index) => value === rightBytes[index]);
 }
 
+function isValidByteCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function normalizeSmokeReadResult(
+  value: StorageReadResponse["value"],
+  byteLength: StorageReadResponse["byteLength"],
+  label: string,
+) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} returned an invalid IndexedDB smoke-test payload`);
+  }
+
+  if (!isValidByteCount(byteLength)) {
+    throw new Error(`${label} returned an invalid byte count`);
+  }
+
+  if (!value.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)) {
+    throw new Error(`${label} returned non-byte data`);
+  }
+
+  if (value.length !== byteLength) {
+    throw new Error(`${label} byte count mismatch: data=${value.length}, reported=${byteLength}`);
+  }
+
+  return value;
+}
+
 function fileNameFallback(name: string | null) {
   return name ?? "—";
 }
@@ -657,8 +685,24 @@ function Popup() {
       const compareResult = await sendMessage<StorageCompareResponse>({ type: "storage:test-compare", key, bytes });
       const readResult = await sendMessage<StorageReadResponse>({ type: "storage:test-read", key });
 
-      if (readResult.value && readResult.value.byteLength === 0) {
+      if (!isValidByteCount(writeResult.byteLength)) {
+        throw new Error("IndexedDB smoke test write response is invalid");
+      }
+
+      if (!isValidByteCount(compareResult.byteLength)) {
+        throw new Error("IndexedDB smoke test compare response is invalid");
+      }
+
+      const readBytes = normalizeSmokeReadResult(readResult.value, readResult.byteLength, "IndexedDB smoke test read");
+
+      if (readBytes.length === 0) {
         throw new Error("IndexedDB smoke test returned an empty record");
+      }
+
+      if (!compareResult.equal) {
+        throw new Error(
+          `IndexedDB smoke test mismatch: wrote ${writeResult.byteLength} bytes, read ${readResult.byteLength} bytes`,
+        );
       }
 
       await sendMessage({ type: "storage:test-delete", key });
@@ -672,7 +716,7 @@ function Popup() {
       const summary = t("messages.storageSummary", {
         savedBytes: formatBytes(writeResult.byteLength, locale),
         readBytes: formatBytes(readResult.byteLength, locale),
-        compareStatus: compareResult.equal ? t("compare.match") : t("compare.mismatch"),
+        compareStatus: t("compare.match"),
         deleteStatus: t("common.ok"),
         missingRecordStatus: t("common.verified"),
       });
@@ -689,7 +733,7 @@ function Popup() {
         summary: {
           savedBytes: writeResult.byteLength,
           readBytes: readResult.byteLength,
-          compareEqual: compareResult.equal,
+          compareEqual: true,
           deleteOk: true,
           missingRecordVerified: true,
         },

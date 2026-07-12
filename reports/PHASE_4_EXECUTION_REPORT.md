@@ -33,6 +33,14 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Fix applied: `ensureOffscreenDocument()` now keeps a shared in-flight creation promise and reuses the existing document instead of issuing a second `createDocument()` call.
 - Result: repeated popup opens and repeated compression requests reuse the same offscreen document, and Diagnostics can reach Engine Ready without the single-document error.
 
+## IndexedDB Smoke Test Fix
+- Root cause of the diagnostics regression: the smoke-test path had drifted away from the current array-backed record schema used by popup persistence, which caused the popup to misread byte counts and report `NaN B / 0 B`.
+- Fix applied:
+  - smoke-test writes now persist an explicit `{ id, data, byteLength }` record
+  - smoke-test reads and comparisons normalize and validate the record shape before computing counts
+  - popup diagnostics now reject invalid byte counts instead of rendering `NaN`
+- Result: the smoke test is aligned with the current persistent record schema, and any future schema drift will now surface as a precise development error.
+
 ## Implementation Summary
 - Added a local MuPDF runtime path under `public/vendor/mupdf/`
 - Added a prebuild copy step to move the official package distribution into the extension runtime

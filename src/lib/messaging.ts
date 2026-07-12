@@ -78,7 +78,7 @@ export type StorageWriteResponse = {
 
 export type StorageReadResponse = {
   ok: true;
-  value: ArrayBuffer | null;
+  value: number[] | null;
   byteLength: number;
 };
 
@@ -89,7 +89,7 @@ export type StorageDeleteResponse = {
 export type StorageCompareResponse = {
   ok: true;
   equal: boolean;
-  value: ArrayBuffer | null;
+  value: number[] | null;
   byteLength: number;
 };
 
