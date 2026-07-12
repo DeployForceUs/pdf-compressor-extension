@@ -156,6 +156,16 @@ export type SplitProgressStage =
   | "persisting"
   | "complete";
 
+export type SplitWarning = {
+  code: "SINGLE_PAGE_EXCEEDS_LIMIT";
+  pageNumber: number;
+  actualGeneratedByteSize: number;
+  requestedMaximumByteSize: number;
+  fileName: string;
+  partNumber: number;
+  oversized: true;
+};
+
 export type SplitResultRecord = {
   id: string;
   sourceRecordId: string;
@@ -165,6 +175,7 @@ export type SplitResultRecord = {
   totalPartsSize: number;
   partsCount: number;
   strategy: SplitStrategy;
+  warnings: SplitWarning[];
   data: ArrayBuffer;
   createdAt: number;
   updatedAt: number;
@@ -179,6 +190,7 @@ export type SplitResultMetadata = {
   totalPartsSize: number;
   partsCount: number;
   strategy: SplitStrategy;
+  warnings: SplitWarning[];
   status: "complete";
 };
 

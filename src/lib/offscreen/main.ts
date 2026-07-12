@@ -302,6 +302,7 @@ function toSplitMetadata(result: Awaited<ReturnType<typeof writeSplitResult>>): 
     totalPartsSize: result.totalPartsSize,
     partsCount: result.partsCount,
     strategy: result.strategy,
+    warnings: result.warnings ?? [],
     status: "complete",
   };
 }

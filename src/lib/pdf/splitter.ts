@@ -65,6 +65,25 @@ async function extractPartBytes(sourceDocument: PDFDocument, range: SplitPageRan
   return outputDocument.save();
 }
 
+export async function buildSplitPart(
+  sourceDocument: PDFDocument,
+  range: SplitPageRange,
+  documentName: string | undefined,
+  partNumber: number,
+): Promise<SplitByPagesOutputPart> {
+  const pageCount = range.endPage - range.startPage + 1;
+  const bytes = await extractPartBytes(sourceDocument, range);
+  await validatePartBytes(bytes, pageCount, range);
+
+  return {
+    partNumber,
+    range,
+    pageCount,
+    filename: formatSplitFilename(documentName, partNumber, range),
+    bytes,
+  };
+}
+
 async function validatePartBytes(bytes: Uint8Array, expectedPageCount: number, range: SplitPageRange) {
   const reopened = await PDFDocument.load(bytes);
   const actualPageCount = reopened.getPageCount();
@@ -86,17 +105,8 @@ export async function splitPdfPartsFromRanges(
   for (let index = 0; index < ranges.length; index += 1) {
     const range = ranges[index];
     const partNumber = index + 1;
-    const pageCount = range.endPage - range.startPage + 1;
-    const bytes = await extractPartBytes(sourceDocument, range);
-    await validatePartBytes(bytes, pageCount, range);
-
-    parts.push({
-      partNumber,
-      range,
-      pageCount,
-      filename: formatSplitFilename(documentName, partNumber, range),
-      bytes,
-    });
+    const part = await buildSplitPart(sourceDocument, range, documentName, partNumber);
+    parts.push(part);
   }
 
   return parts;

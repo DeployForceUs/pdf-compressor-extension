@@ -30,6 +30,7 @@ function toSplitMetadata(record: SplitResultRecord): SplitResultMetadata {
     totalPartsSize: record.totalPartsSize,
     partsCount: record.partsCount,
     strategy: record.strategy,
+    warnings: record.warnings ?? [],
     status: "complete",
   };
 }
@@ -116,6 +117,7 @@ export async function runSplitJob(
       totalPartsSize: outcome.result.totalPartsSize,
       partsCount: outcome.result.partsCount,
       strategy: outcome.result.strategy,
+      warnings: outcome.result.warnings,
       data: outcome.zipBytes,
       createdAt: now,
       updatedAt: now,
