@@ -1,5 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import { planSplit } from "./split-planner";
+import { parsePageRangeExpression, validatePageRangesInInputOrder } from "./page-range-parser";
 import type { SplitPageRange, SplitPlannedPart } from "./split-strategies";
 
 export type SplitByPagesRequest = {
@@ -17,6 +18,14 @@ export type SplitByPagesResult = {
   sourcePageCount: number;
   parts: SplitByPagesOutputPart[];
 };
+
+export type SplitByManualRangesRequest = {
+  inputBytes: ArrayBuffer | Uint8Array;
+  ranges: string;
+  documentName?: string;
+};
+
+export type SplitByManualRangesResult = SplitByPagesResult;
 
 function toUint8Array(inputBytes: ArrayBuffer | Uint8Array) {
   return inputBytes instanceof Uint8Array ? inputBytes : new Uint8Array(inputBytes);
@@ -67,6 +76,32 @@ async function validatePartBytes(bytes: Uint8Array, expectedPageCount: number, r
   }
 }
 
+async function splitPdfByRanges(
+  sourceDocument: PDFDocument,
+  ranges: SplitPageRange[],
+  documentName: string | undefined,
+): Promise<SplitByPagesOutputPart[]> {
+  const parts: SplitByPagesOutputPart[] = [];
+
+  for (let index = 0; index < ranges.length; index += 1) {
+    const range = ranges[index];
+    const partNumber = index + 1;
+    const pageCount = range.endPage - range.startPage + 1;
+    const bytes = await extractPartBytes(sourceDocument, range);
+    await validatePartBytes(bytes, pageCount, range);
+
+    parts.push({
+      partNumber,
+      range,
+      pageCount,
+      filename: formatSplitFilename(documentName, partNumber, range),
+      bytes,
+    });
+  }
+
+  return parts;
+}
+
 export async function splitPdfByPages(request: SplitByPagesRequest): Promise<SplitByPagesResult> {
   const sourceBytes = toUint8Array(request.inputBytes);
   const sourceDocument = await PDFDocument.load(sourceBytes);
@@ -83,18 +118,7 @@ export async function splitPdfByPages(request: SplitByPagesRequest): Promise<Spl
     throw new Error("splitPdfByPages requires a resolved by-pages plan");
   }
 
-  const parts: SplitByPagesOutputPart[] = [];
-
-  for (const plannedPart of plan.parts) {
-    const bytes = await extractPartBytes(sourceDocument, plannedPart.range);
-    await validatePartBytes(bytes, plannedPart.pageCount, plannedPart.range);
-
-    parts.push({
-      ...plannedPart,
-      filename: formatSplitFilename(request.documentName, plannedPart.partNumber, plannedPart.range),
-      bytes,
-    });
-  }
+  const parts = await splitPdfByRanges(sourceDocument, plan.parts.map((part) => part.range), request.documentName);
 
   return {
     sourcePageCount,
@@ -102,3 +126,16 @@ export async function splitPdfByPages(request: SplitByPagesRequest): Promise<Spl
   };
 }
 
+export async function splitPdfByManualRanges(request: SplitByManualRangesRequest): Promise<SplitByManualRangesResult> {
+  const sourceBytes = toUint8Array(request.inputBytes);
+  const sourceDocument = await PDFDocument.load(sourceBytes);
+  const sourcePageCount = sourceDocument.getPageCount();
+  const parsedRanges = parsePageRangeExpression(request.ranges);
+  const validatedRanges = validatePageRangesInInputOrder(parsedRanges, sourcePageCount);
+  const parts = await splitPdfByRanges(sourceDocument, validatedRanges, request.documentName);
+
+  return {
+    sourcePageCount,
+    parts,
+  };
+}

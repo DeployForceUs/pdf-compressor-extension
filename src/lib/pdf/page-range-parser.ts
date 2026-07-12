@@ -137,6 +137,60 @@ export function validatePageRanges(ranges: SplitPageRange[], totalPages: number)
   return normalized;
 }
 
+export function validatePageRangesInInputOrder(ranges: SplitPageRange[], totalPages: number): SplitPageRange[] {
+  if (!Number.isInteger(totalPages) || totalPages <= 0) {
+    throw new SplitPlannerError("INVALID_TOTAL_PAGES", "totalPages must be a positive integer", { totalPages });
+  }
+
+  const validated = ranges.map(cloneSplitPageRange);
+  const seenPages = new Set<number>();
+  let previousRange: SplitPageRange | null = null;
+
+  for (const range of validated) {
+    if (range.startPage < 1 || range.endPage > totalPages) {
+      createRangeConflictError(
+        "PAGE_RANGE_OUT_OF_BOUNDS",
+        `Page range ${range.startPage}-${range.endPage} is outside the document bounds`,
+        range,
+        totalPages,
+      );
+    }
+
+    if (previousRange && range.startPage <= previousRange.endPage) {
+      const isDuplicateSinglePage =
+        range.startPage === range.endPage &&
+        previousRange.startPage === previousRange.endPage &&
+        range.startPage === previousRange.startPage;
+
+      createRangeConflictError(
+        isDuplicateSinglePage ? "DUPLICATE_PAGE" : "OVERLAPPING_PAGE_RANGES",
+        isDuplicateSinglePage
+          ? `Page ${range.startPage} was specified more than once`
+          : `Page ranges ${previousRange.startPage}-${previousRange.endPage} and ${range.startPage}-${range.endPage} overlap`,
+        range,
+        totalPages,
+      );
+    }
+
+    for (let page = range.startPage; page <= range.endPage; page += 1) {
+      if (seenPages.has(page)) {
+        createRangeConflictError(
+          "DUPLICATE_PAGE",
+          `Page ${page} was specified more than once`,
+          range,
+          totalPages,
+        );
+      }
+
+      seenPages.add(page);
+    }
+
+    previousRange = range;
+  }
+
+  return validated;
+}
+
 export function parseAndValidatePageRanges(expression: string, totalPages: number): SplitPageRange[] {
   return validatePageRanges(parsePageRangeExpression(expression), totalPages);
 }
