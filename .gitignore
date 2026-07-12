@@ -1,5 +1,7 @@
 node_modules/
 .output/
 .wxt/
+.playwright-mcp/
+public/vendor/
 reports/*.md
 !reports/PHASE_2_EXECUTION_REPORT.md
