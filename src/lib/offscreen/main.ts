@@ -8,6 +8,7 @@ import type {
   CompressionErrorEvent,
   CompressionHealthResponse,
   CompressionProgressEvent,
+  CompressionResultMetadata,
   CompressionResultDeleteResponse,
   CompressionResultReadResponse,
   CompressionStartResponse,
@@ -223,7 +224,24 @@ function compressionErrorPayload(
 function compressionResultEvent(result: Awaited<ReturnType<typeof writeCompressionResult>>) {
   return {
     type: "compression:result" as const,
-    result,
+    result: toCompressionMetadata(result),
+  };
+}
+
+function toCompressionMetadata(result: Awaited<ReturnType<typeof writeCompressionResult>>): CompressionResultMetadata {
+  return {
+    id: result.id,
+    sourceRecordId: result.sourceRecordId,
+    fileName: result.fileName,
+    mimeType: result.mimeType,
+    originalSize: result.originalSize,
+    compressedSize: result.compressedSize,
+    savedBytes: result.savedBytes,
+    savedPercent: result.savedPercent,
+    pageCount: result.pageCount,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
+    status: "complete",
   };
 }
 
@@ -238,9 +256,9 @@ async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
   return api.health(getMuPdfRuntimeUrl());
 }
 
-async function readCompressionState() {
-  const result = await readCompressionResult();
-  return { ok: true as const, result };
+async function readCompressionState(recordId?: string) {
+  const result = await readCompressionResult(recordId);
+  return { ok: true as const, result: result ? toCompressionMetadata(result) : null };
 }
 
 async function deleteCompressionState() {
@@ -361,7 +379,7 @@ async function startCompression(
     return {
       ok: true,
       recordId: outcome.result.id,
-      result: outcome.result,
+      result: toCompressionMetadata(outcome.result),
       details: outcome.result.savedBytes > 0 ? "Compression complete" : "Compression complete with no size reduction",
     };
   } catch (error) {
@@ -448,7 +466,7 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
     case "offscreen:compression-cancel":
       return cancelCompression();
     case "offscreen:compression-result-read":
-      return readCompressionState();
+      return readCompressionState(message.recordId);
     case "offscreen:compression-result-delete":
       return deleteCompressionState();
     default:

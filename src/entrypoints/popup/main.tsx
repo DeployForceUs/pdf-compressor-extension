@@ -17,6 +17,7 @@ import type {
   OffscreenHealthResponse,
   CompressionErrorEvent,
   CompressionHealthResponse,
+  CompressionResultMetadata,
   CompressionCancelResponse,
   CompressionProgressEvent,
   CompressionResultDeleteResponse,
@@ -30,6 +31,8 @@ import type {
   StorageWriteResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
+import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
+import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
 import { SELECTED_PDF_RECORD_ID, usePopupStore } from "./store";
 import "../../styles/popup.css";
 
@@ -91,8 +94,35 @@ function isCompressionProgressEvent(message: unknown): message is CompressionPro
   return typeof message === "object" && message !== null && (message as CompressionProgressEvent).type === "compression:progress";
 }
 
-function isCompressionResultEvent(message: unknown): message is { type: "compression:result"; result: CompressionStartResponse["result"] } {
+function isCompressionResultEvent(message: unknown): message is { type: "compression:result"; result: CompressionResultMetadata } {
   return typeof message === "object" && message !== null && (message as { type?: string }).type === "compression:result";
+}
+
+function isPdfArrayBuffer(value: unknown): value is ArrayBuffer {
+  return value instanceof ArrayBuffer;
+}
+
+function assertDownloadablePdf(record: Awaited<ReturnType<typeof readCompressionResult>>): ArrayBuffer {
+  if (!record) {
+    throw new Error("Compressed PDF record was not found in IndexedDB");
+  }
+
+  if (!isPdfArrayBuffer(record.data)) {
+    throw new Error("Compressed PDF record data is not an ArrayBuffer");
+  }
+
+  if (record.data.byteLength !== record.compressedSize) {
+    throw new Error(
+      `Compressed PDF byte count mismatch: data=${record.data.byteLength}, metadata=${record.compressedSize}`,
+    );
+  }
+
+  const header = new TextDecoder().decode(new Uint8Array(record.data).slice(0, 5));
+  if (header !== "%PDF-") {
+    throw new Error("Compressed PDF record does not start with %PDF-");
+  }
+
+  return record.data;
 }
 
 function isCompressionErrorEvent(message: unknown): message is CompressionErrorEvent {
@@ -277,7 +307,7 @@ function Popup() {
     }
   }
 
-  function applyCompressionResult(result: CompressionStartResponse["result"], status: "complete" | "cancelled" = "complete") {
+  function applyCompressionResult(result: CompressionResultMetadata, status: "complete" | "cancelled" = "complete") {
     setCompression({
       status,
       engineStatus: "ready",
@@ -291,7 +321,7 @@ function Popup() {
       savedBytes: result.savedBytes,
       savedPercent: result.savedPercent,
       pageCount: result.pageCount,
-      outputBytes: result.data,
+      resultAvailable: true,
     });
   }
 
@@ -429,18 +459,19 @@ function Popup() {
 
   async function downloadCompressedPdf() {
     try {
-      const result = compression.outputBytes ?? (await (async () => {
-        const response = await sendMessage<CompressionResultReadResponse>(
-          { type: "background:compression-result-read" } as BackgroundCompressionResultReadRequest,
-        );
-        return response.ok ? response.result?.data ?? null : null;
-      })());
+      const recordId = compression.recordId ?? COMPRESSED_PDF_RECORD_ID;
+      const metadataResponse = await sendMessage<CompressionResultReadResponse>({
+        type: "background:compression-result-read",
+        recordId,
+      } as BackgroundCompressionResultReadRequest);
 
-      if (!result) {
+      if (!metadataResponse.ok || !metadataResponse.result) {
         throw new Error("No compressed PDF is available for download");
       }
 
-      const blob = new Blob([result], { type: "application/pdf" });
+      const record = await readCompressionResult(recordId);
+      const bytes = assertDownloadablePdf(record);
+      const blob = new Blob([bytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -825,7 +856,7 @@ function Popup() {
   const compressionSavedPercentValue =
     compression.savedPercent !== null ? formatPercent(compression.savedPercent, locale) : "—";
   const compressionBusy = compression.status === "loading-engine" || compression.status === "compressing" || compression.status === "cancelling";
-  const compressionHasResult = compression.status === "complete" && compression.outputBytes !== null;
+  const compressionHasResult = compression.status === "complete" && compression.resultAvailable;
   const compressionCanStart = pdf.selected && pdf.status === "ready" && !compressionBusy && compression.engineStatus === "ready";
   const compressionDownloadName = compression.fileName
     ? compression.fileName.replace(/\.pdf$/i, "-compressed.pdf")

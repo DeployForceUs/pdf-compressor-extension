@@ -66,6 +66,19 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
   - popup diagnostics now reject invalid byte counts instead of rendering `NaN`
 - Result: the smoke test is aligned with the current persistent record schema, and any future schema drift will now surface as a precise development error.
 
+## Download Binary Transport Fix
+- Root cause of the 15-byte downloaded PDF: `CompressionResultRecord.data` crossed `browser.runtime.sendMessage` from Offscreen to Popup. Chrome runtime messaging serialized the `ArrayBuffer` as a plain object, and the popup created `new Blob([object])`, producing a 15-byte file containing `[object Object]`.
+- Fix applied:
+  - runtime completion messages now send `CompressionResultMetadata` only, with no `data` field
+  - compressed PDF bytes remain only in IndexedDB as `CompressionResultRecord.data`
+  - popup state no longer stores `outputBytes`; it stores result metadata and `resultAvailable`
+  - download requests metadata by result ID, then reads the full record directly from extension IndexedDB
+  - before creating the Blob, the popup verifies:
+    - `record.data` is an `ArrayBuffer`
+    - `record.data.byteLength` matches `compressedSize`
+    - first bytes decode to `%PDF-`
+- Result: the popup no longer creates a Blob from a runtime-messaging-corrupted object.
+
 ## Implementation Summary
 - Added a local MuPDF runtime path under `public/vendor/mupdf/`
 - Added a prebuild copy step to move the official package distribution into the extension runtime
@@ -91,6 +104,7 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Worker performs the actual compression work through Comlink RPC
 - MuPDF is loaded locally from the extension package payload, not from a remote URL
 - Result bytes are persisted locally in IndexedDB and can be restored on popup reopen
+- Runtime messages carry result metadata only; binary result bytes are not sent through Chrome runtime messaging
 
 ## CSP Changes
 - Updated extension CSP to permit the local WASM path used by MuPDF:
@@ -121,6 +135,7 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
   - `createdAt`
   - `updatedAt`
 - Result can be read back, replaced, deleted, and restored after popup reopen
+- Download reads the binary record directly from IndexedDB and validates the PDF bytes before Blob creation
 
 ## Compression Capability Actually Achieved
 - Implemented `Balanced` mode only
@@ -178,6 +193,10 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Offscreen bundle inspection:
   - resolves MuPDF with `browser.runtime.getURL("vendor/mupdf/mupdf.js")`
   - passes the resolved runtime URL into Worker health and compression calls
+- Download transport inspection:
+  - Offscreen `compression:result` event emits metadata only
+  - Popup download path reads `CompressionResultRecord` from IndexedDB by result ID
+  - Popup validates `ArrayBuffer`, byte count, and `%PDF-` header before `Blob` creation
 
 ## Manual Chrome Acceptance
 - Pending manual verification

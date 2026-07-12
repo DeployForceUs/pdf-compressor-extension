@@ -45,7 +45,7 @@ export type CompressionSnapshot = {
   savedBytes: number | null;
   savedPercent: number | null;
   pageCount: number | null;
-  outputBytes: ArrayBuffer | null;
+  resultAvailable: boolean;
 };
 
 export type PopupStoreState = {
@@ -94,7 +94,7 @@ const initialCompression: CompressionSnapshot = {
   savedBytes: null,
   savedPercent: null,
   pageCount: null,
-  outputBytes: null,
+  resultAvailable: false,
 };
 
 const initialDiagnostic: DiagnosticSnapshot = {

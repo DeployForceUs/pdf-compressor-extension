@@ -135,7 +135,7 @@ export default defineBackground(() => {
         }
         case "background:compression-result-read": {
           await ensureOffscreenDocument();
-          return forwardToOffscreen({ type: "offscreen:compression-result-read" });
+          return forwardToOffscreen({ type: "offscreen:compression-result-read", recordId: message.recordId });
         }
         case "background:compression-result-delete": {
           await ensureOffscreenDocument();

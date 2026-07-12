@@ -137,6 +137,10 @@ export type CompressionResultRecord = {
   updatedAt: number;
 };
 
+export type CompressionResultMetadata = Omit<CompressionResultRecord, "data"> & {
+  status: "complete";
+};
+
 export type CompressionHealthRequest = {
   type: "compression:health";
 };
@@ -173,6 +177,7 @@ export type BackgroundCompressionCancelRequest = {
 
 export type BackgroundCompressionResultReadRequest = {
   type: "background:compression-result-read";
+  recordId?: string;
 };
 
 export type BackgroundCompressionResultDeleteRequest = {
@@ -194,6 +199,7 @@ export type OffscreenCompressionCancelRequest = {
 
 export type OffscreenCompressionResultReadRequest = {
   type: "offscreen:compression-result-read";
+  recordId?: string;
 };
 
 export type OffscreenCompressionResultDeleteRequest = {
@@ -212,7 +218,7 @@ export type CompressionProgressEvent = {
 
 export type CompressionResultEvent = {
   type: "compression:result";
-  result: CompressionResultRecord;
+  result: CompressionResultMetadata;
 };
 
 export type CompressionErrorEvent = {
@@ -233,7 +239,7 @@ export type CompressionHealthResponse = {
 export type CompressionStartResponse = {
   ok: true;
   recordId: string;
-  result: CompressionResultRecord;
+  result: CompressionResultMetadata;
   details: string;
 };
 
@@ -245,7 +251,7 @@ export type CompressionCancelResponse = {
 
 export type CompressionResultReadResponse = {
   ok: true;
-  result: CompressionResultRecord | null;
+  result: CompressionResultMetadata | null;
 };
 
 export type CompressionResultDeleteResponse = {
