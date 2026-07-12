@@ -40,6 +40,20 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Fix applied: `browser.runtime.getURL("vendor/mupdf/mupdf.js")` is now used directly, with no bare-specifier fallback.
 - Result: the worker imports MuPDF through an absolute `chrome-extension://...` URL, which preserves local asset loading and keeps the WASM path intact.
 
+## Disabled Button Investigation
+- Instrumentation was added at the two popup restore boundaries:
+  - immediately after `restoreSelectedPdf()`
+  - immediately after `restoreCompressionEngine()`
+- Logged runtime fields:
+  - `pdf.selected`
+  - `pdf.status`
+  - `compression.status`
+  - `compressionBusy`
+  - `compression.engineStatus`
+- Minimal safe fix applied:
+  - when the engine health response is `ready`, the popup now clears any stale compression busy state before publishing `engineStatus: "ready"`
+- This preserves the existing guard and does not force-enable the button globally.
+
 ## IndexedDB Smoke Test Fix
 - Root cause of the diagnostics regression: the smoke-test path had drifted away from the current array-backed record schema used by popup persistence, which caused the popup to misread byte counts and report `NaN B / 0 B`.
 - Fix applied:

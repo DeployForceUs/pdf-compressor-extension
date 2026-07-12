@@ -329,6 +329,10 @@ function Popup() {
         { type: "background:compression-health" } as BackgroundCompressionHealthRequest,
       );
 
+      if (response.status === "ready") {
+        resetCompression();
+      }
+
       setCompression({
         engineStatus: response.status,
         status: response.status === "ready" ? "idle" : "error",
@@ -340,6 +344,18 @@ function Popup() {
             : response.status === "failed"
               ? t("compression.wasmLoadFailed")
               : "",
+      });
+
+      const compressionState = usePopupStore.getState().compression;
+      console.info("[pdf-compressor] Compression engine restore state", {
+        pdfSelected: usePopupStore.getState().pdf.selected,
+        pdfStatus: usePopupStore.getState().pdf.status,
+        compressionStatus: compressionState.status,
+        compressionBusy:
+          compressionState.status === "loading-engine" ||
+          compressionState.status === "compressing" ||
+          compressionState.status === "cancelling",
+        engineStatus: compressionState.engineStatus,
       });
     } catch (error) {
       setCompression({
@@ -523,6 +539,19 @@ function Popup() {
         storedByteLength: storeResponse.byteLength,
         readBackByteLength: readBack.byteLength,
         status: "ready",
+      });
+
+      const pdfState = usePopupStore.getState().pdf;
+      const compressionState = usePopupStore.getState().compression;
+      console.info("[pdf-compressor] Selected PDF restore state", {
+        pdfSelected: pdfState.selected,
+        pdfStatus: pdfState.status,
+        compressionStatus: compressionState.status,
+        compressionBusy:
+          compressionState.status === "loading-engine" ||
+          compressionState.status === "compressing" ||
+          compressionState.status === "cancelling",
+        engineStatus: compressionState.engineStatus,
       });
     } catch (error) {
       try {
