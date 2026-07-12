@@ -6,6 +6,8 @@ Implemented the production-safe multi-image recompression helper on top of exist
 
 The normal extension runtime now recompresses only `SAFE_RECOMPRESS` candidates inside the compression path. Each safe image is decoded, JPEG re-encoded at quality 75, rewritten only when smaller, and the final PDF falls back to the structural-only result if recompression is not smaller or final validation fails.
 
+Manual Chrome acceptance passed after reloading the unpacked extension in `chrome://extensions`. A stale extension build had temporarily shown `0%` compression before reload; the current production bundle now reproduces the expected `76.22%` scan result.
+
 ## Implementation Summary
 
 - Added a dedicated classifier module at `src/lib/pdf/image-xobject-classifier.ts`.
@@ -78,6 +80,13 @@ The normal extension runtime now recompresses only `SAFE_RECOMPRESS` candidates 
   - `IMAGE_MASK`: 2
 - largest safe candidate: none
 - page count: `204` before, `204` after
+
+## Final Notes
+
+- Production multi-image recompression is working in the browser pipeline.
+- The current production encoder remains MuPDF `Pixmap.asJPEG(75)`.
+- The OffscreenCanvas comparison was intentionally abandoned as inconclusive and over-engineered for this milestone.
+- Unsupported formats remain deferred: `ICCBased`, CMYK, Indexed ColorSpace, `JPXDecode`, `JBIG2Decode`, and masks / alpha dependencies.
 
 ## Phase 4 Requirement Mapping
 

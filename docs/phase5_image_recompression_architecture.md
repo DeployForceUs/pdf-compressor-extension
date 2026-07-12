@@ -11,6 +11,8 @@ Current state:
 - a production-safe multi-image recompression helper is implemented
 - the helper rewrites only `SAFE_RECOMPRESS` candidates, keeps the structural-only result as fallback, and validates the final output before returning it
 - the normal extension runtime still only mutates the PDF inside the compression path
+- manual Chrome acceptance passed after reloading the unpacked extension in `chrome://extensions`
+- a stale extension build briefly showed `0%` compression before reload; the current production bundle reproduces the measured scan result
 
 ## Pipeline shape
 
@@ -95,3 +97,5 @@ The development log prints a concise read-only summary:
 ## Next implementation slice
 
 The next slice is the browser-side encoding benchmark and quality comparison work. The production helper is now in place and should stay behind the current classifier without changing discovery or classification behavior.
+
+OffscreenCanvas comparison was intentionally abandoned for this milestone after it proved inconclusive relative to the production `Pixmap.asJPEG(75)` path.
