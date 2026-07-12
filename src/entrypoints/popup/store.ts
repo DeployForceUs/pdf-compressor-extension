@@ -1,6 +1,8 @@
 import { create } from "zustand";
+import type { CompressionEngineStatus, CompressionStage, CompressionStatus } from "../../lib/messaging";
+import { SELECTED_PDF_RECORD_ID } from "../../lib/pdf-records";
 
-export const SELECTED_PDF_RECORD_ID = "selected-pdf";
+export { SELECTED_PDF_RECORD_ID };
 
 export type PanelStatus = "idle" | "validating" | "ready" | "error";
 
@@ -30,8 +32,25 @@ export type SelectedPdfSnapshot = {
   error: string;
 };
 
+export type CompressionSnapshot = {
+  status: CompressionStatus;
+  engineStatus: CompressionEngineStatus;
+  progress: number;
+  stage: CompressionStage | "idle";
+  error: string;
+  recordId: string | null;
+  fileName: string | null;
+  originalSize: number | null;
+  compressedSize: number | null;
+  savedBytes: number | null;
+  savedPercent: number | null;
+  pageCount: number | null;
+  outputBytes: ArrayBuffer | null;
+};
+
 export type PopupStoreState = {
   pdf: SelectedPdfSnapshot;
+  compression: CompressionSnapshot;
   background: DiagnosticSnapshot;
   offscreen: DiagnosticSnapshot;
   storage: DiagnosticSnapshot & {
@@ -41,6 +60,8 @@ export type PopupStoreState = {
   dragActive: boolean;
   setPdf: (next: Partial<SelectedPdfSnapshot>) => void;
   resetPdf: () => void;
+  setCompression: (next: Partial<CompressionSnapshot>) => void;
+  resetCompression: () => void;
   setBackground: (next: Partial<DiagnosticSnapshot>) => void;
   setOffscreen: (next: Partial<DiagnosticSnapshot>) => void;
   setStorage: (next: Partial<PopupStoreState["storage"]>) => void;
@@ -60,6 +81,22 @@ const initialPdf: SelectedPdfSnapshot = {
   error: "",
 };
 
+const initialCompression: CompressionSnapshot = {
+  status: "idle",
+  engineStatus: "loading",
+  progress: 0,
+  stage: "idle",
+  error: "",
+  recordId: null,
+  fileName: null,
+  originalSize: null,
+  compressedSize: null,
+  savedBytes: null,
+  savedPercent: null,
+  pageCount: null,
+  outputBytes: null,
+};
+
 const initialDiagnostic: DiagnosticSnapshot = {
   checked: false,
   durationMs: null,
@@ -68,6 +105,7 @@ const initialDiagnostic: DiagnosticSnapshot = {
 
 export const usePopupStore = create<PopupStoreState>((set) => ({
   pdf: initialPdf,
+  compression: initialCompression,
   background: initialDiagnostic,
   offscreen: initialDiagnostic,
   storage: {
@@ -87,6 +125,20 @@ export const usePopupStore = create<PopupStoreState>((set) => ({
     set({
       pdf: initialPdf,
     }),
+  setCompression: (next) =>
+    set((state) => ({
+      compression: {
+        ...state.compression,
+        ...next,
+      },
+    })),
+  resetCompression: () =>
+    set((state) => ({
+      compression: {
+        ...initialCompression,
+        engineStatus: state.compression.engineStatus,
+      },
+    })),
   setBackground: (next) =>
     set((state) => ({
       background: {

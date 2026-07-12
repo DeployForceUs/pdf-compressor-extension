@@ -1,7 +1,15 @@
 import { defineBackground } from "wxt/utils/define-background";
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../lib/bootstrap";
-import type { BackgroundRequest, BackgroundResponse } from "../lib/messaging";
+import type {
+  BackgroundCompressionCancelRequest,
+  BackgroundCompressionHealthRequest,
+  BackgroundCompressionResultDeleteRequest,
+  BackgroundCompressionResultReadRequest,
+  BackgroundCompressionStartRequest,
+  BackgroundRequest,
+  BackgroundResponse,
+} from "../lib/messaging";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -38,7 +46,7 @@ async function ensureOffscreenDocument() {
   await offscreen.offscreen.createDocument({
     url: OFFSCREEN_URL,
     reasons: [OFFSCREEN_REASON],
-    justification: "Provide local IndexedDB-backed smoke tests for Phase 1",
+    justification: "Provide local offscreen storage and compression workflows",
   });
 
   return { supported: true, created: true };
@@ -61,6 +69,10 @@ async function closeOffscreenDocument() {
 
   await offscreen.offscreen.closeDocument();
   return { supported: true, closed: true };
+}
+
+async function forwardToOffscreen<TResponse>(message: object): Promise<TResponse> {
+  return (await browser.runtime.sendMessage(message)) as TResponse;
 }
 
 export default defineBackground(() => {
@@ -93,6 +105,26 @@ export default defineBackground(() => {
             ok: true,
             details: result.closed ? "Offscreen closed" : "Offscreen already closed",
           };
+        }
+        case "background:compression-health": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:compression-health" });
+        }
+        case "background:compression-start": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:compression-start", mode: message.mode });
+        }
+        case "background:compression-cancel": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:compression-cancel" });
+        }
+        case "background:compression-result-read": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:compression-result-read" });
+        }
+        case "background:compression-result-delete": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:compression-result-delete" });
         }
         default:
           return null;
