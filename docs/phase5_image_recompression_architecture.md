@@ -8,8 +8,9 @@ Current state:
 
 - image XObject discovery is implemented
 - image candidate classification is implemented
-- one controlled single-image recompression spike succeeded on the scan PDF
-- the normal extension runtime still does not mutate PDF objects outside that spike path
+- a production-safe multi-image recompression helper is implemented
+- the helper rewrites only `SAFE_RECOMPRESS` candidates, keeps the structural-only result as fallback, and validates the final output before returning it
+- the normal extension runtime still only mutates the PDF inside the compression path
 
 ## Pipeline shape
 
@@ -17,8 +18,9 @@ The browser-side pipeline is intentionally split into read-only stages:
 
 1. discover image XObjects from every page resource tree
 2. classify each candidate into `SAFE_RECOMPRESS`, `SKIP`, or `UNSUPPORTED`
-3. only after that, perform decode, resample, re-encode, and stream replacement
-4. finish with a structural rewrite and garbage cleanup
+3. only after that, perform decode, JPEG re-encode, and stream replacement for safe candidates
+4. re-check the final PDF, then fall back to the structural-only result if the recompressed output is invalid or larger
+5. finish with a structural rewrite and garbage cleanup
 
 Discovery and classification remain separate modules so the first two stages can be validated without changing PDF contents.
 
@@ -34,12 +36,13 @@ The installed MuPDF binding already exposes the primitives required for the late
 - final document rewrite via `saveToBuffer({ garbage: 4 })`
 
 That is enough for planning, classification, and eventual recompression, but not enough to claim that recompression has happened yet.
+The production helper now uses those primitives directly:
 
-Spike note:
-
-- the tested image XObject was decoded to a pixmap, JPEG re-encoded at quality 75, written back in place, and saved with `saveToBuffer({ garbage: 4 })`
-- the object that must be rewritten is the indirect PDF stream reference, not the resolved stream dictionary
-- the output reopened with the same page count and rendered without visible corruption on the tested scan PDF
+- the image is decoded to a pixmap
+- JPEG re-encode stays fixed at quality 75
+- the indirect PDF stream reference is rewritten in place when the new stream is smaller
+- the structural-only result remains the fallback if the recompressed output is invalid or larger
+- final validation reopens the document and checks the rewritten pages again
 
 ## Classification policy
 
@@ -81,6 +84,9 @@ The development log prints a concise read-only summary:
 
 - total images
 - `SAFE_RECOMPRESS` count
+- successfully recompressed count
+- skipped because new stream was not smaller
+- failed recompression count
 - `SKIP` count
 - `UNSUPPORTED` count
 - reason breakdown
@@ -88,5 +94,4 @@ The development log prints a concise read-only summary:
 
 ## Next implementation slice
 
-The next step is expanding the single-image spike into a controlled pipeline for safe candidates only.
-That work should stay behind the current classifier and should not alter discovery or classification behavior.
+The next slice is the browser-side encoding benchmark and quality comparison work. The production helper is now in place and should stay behind the current classifier without changing discovery or classification behavior.

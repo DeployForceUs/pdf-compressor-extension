@@ -8,12 +8,15 @@ import type {
 import { createLogger } from "../bootstrap";
 import { classifyImageCandidates, formatImageCandidateClassificationDiagnostics } from "./image-xobject-classifier";
 import { discoverImageXObjects } from "./image-xobject-discovery";
+import {
+  formatSafeImageRecompressionDiagnostics,
+  recompressSafeImageCandidates,
+} from "./image-xobject-recompression";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
 type MuPdfDocument = InstanceType<MuPdfNamespace["Document"]>;
 type MuPdfPdfDocument = InstanceType<MuPdfNamespace["PDFDocument"]>;
-type MuPdfBuffer = InstanceType<MuPdfNamespace["Buffer"]>;
 
 const TINY_PDF_BYTES = createTinyPdfBytes();
 let mupdfModulePromise: Promise<MuPdfNamespace> | null = null;
@@ -217,7 +220,6 @@ export async function compressBalancedPdf(
 
   let document: MuPdfDocument | null = null;
   let pdfDocument: MuPdfPdfDocument | null = null;
-  let outputBuffer: MuPdfBuffer | null = null;
   let verifiedDocument: MuPdfDocument | null = null;
 
   try {
@@ -258,9 +260,21 @@ export async function compressBalancedPdf(
       progressEvent(request.recordId, "rewriting", 68, pageCount, 0, "Rewriting PDF", originalBytes),
     );
 
-    outputBuffer = pdfDocument.saveToBuffer({ garbage: 4 });
-    const outputBytesView = outputBuffer.asUint8Array();
-    const outputBytes = outputBytesView.slice().buffer;
+    const recompressionOutcome = await recompressSafeImageCandidates(
+      mupdf,
+      request.input,
+      pdfDocument,
+      imageClassification,
+      75,
+    );
+    if (import.meta.env.DEV) {
+      logger.info(
+        "Image recompression diagnostics",
+        formatSafeImageRecompressionDiagnostics(recompressionOutcome.diagnostics),
+      );
+    }
+
+    const outputBytes = recompressionOutcome.outputBytes;
     const outputHeader = getHeaderPreview(new Uint8Array(outputBytes));
 
     if (outputHeader !== "%PDF-") {
@@ -326,7 +340,6 @@ export async function compressBalancedPdf(
     throw compressionFailure("UNKNOWN", "Unknown compression error");
   } finally {
     verifiedDocument?.destroy();
-    outputBuffer?.destroy();
     document?.destroy();
     const elapsedMs = performance.now() - started;
     void elapsedMs;

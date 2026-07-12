@@ -2,25 +2,73 @@
 
 ## Scope
 
-Implemented the read-only image candidate classification layer on top of existing image XObject discovery, then validated a controlled single-image recompression spike on the scan PDF.
+Implemented the production-safe multi-image recompression helper on top of existing image XObject discovery and candidate classification.
 
-The normal extension runtime still does not modify PDF objects. The spike path decoded one image, recompressed it to JPEG, replaced that one stream in place, and saved the output with the existing `saveToBuffer({ garbage: 4 })` flow.
+The normal extension runtime now recompresses only `SAFE_RECOMPRESS` candidates inside the compression path. Each safe image is decoded, JPEG re-encoded at quality 75, rewritten only when smaller, and the final PDF falls back to the structural-only result if recompression is not smaller or final validation fails.
 
 ## Implementation Summary
 
 - Added a dedicated classifier module at `src/lib/pdf/image-xobject-classifier.ts`.
 - Extended discovery metadata in `src/lib/pdf/image-xobject-discovery.ts` with read-only mask and alpha indicators needed by the classifier.
-- Wired developer-only classification diagnostics into `src/lib/pdf/compressor.ts`.
+- Added a production recompression helper at `src/lib/pdf/image-xobject-recompression.ts`.
+- Wired the helper into `src/lib/pdf/compressor.ts` without changing the UI, worker topology, or download flow.
 - Kept discovery and classification separate.
-- Kept the runtime compression path unchanged.
+- Kept the runtime compression path conservative: only safe candidates are processed, and structural-only output remains the fallback.
+- Wired developer-only classification diagnostics into `src/lib/pdf/compressor.ts`.
 
 ## Validation Results
+
+### `Downloads/Scan_20251024 (2).pdf`
+
+- total discovered: 1
+- safe count: 1
+- successfully recompressed count: 1
+- skipped because new stream was not smaller: 0
+- failed recompression count: 0
+- unsupported count: 0
+- top reasons:
+  - `ELIGIBLE_FOR_RECOMPRESSION`: 1
+- largest safe candidate:
+  - page 1, object `2 0 R`, `1653x2338`, `1985585` bytes, `0.5138` bytes/pixel
+- original image bytes: `1,985,585`
+- rewritten image bytes: `471,542`
+- structural PDF size: `1,986,506`
+- final PDF size: `472,459`
+- saved bytes vs original input: `1,514,047`
+- saved percent vs original input: `76.22%`
+- page count: `1` before, `1` after
+
+### `Downloads/Easy-PhotoPrintEditor_V1.10.0_Win_Mac_EN_V01.pdf`
+
+- total discovered: 233
+- safe count: 53
+- successfully recompressed count: 53
+- skipped because new stream was not smaller: 0
+- failed recompression count: 0
+- unsupported count: 133
+- top reasons:
+  - `UNSUPPORTED_INDEXED_COLORSPACE`: 104
+  - `ELIGIBLE_FOR_RECOMPRESSION`: 53
+  - `ALPHA_DEPENDENCY`: 28
+  - `RECOMPRESSION_WOULD_INCREASE_SIZE`: 24
+  - `ALREADY_EFFICIENTLY_COMPRESSED`: 12
+- largest safe candidate:
+  - page 69, object `416 0 R`, `83036` bytes
+- original image bytes: `2,714,739`
+- rewritten image bytes: `2,358,136`
+- structural PDF size: `6,368,491`
+- final PDF size: `5,756,013`
+- saved bytes vs original input: `642,433`
+- saved percent vs original input: `10.04%`
+- page count: `220` before, `220` after
 
 ### `Downloads/Magellan-1100i-Manual.pdf`
 
 - total discovered: 15
 - safe count: 0
-- skip count: 3
+- successfully recompressed count: 0
+- skipped because new stream was not smaller: 0
+- failed recompression count: 0
 - unsupported count: 12
 - top reasons:
   - `UNSUPPORTED_CMYK_COLORSPACE`: 4
@@ -29,50 +77,22 @@ The normal extension runtime still does not modify PDF objects. The spike path d
   - `UNSUPPORTED_COLORSPACE`: 2
   - `IMAGE_MASK`: 2
 - largest safe candidate: none
-
-### `Downloads/Scan_20251024 (2).pdf`
-
-- total discovered: 1
-- safe count: 1
-- skip count: 0
-- unsupported count: 0
-- top reasons:
-  - `ELIGIBLE_FOR_RECOMPRESSION`: 1
-- largest safe candidate:
-  - page 1, object `2 0 R`, `1653x2338`, `1985585` bytes, `0.5138` bytes/pixel
-
-## Controlled Spike Result
-
-Validated a single safe image XObject recompression spike against `Downloads/Scan_20251024 (2).pdf`.
-
-- target image: page 1, object `2 0 R`
-- input size: `1,986,416` bytes
-- output size: `472,323` bytes
-- saved bytes: `1,514,093`
-- saved percent: `76.22%`
-- output header: `%PDF-`
-- input page count: `1`
-- output page count: `1`
-- rewritten image remained loadable after save
-- manual page render showed no visible corruption
-
-Implementation note:
-
-- the rewrite path must operate on the indirect PDF stream reference, not the resolved stream dictionary
-- `saveToBuffer({ garbage: 4 })` preserved document structure for the tested file
+- page count: `204` before, `204` after
 
 ## Phase 4 Requirement Mapping
 
 - `Интеграция mupdf.js (WASM) для in-place замены изображений`:
-  - discovery and classification now prepare the image candidates required for that later phase, without mutating PDF objects yet.
+  - the production helper now decodes safe image XObjects, JPEG re-encodes them at quality 75, and rewrites only the indirect stream reference when the new stream is smaller.
 - `Извлечение изображений из PDF (JPEG, PNG)`:
   - the new discovery pass walks every page resource tree and enumerates image XObjects.
 - `Сжатие изображений через OffscreenCanvas`:
-  - not implemented yet; classification isolates the safe candidates that will feed that work.
+  - not implemented yet; the production helper stays on MuPDF Pixmap JPEG encoding for this slice.
 - `Таймаут для длительных операций` and `Scrubbing метаданных`:
   - unchanged in the current branch.
-- controlled single-image recompression spike:
-  - one safe candidate was decoded, JPEG re-encoded at quality 75, written back in place, and saved successfully without changing page count or visible output integrity.
+- `SAFE_RECOMPRESS` only:
+  - SKIP and UNSUPPORTED candidates remain untouched.
+- shared reference safety:
+  - the helper rewrites each discovered image at most once and falls back to the structural-only result if the recompressed output is invalid or larger.
 
 ## Commit
 
