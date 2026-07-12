@@ -28,6 +28,11 @@ Phase 4 implementation is complete at the code/build level and ready for manual 
 - Fix applied: the popup now uses one vertical scrollable document flow with `overflow-y: auto` on `body`, no content clamp on `body`, and no overflow clipping on the shell container.
 - Result: the Compression section remains reachable, the Compress button is inside the scroll range, and horizontal overflow remains suppressed.
 
+## Offscreen Lifecycle Fix
+- Root cause of the runtime error: popup startup and compression validation could trigger multiple concurrent `offscreen:open` requests, and the background handler created the offscreen document on each request path once `hasDocument()` still returned false.
+- Fix applied: `ensureOffscreenDocument()` now keeps a shared in-flight creation promise and reuses the existing document instead of issuing a second `createDocument()` call.
+- Result: repeated popup opens and repeated compression requests reuse the same offscreen document, and Diagnostics can reach Engine Ready without the single-document error.
+
 ## Implementation Summary
 - Added a local MuPDF runtime path under `public/vendor/mupdf/`
 - Added a prebuild copy step to move the official package distribution into the extension runtime

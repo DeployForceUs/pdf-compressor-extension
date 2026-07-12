@@ -13,6 +13,7 @@ import type {
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
+let offscreenCreationPromise: Promise<{ supported: boolean; created: boolean }> | null = null;
 
 async function hasOffscreenDocument() {
   const offscreen = browser as typeof browser & {
@@ -39,17 +40,31 @@ async function ensureOffscreenDocument() {
     return { supported: false, created: false };
   }
 
-  if (await hasOffscreenDocument()) {
-    return { supported: true, created: false };
+  const createDocument = offscreen.offscreen.createDocument;
+
+  if (offscreenCreationPromise) {
+    return offscreenCreationPromise;
   }
 
-  await offscreen.offscreen.createDocument({
-    url: OFFSCREEN_URL,
-    reasons: [OFFSCREEN_REASON],
-    justification: "Provide local offscreen storage and compression workflows",
-  });
+  offscreenCreationPromise = (async () => {
+    try {
+      if (await hasOffscreenDocument()) {
+        return { supported: true, created: false };
+      }
 
-  return { supported: true, created: true };
+      await createDocument({
+        url: OFFSCREEN_URL,
+        reasons: [OFFSCREEN_REASON],
+        justification: "Provide local offscreen storage and compression workflows",
+      });
+
+      return { supported: true, created: true };
+    } finally {
+      offscreenCreationPromise = null;
+    }
+  })();
+
+  return offscreenCreationPromise;
 }
 
 async function closeOffscreenDocument() {
