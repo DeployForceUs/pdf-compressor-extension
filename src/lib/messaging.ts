@@ -49,6 +49,7 @@ export type PdfRecord = {
   size: number;
   type: string | null;
   lastModified: number;
+  pageCount?: number | null;
   data: number[];
 };
 

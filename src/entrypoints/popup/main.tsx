@@ -6,6 +6,8 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
 import { formatBytes, formatDuration, formatPercent, normalizeLocale } from "../../lib/i18n/helpers";
 import { MAX_PDF_BYTES, validatePdfFile } from "../../lib/pdf-validation";
+import { buildSelectedPdfDisplay, formatSplitWarningsHeader } from "./pdf-display";
+import { readPdfPageCount } from "../../lib/pdf-validation";
 import type {
   BackgroundCompressionCancelRequest,
   BackgroundCompressionHealthRequest,
@@ -86,10 +88,6 @@ function normalizeSmokeReadResult(
   }
 
   return value;
-}
-
-function fileNameFallback(name: string | null) {
-  return name ?? "—";
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -850,6 +848,7 @@ function Popup() {
     }
 
     const { bytes, fileName, fileSize, mimeType } = validation.file;
+    const pageCount = await readPdfPageCount(bytes);
     const byteArray = Array.from(new Uint8Array(bytes));
     const recordId = SELECTED_PDF_RECORD_ID;
 
@@ -864,6 +863,7 @@ function Popup() {
           size: fileSize,
           type: mimeType || null,
           lastModified: file.lastModified,
+          pageCount,
           data: byteArray,
         },
       });
@@ -895,6 +895,7 @@ function Popup() {
         selected: true,
         fileName: readBack.record.name,
         fileSize: readBack.record.size,
+        pageCount: readBack.record.pageCount ?? pageCount,
         mimeType: readBack.record.type,
         recordId: storeResponse.recordId,
         storedByteLength: storeResponse.byteLength,
@@ -961,11 +962,15 @@ function Popup() {
         return;
       }
 
+      const restoredPageCount =
+        readBack.record.pageCount ?? (await readPdfPageCount(new Uint8Array(readBack.record.data).buffer));
+
       setPdf({
         status: "ready",
         selected: true,
         fileName: readBack.record.name,
         fileSize: readBack.record.size,
+        pageCount: restoredPageCount,
         mimeType: readBack.record.type,
         recordId: readBack.record.id,
         storedByteLength: readBack.byteLength,
@@ -1181,9 +1186,8 @@ function Popup() {
       : "";
 
   const pdfStatusLabel = formatPdfStatus(t, pdf.status, pdf.error);
-  const pdfMetric = pdf.selected && pdf.fileSize > 0 ? formatBytes(pdf.fileSize, locale) : "";
+  const pdfDisplay = buildSelectedPdfDisplay(pdf, locale, t);
   const pdfHasFile = pdf.fileName !== null;
-  const pdfSelectedLabel = pdf.selected ? t("pdfInput.selected") : t("pdfInput.notSelected");
   const compressionStatusLabel = formatCompressionStatus(t, compression.status, compression.error);
   const compressionOriginalValue = pdf.fileSize > 0 ? formatBytes(pdf.fileSize, locale) : "—";
   const compressionCompressedValue =
@@ -1352,25 +1356,15 @@ function Popup() {
                   <span className="status-dot" />
                   <span>{t("pdfInput.metadataTitle")}</span>
                 </div>
-                {pdfMetric ? <span className="status-badge">{pdfMetric}</span> : null}
+                {pdfDisplay.badge ? <span className="status-badge">{pdfDisplay.badge}</span> : null}
               </div>
               <div className="metadata-grid">
-                <div className="metadata-row">
-                  <span className="metadata-row__label">{t("pdfInput.fileName")}</span>
-                  <span className="metadata-row__value">{fileNameFallback(pdf.fileName)}</span>
-                </div>
-                <div className="metadata-row">
-                  <span className="metadata-row__label">{t("pdfInput.fileSize")}</span>
-                  <span className="metadata-row__value">{pdf.fileSize > 0 ? formatBytes(pdf.fileSize, locale) : "—"}</span>
-                </div>
-                <div className="metadata-row">
-                  <span className="metadata-row__label">{t("pdfInput.validationStatus")}</span>
-                  <span className="metadata-row__value">{pdfStatusLabel}</span>
-                </div>
-                <div className="metadata-row">
-                  <span className="metadata-row__label">{t("pdfInput.selectedState")}</span>
-                  <span className="metadata-row__value">{pdfSelectedLabel}</span>
-                </div>
+                {pdfDisplay.rows.map((row) => (
+                  <div className="metadata-row" key={row.label}>
+                    <span className="metadata-row__label">{row.label}</span>
+                    <span className="metadata-row__value">{row.value}</span>
+                  </div>
+                ))}
               </div>
             {pdf.selected && pdf.recordId && pdf.storedByteLength !== null && pdf.readBackByteLength !== null ? (
                 <div className="metadata-card__footnote">
@@ -1413,7 +1407,7 @@ function Popup() {
                     className={split.strategy === value ? "split-card__strategy split-card__strategy--active" : "split-card__strategy"}
                     aria-pressed={split.strategy === value}
                     onClick={() =>
-                      setSplit({
+      setSplit({
                         strategy: value as SplitSnapshot["strategy"],
                         error: "",
                       })
@@ -1528,8 +1522,7 @@ function Popup() {
               {splitHasResult && splitWarningsCount > 0 ? (
                 <div className="split-warnings" aria-live="polite">
                   <div className="split-warnings__header">
-                    <span>{t("split.warnings")}</span>
-                    <span>{t("split.warningCount", { count: splitWarningsCount })}</span>
+                    <span>{formatSplitWarningsHeader(splitWarningsCount, t)}</span>
                   </div>
                   <div className="split-warnings__list">
                     {split.warnings.map((warning) => (
@@ -1538,7 +1531,7 @@ function Popup() {
                           const rendered = formatSplitWarning(warning, {
                             t,
                             formatBytes: (value) => formatBytes(value, locale),
-                          });
+      });
 
                           return (
                             <>

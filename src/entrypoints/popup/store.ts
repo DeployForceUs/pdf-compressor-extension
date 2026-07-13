@@ -32,6 +32,7 @@ export type SelectedPdfSnapshot = {
   selected: boolean;
   fileName: string | null;
   fileSize: number;
+  pageCount: number | null;
   mimeType: string | null;
   recordId: string | null;
   storedByteLength: number | null;
@@ -120,6 +121,7 @@ const initialPdf: SelectedPdfSnapshot = {
   selected: false,
   fileName: null,
   fileSize: 0,
+  pageCount: null,
   mimeType: null,
   recordId: null,
   storedByteLength: null,

@@ -43,6 +43,7 @@
     "metadataTitle": "File details",
     "fileName": "File name",
     "fileSize": "File size",
+    "pages": "Pages",
     "validationStatus": "Validation status",
     "selectedState": "Selected state",
     "selected": "Selected",
@@ -121,6 +122,8 @@
       "noFallback": "No fallback"
     },
     "warnings": {
+      "title_one": "{{count}} warning",
+      "title_other": "{{count}} warnings",
       "singlePageExceedsLimit": "Single page exceeds limit",
       "singlePageExceedsLimitDetail": "Page {{page}} generated {{actual}} (limit {{requested}}) in {{fileName}}",
       "compressionFailedFallback": "Compression failed, using original part",

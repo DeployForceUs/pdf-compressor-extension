@@ -128,6 +128,10 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
   assert.equal(response.ok, true);
   assert.equal(response.result.partsCount, 1);
   assert.equal(response.result.warnings.length, 0);
+  assert.equal(
+    response.result.totalBytesSaved,
+    Math.max(0, response.result.originalSize - (persisted as { data: ArrayBuffer }).data.byteLength),
+  );
   assert.equal(progressEvents[0]?.stage, "validating");
   assert.equal(progressEvents.at(-1)?.stage, "complete");
   assert.equal((persisted as SplitResultMetadata).warnings.length, 0);

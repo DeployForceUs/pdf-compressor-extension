@@ -43,6 +43,7 @@
     "metadataTitle": "Detalles del archivo",
     "fileName": "Nombre",
     "fileSize": "Tamaño",
+    "pages": "Páginas",
     "validationStatus": "Estado de validación",
     "selectedState": "Estado de selección",
     "selected": "Seleccionado",
@@ -121,6 +122,8 @@
       "noFallback": "Sin alternativa"
     },
     "warnings": {
+      "title_one": "{{count}} advertencia",
+      "title_other": "{{count}} advertencias",
       "singlePageExceedsLimit": "Una sola página supera el límite",
       "singlePageExceedsLimitDetail": "La página {{page}} generó {{actual}} (límite {{requested}}) en {{fileName}}",
       "compressionFailedFallback": "La compresión falló, se usa la parte original",

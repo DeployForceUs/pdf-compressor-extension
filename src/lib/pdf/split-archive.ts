@@ -555,7 +555,7 @@ export async function createSplitZipArchive(
   }
 
   const zipArrayBuffer = zipBytes.slice().buffer;
-  const totalBytesSaved = Math.max(0, finalized.originalSplitPartsSize - finalized.finalPartsSize);
+  const totalBytesSaved = Math.max(0, request.inputBytes.byteLength - zipArrayBuffer.byteLength);
 
   const result: SplitArchiveOutcome["result"] = {
     zipBlobId: SPLIT_PDF_RECORD_ID,

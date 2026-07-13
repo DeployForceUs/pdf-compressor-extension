@@ -4,6 +4,7 @@ import { createLogger, initTelemetry } from "../bootstrap";
 import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID, SPLIT_PDF_RECORD_ID } from "../pdf-records";
 import { completeCompressionOutcome, compressionMetadata } from "./compression-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../storage/pdf-compression-db";
+import { deletePdfRecord, readPdfRecord, writePdfRecord } from "../storage/pdf-records-db";
 import { deleteSplitResult, readSplitResult, writeSplitResult } from "../storage/pdf-split-results-db";
 import type {
   CompressionCancelResponse,
@@ -37,19 +38,15 @@ import { toSplitRuntimeError } from "../pdf/split-errors";
 import { runSplitJob } from "./split-runtime";
 import type { CompressionWorkerApi } from "./worker";
 
-const RECORD_STORE = "binary-records";
-const DB_NAME = "pdf-compressor-phase1";
-const DB_VERSION = 2;
 const COMPRESSION_TIMEOUT_MS = 30_000;
 const SPLIT_TIMEOUT_MS = 30_000;
 const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
+const RECORD_STORE = "binary-records";
+const DB_NAME = "pdf-compressor-phase1";
+const DB_VERSION = 2;
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
-
-type DatabaseHandle = {
-  db: IDBDatabase;
-};
 
 type CompressionRunState = {
   abortController: AbortController;
@@ -70,16 +67,19 @@ let workerApi: CompressionWorkerApi | null = null;
 let activeCompression: CompressionRunState | null = null;
 let activeSplit: SplitRunState | null = null;
 
+type DatabaseHandle = {
+  db: IDBDatabase;
+};
+
 function openDatabase(): Promise<DatabaseHandle> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (db.objectStoreNames.contains(RECORD_STORE)) {
-        db.deleteObjectStore(RECORD_STORE);
+      if (!db.objectStoreNames.contains(RECORD_STORE)) {
+        db.createObjectStore(RECORD_STORE, { keyPath: "id" });
       }
-      db.createObjectStore(RECORD_STORE, { keyPath: "id" });
     };
 
     request.onsuccess = () => {
@@ -153,15 +153,6 @@ async function putBytes(key: string, bytes: number[]) {
   return { ok: true as const, byteLength: record.byteLength };
 }
 
-async function putPdf(record: PdfRecord) {
-  const stored: PdfRecord = {
-    ...record,
-    data: [...record.data],
-  };
-  await withStore("readwrite", (store) => requestToPromise(store.put(stored)));
-  return { ok: true as const, recordId: record.id, byteLength: record.data.length };
-}
-
 async function readBytes(key: string) {
   const value = await withStore("readonly", (store) => requestToPromise(store.get(key)));
   if (value === undefined) {
@@ -173,7 +164,7 @@ async function readBytes(key: string) {
 }
 
 async function readPdf(recordId: string) {
-  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as PdfRecord | undefined;
+  const value = await readPdfRecord(recordId);
   return { ok: true as const, recordId, record: value ?? null, byteLength: value?.data.length ?? 0 };
 }
 
@@ -183,9 +174,8 @@ async function deleteBytes(key: string) {
 }
 
 async function deletePdf(recordId: string) {
-  const existing = await withStore("readonly", (store) => requestToPromise(store.get(recordId)));
-  await withStore("readwrite", (store) => requestToPromise(store.delete(recordId)));
-  return { ok: true as const, recordId, deleted: existing !== undefined };
+  const deleted = await deletePdfRecord(recordId);
+  return { ok: true as const, recordId, deleted };
 }
 
 async function compareBytes(key: string, bytes: number[]) {
@@ -648,7 +638,11 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
         type: message.record.type,
         found: true,
       });
-      return putPdf(message.record);
+      return writePdfRecord(message.record).then((record) => ({
+        ok: true as const,
+        recordId: record.id,
+        byteLength: record.data.length,
+      }));
     case "pdf:read":
       logger.info("Reading PDF record", {
         recordId: message.recordId,
