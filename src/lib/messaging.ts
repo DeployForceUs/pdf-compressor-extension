@@ -126,7 +126,15 @@ export type CompressionStage = "loading-engine" | "opening" | "scrubbing" | "rew
 
 export type CompressionStatus = "idle" | "loading-engine" | "compressing" | "cancelling" | "complete" | "error" | "cancelled";
 
-export type CompressionErrorCode = "WASM_NOT_SUPPORTED" | "WASM_LOAD_FAILED" | "INVALID_PDF" | "ENCRYPTED_PDF" | "TIMEOUT" | "CANCELLED" | "UNKNOWN";
+export type CompressionErrorCode =
+  | "WASM_NOT_SUPPORTED"
+  | "WASM_LOAD_FAILED"
+  | "INVALID_PDF"
+  | "ENCRYPTED_PDF"
+  | "TIMEOUT"
+  | "CANCELLED"
+  | "STORAGE_QUOTA_EXCEEDED"
+  | "UNKNOWN";
 
 export type CompressionResultRecord = {
   id: string;

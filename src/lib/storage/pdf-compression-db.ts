@@ -5,6 +5,7 @@ import type { CompressionResultRecord } from "../messaging";
 const DB_NAME = "pdf-compressor-phase4";
 const DB_VERSION = 1;
 const STORE_NAME = "compression-results";
+export const COMPRESSION_STORAGE_QUOTA_ERROR_CODE = "STORAGE_QUOTA_EXCEEDED" as const;
 
 interface CompressionDbSchema extends DBSchema {
   [STORE_NAME]: {
@@ -16,6 +17,43 @@ interface CompressionDbSchema extends DBSchema {
 type CompressionDb = Pick<IDBPDatabase<CompressionDbSchema>, "get" | "put" | "delete">;
 
 const memoryStores = new Map<string, Map<string, CompressionResultRecord>>();
+
+export class CompressionStorageError extends Error {
+  readonly code: typeof COMPRESSION_STORAGE_QUOTA_ERROR_CODE;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "CompressionStorageError";
+    this.code = COMPRESSION_STORAGE_QUOTA_ERROR_CODE;
+
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        configurable: true,
+        enumerable: false,
+        value: cause,
+        writable: true,
+      });
+    }
+  }
+}
+
+function isQuotaExceededError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.code === 22 || error.code === 1014)
+  );
+}
+
+export function normalizeCompressionPersistenceError(error: unknown): never {
+  if (isQuotaExceededError(error)) {
+    throw new CompressionStorageError(
+      "Compression result could not be persisted because storage quota was exceeded",
+      error,
+    );
+  }
+
+  throw error;
+}
 
 function createMemoryDb(): CompressionDb {
   return {
@@ -58,8 +96,12 @@ export async function readCompressionResult(recordId = COMPRESSED_PDF_RECORD_ID)
 
 export async function writeCompressionResult(record: CompressionResultRecord) {
   const db = await getDb();
-  await db.put(STORE_NAME, record, record.id);
-  return record;
+  try {
+    await db.put(STORE_NAME, record, record.id);
+    return record;
+  } catch (error) {
+    normalizeCompressionPersistenceError(error);
+  }
 }
 
 export async function deleteCompressionResult(recordId = COMPRESSED_PDF_RECORD_ID) {
