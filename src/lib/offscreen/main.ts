@@ -5,7 +5,15 @@ import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID, SPLIT_PDF_RECORD_ID }
 import { completeCompressionOutcome, compressionMetadata } from "./compression-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../storage/pdf-compression-db";
 import { deletePdfRecord, readPdfRecord, writePdfRecord } from "../storage/pdf-records-db";
-import { deleteSplitResult, readSplitResult, writeSplitResult } from "../storage/pdf-split-results-db";
+import {
+  buildSplitResultMetadataFromBundle,
+  buildSplitResultMetadataFromLegacyRecord,
+  deleteSplitResult,
+  readSplitArtifactsForBundle,
+  readSplitResult,
+  readSplitResultBundle,
+  writeSplitResultBundle,
+} from "../storage/pdf-split-results-db";
 import type {
   CompressionCancelResponse,
   CompressionErrorEvent,
@@ -32,6 +40,7 @@ import type {
   SplitResultDeleteResponse,
   SplitResultMetadata,
   SplitResultReadResponse,
+  SplitResultBundle,
   SplitStartResponse,
 } from "../messaging";
 import { toSplitRuntimeError } from "../pdf/split-errors";
@@ -255,34 +264,6 @@ function splitProgressFromMessage(event: SplitProgressEvent): SplitProgressEvent
   return event;
 }
 
-function toSplitMetadata(result: Awaited<ReturnType<typeof writeSplitResult>>): SplitResultMetadata {
-  return {
-    zipBlobId: result.id,
-    fileName: result.fileName,
-    mimeType: result.mimeType,
-    size: result.data.byteLength,
-    compressAfterRequested: result.compressAfterRequested,
-    originalSplitPartsSize: result.originalSplitPartsSize,
-    finalPartsSize: result.finalPartsSize,
-    compressedPartsCount: result.compressedPartsCount,
-    fallbackPartsCount: result.fallbackPartsCount,
-    totalBytesSaved: result.totalBytesSaved,
-    originalSize: result.originalSize,
-    totalPartsSize: result.totalPartsSize,
-    partsCount: result.partsCount,
-    strategy: result.strategy,
-    warnings: result.warnings ?? [],
-    status: "complete",
-  };
-}
-
-function splitResultEvent(result: Awaited<ReturnType<typeof writeSplitResult>>) {
-  return {
-    type: "split:result" as const,
-    result: toSplitMetadata(result),
-  };
-}
-
 function splitResultEventFromMetadata(result: SplitResultMetadata) {
   return {
     type: "split:result" as const,
@@ -337,8 +318,17 @@ async function cancelSplit() {
 }
 
 async function readSplitState(recordId?: string) {
-  const result = await readSplitResult(recordId);
-  return { ok: true as const, result: result ? toSplitMetadata(result) : null };
+  const bundle = await readSplitResultBundle(recordId);
+  if (bundle) {
+    const artifacts = await readSplitArtifactsForBundle(bundle.id);
+    return {
+      ok: true as const,
+      result: artifacts ? buildSplitResultMetadataFromBundle(bundle, artifacts) : null,
+    };
+  }
+
+  const legacy = await readSplitResult(recordId);
+  return { ok: true as const, result: legacy ? buildSplitResultMetadataFromLegacyRecord(legacy) : null };
 }
 
 async function deleteSplitState(recordId?: string) {
@@ -386,23 +376,24 @@ async function startSplit(
       selected,
       {
         strategy: message.strategy,
+        outputMode: message.outputMode,
         compressAfter: message.compressAfter,
       },
       {
-      workerApi: getSplitWorkerGateway(),
-      persistResult: writeSplitResult,
-      isCancelled: () => abortController.signal.aborted,
-      onProgress: (event) => {
-        const progressEvent = splitProgressFromMessage(event);
-        logger.info("Split progress", {
-          recordId: progressEvent.recordId,
-          stage: progressEvent.stage,
-          progress: progressEvent.progress,
-          partsCount: progressEvent.partsCount,
-          currentPart: progressEvent.currentPart,
-        });
-        broadcast(progressEvent);
-      },
+        workerApi: getSplitWorkerGateway(),
+        persistResult: writeSplitResultBundle,
+        isCancelled: () => abortController.signal.aborted,
+        onProgress: (event) => {
+          const progressEvent = splitProgressFromMessage(event);
+          logger.info("Split progress", {
+            recordId: progressEvent.recordId,
+            stage: progressEvent.stage,
+            progress: progressEvent.progress,
+            partsCount: progressEvent.partsCount,
+            currentPart: progressEvent.currentPart,
+          });
+          broadcast(progressEvent);
+        },
       },
     );
 

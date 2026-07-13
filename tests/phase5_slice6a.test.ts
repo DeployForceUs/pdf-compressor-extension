@@ -5,7 +5,7 @@ import mupdf from "mupdf";
 import { SPLIT_PDF_RECORD_ID } from "../src/lib/pdf-records";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
-import type { PdfRecord, SplitProgressEvent } from "../src/lib/messaging";
+import type { PdfRecord, SplitArtifactRecord, SplitProgressEvent, SplitResultBundle } from "../src/lib/messaging";
 import type { SplitRuntimeError } from "../src/lib/pdf/split-errors";
 
 async function createPdf(pageCount: number) {
@@ -50,7 +50,7 @@ async function runSplit(
   },
 ) {
   const progressEvents: SplitProgressEvent[] = [];
-  let persisted: unknown = null;
+  let persisted: { bundle: SplitResultBundle; artifacts: SplitArtifactRecord[] } | null = null;
 
   const response = await runSplitJob(
     inputRecord,
@@ -58,13 +58,13 @@ async function runSplit(
     {
       workerApi: createWorkerGateway(),
       persistResult: hooks?.persistResult
-        ? async (record) => {
-            persisted = await hooks.persistResult?.(record);
-            return record;
+        ? async (bundle, artifacts) => {
+            persisted = await hooks.persistResult?.({ bundle, artifacts });
+            return bundle;
           }
-        : async (record) => {
-            persisted = record;
-            return record;
+        : async (bundle, artifacts) => {
+            persisted = { bundle, artifacts };
+            return bundle;
           },
       isCancelled: hooks?.isCancelled ?? (() => false),
       onProgress: async (event) => {
@@ -97,11 +97,12 @@ async function assertZipContains(zipBytes: ArrayBuffer, expectedFilenames: strin
   assert.equal(response.ok, true);
   assert.equal(response.zipBlobId, SPLIT_PDF_RECORD_ID);
   assert.equal(response.result.partsCount, 3);
+  assert.equal(response.result.outputMode, "single-zip");
   assert.equal(response.result.fileName, "pages_split.zip");
   assert.equal(response.result.mimeType, "application/zip");
   assert.equal(response.result.originalSize, inputRecord.data.length);
   assert.equal(response.result.totalPartsSize > 0, true);
-  assert.equal((persisted as { id?: string } | null)?.id, SPLIT_PDF_RECORD_ID);
+  assert.equal(persisted?.bundle.id, SPLIT_PDF_RECORD_ID);
   assert.deepEqual(
     progressEvents.map((event) => event.stage),
     [
@@ -119,20 +120,13 @@ async function assertZipContains(zipBytes: ArrayBuffer, expectedFilenames: strin
     ],
   );
 
-  const stored = persisted as {
-    fileName: string;
-    mimeType: string | null;
-    originalSize: number;
-    totalPartsSize: number;
-    partsCount: number;
-    strategy: { type: string };
-    data: ArrayBuffer;
-  };
-  assert.equal(stored.fileName, "pages_split.zip");
-  assert.equal(stored.mimeType, "application/zip");
-  assert.equal(stored.partsCount, 3);
-  assert.equal(stored.strategy.type, "by-pages");
-  await assertZipContains(stored.data, [
+  const stored = persisted;
+  assert.ok(stored);
+  assert.equal(stored.artifacts[0].filename, "pages_split.zip");
+  assert.equal(stored.bundle.outputMode, "single-zip");
+  assert.equal(stored.bundle.partsCount, 3);
+  assert.equal(stored.bundle.strategy.type, "by-pages");
+  await assertZipContains(stored.artifacts[0].data, [
     "pages_part_001_pages_1-2.pdf",
     "pages_part_002_pages_3-4.pdf",
     "pages_part_003_pages_5-5.pdf",
@@ -148,8 +142,9 @@ async function assertZipContains(zipBytes: ArrayBuffer, expectedFilenames: strin
 
   assert.equal(response.result.partsCount, 3);
   assert.deepEqual(progressEvents[0]?.stage, "validating");
-  assert.equal((persisted as { strategy?: { type?: string } }).strategy?.type, "manual-ranges");
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  assert.ok(persisted);
+  assert.equal(persisted.bundle.strategy.type, "manual-ranges");
+  await assertZipContains(persisted.artifacts[0].data, [
     "manual_part_001_pages_1-2.pdf",
     "manual_part_002_pages_4-4.pdf",
     "manual_part_003_pages_5-6.pdf",

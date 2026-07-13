@@ -1,8 +1,16 @@
-import type { SplitLocalRequest, SplitProgressEvent, SplitWarning } from "../../lib/messaging";
+import {
+  normalizeSplitOutputMode,
+  type SplitArtifactDescriptor,
+  type SplitLocalRequest,
+  type SplitOutputMode,
+  type SplitProgressEvent,
+  type SplitWarning,
+} from "../../lib/messaging";
 import type { SplitStrategy } from "../../lib/pdf/split-strategies";
 
 export type SplitFormState = {
   strategy: SplitStrategy["type"];
+  outputMode: SplitOutputMode;
   pagesPerPart: string;
   maxPartSizeMb: string;
   manualRanges: string;
@@ -44,6 +52,21 @@ export type SplitWarningRender = {
   detail: string;
 };
 
+export type SplitOutputModeOption = {
+  value: SplitOutputMode;
+  label: string;
+  description: string;
+};
+
+export type SplitArtifactRender = {
+  id: string;
+  filename: string;
+  size: string;
+  pageRange: string;
+  kind: string;
+  downloadLabel: string;
+};
+
 const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
 const POSITIVE_DECIMAL_OR_INTEGER_PATTERN = /^(?:[1-9]\d*|0)(?:\.\d+)?$/;
 
@@ -73,6 +96,26 @@ function toSplitFormError(issue: SplitFormIssue): SplitFormError {
   return { issue };
 }
 
+export function buildSplitOutputModeOptions(i18n: SplitUiText): SplitOutputModeOption[] {
+  return [
+    {
+      value: "single-zip",
+      label: i18n.t("split.outputModes.singleZip"),
+      description: i18n.t("split.outputModes.singleZipDescription"),
+    },
+    {
+      value: "individual-pdfs",
+      label: i18n.t("split.outputModes.individualPdfs"),
+      description: i18n.t("split.outputModes.individualPdfsDescription"),
+    },
+    {
+      value: "separate-zips",
+      label: i18n.t("split.outputModes.separateZips"),
+      description: i18n.t("split.outputModes.separateZipsDescription"),
+    },
+  ];
+}
+
 export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalRequest | SplitFormError {
   switch (form.strategy) {
     case "by-pages": {
@@ -87,6 +130,7 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
           type: "by-pages",
           pagesPerPart,
         },
+        outputMode: normalizeSplitOutputMode(form.outputMode),
         compressAfter: form.compressAfter || undefined,
       };
     }
@@ -102,6 +146,7 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
           type: "by-max-size",
           maxPartSizeBytes: Math.max(1, Math.round(maxPartSizeMb * 1024 * 1024)),
         },
+        outputMode: normalizeSplitOutputMode(form.outputMode),
         compressAfter: form.compressAfter || undefined,
       };
     }
@@ -117,6 +162,7 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
           type: "manual-ranges",
           ranges,
         },
+        outputMode: normalizeSplitOutputMode(form.outputMode),
         compressAfter: form.compressAfter || undefined,
       };
     }
@@ -164,6 +210,9 @@ export function formatSplitProgressDisplay(event: SplitProgressSnapshot, i18n: S
       break;
     case "creating-zip":
       label = i18n.t("split.progress.creatingZip");
+      break;
+    case "creating-artifacts":
+      label = i18n.t("split.progress.creatingArtifacts");
       break;
     case "persisting":
       label = i18n.t("split.progress.savingResult");
@@ -255,6 +304,53 @@ export function formatSplitWarning(warning: SplitWarning, i18n: SplitUiText): Sp
       return exhausted;
     }
   }
+}
+
+function formatArtifactPageRange(artifact: Pick<SplitArtifactDescriptor, "pageStart" | "pageEnd">, t: SplitUiText["t"]) {
+  if (typeof artifact.pageStart === "number" && typeof artifact.pageEnd === "number") {
+    return t("split.artifactPageRange", {
+      start: artifact.pageStart,
+      end: artifact.pageEnd,
+    });
+  }
+
+  return t("split.artifactPageRangeUnknown");
+}
+
+export function buildSplitArtifactRender(
+  artifact: SplitArtifactDescriptor,
+  i18n: SplitUiText,
+): SplitArtifactRender {
+  return {
+    id: artifact.id,
+    filename: artifact.filename,
+    size: i18n.formatBytes(artifact.byteLength),
+    pageRange: formatArtifactPageRange(artifact, i18n.t),
+    kind: i18n.t(`split.artifactKinds.${artifact.kind}`),
+    downloadLabel: i18n.t("split.downloadArtifact"),
+  };
+}
+
+export function assertDownloadableSplitArtifactBytes(
+  artifact: Pick<SplitArtifactDescriptor, "kind" | "filename">,
+  bytes: ArrayBuffer,
+) {
+  if (!(bytes instanceof ArrayBuffer)) {
+    throw new Error(`Artifact ${artifact.filename} data is not an ArrayBuffer`);
+  }
+
+  const headerLength = artifact.kind === "pdf" ? 5 : 2;
+  const header = new TextDecoder().decode(new Uint8Array(bytes).slice(0, headerLength));
+
+  if (artifact.kind === "pdf" && header !== "%PDF-") {
+    throw new Error(`Artifact ${artifact.filename} does not start with %PDF-`);
+  }
+
+  if (artifact.kind === "zip" && header !== "PK") {
+    throw new Error(`Artifact ${artifact.filename} does not start with PK`);
+  }
+
+  return bytes;
 }
 
 export function splitDownloadFileName(fileName: string | null | undefined) {

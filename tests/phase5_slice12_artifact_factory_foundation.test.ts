@@ -6,7 +6,7 @@ import mupdf from "mupdf";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive.ts";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime.ts";
 import { createSplitResultsStore } from "../src/lib/storage/pdf-split-results-db.ts";
-import { SPLIT_OUTPUT_MODES, type PdfRecord, type SplitResultRecord } from "../src/lib/messaging.ts";
+import { SPLIT_OUTPUT_MODES, type PdfRecord, type SplitArtifactRecord, type SplitResultBundle } from "../src/lib/messaging.ts";
 
 async function createPdf(pageCount: number) {
   const pdf = await PDFDocument.create();
@@ -44,7 +44,7 @@ function createWorkerGateway() {
 
 async function runSplit(inputRecord: PdfRecord) {
   const progressEvents: Array<unknown> = [];
-  let persisted: SplitResultRecord | null = null;
+  let persisted: { bundle: SplitResultBundle; artifacts: SplitArtifactRecord[] } | null = null;
 
   const response = await runSplitJob(
     inputRecord,
@@ -58,9 +58,9 @@ async function runSplit(inputRecord: PdfRecord) {
     },
     {
       workerApi: createWorkerGateway(),
-      persistResult: async (record) => {
-        persisted = record;
-        return record;
+      persistResult: async (bundle, artifacts) => {
+        persisted = { bundle, artifacts };
+        return bundle;
       },
       isCancelled: () => false,
       onProgress: async (event) => {
@@ -94,43 +94,48 @@ assert.ok(typeof indexedDB !== "undefined");
   const { response, persisted } = await runSplit(inputRecord);
   assert.equal(response.ok, true);
   assert.equal(response.result.partsCount, 3);
+  assert.equal(response.result.outputMode, "single-zip");
+  assert.equal(response.result.artifactCount, 1);
   assert.equal(response.result.warnings.length, 0);
-  assert.equal(response.result.totalBytesSaved, Math.max(0, response.result.originalSize - persisted.data.byteLength));
+  assert.equal(response.result.totalBytesSaved, Math.max(0, response.result.originalSize - response.result.size));
+  assert.equal(persisted?.bundle.outputMode, "single-zip");
+  assert.equal(persisted?.artifacts.length, 1);
 
-  await store.writeSplitResult(persisted);
+  assert.ok(persisted);
+  await store.writeSplitResultBundle(persisted.bundle, persisted.artifacts);
 
-  const bundle = await store.readSplitResultBundle(persisted.id);
+  const bundle = await store.readSplitResultBundle(persisted.bundle.id);
   assert.ok(bundle);
   assert.equal(bundle?.outputMode, "single-zip");
   assert.equal(bundle?.artifactIds.length, 1);
   assert.equal(bundle?.status, "complete");
 
-  const artifacts = await store.readSplitArtifactsForBundle(persisted.id);
+  const artifacts = await store.readSplitArtifactsForBundle(persisted.bundle.id);
   assert.ok(artifacts);
   assert.equal(artifacts?.length, 1);
   assert.equal(artifacts?.[0].kind, "zip");
   assert.equal(artifacts?.[0].mimeType, "application/zip");
 
-  const artifact = await store.readSplitArtifact(persisted.id);
+  const artifact = await store.readSplitArtifact(persisted.bundle.id);
   assert.ok(artifact);
-  assert.equal(artifact?.byteLength, persisted.data.byteLength);
+  assert.equal(artifact?.byteLength, persisted.artifacts[0].data.byteLength);
   await assertZipContains(artifact!.data, [
     { filename: "foundation_part_001_pages_1-1.pdf", pageCount: 1 },
     { filename: "foundation_part_002_pages_2-2.pdf", pageCount: 1 },
     { filename: "foundation_part_003_pages_3-3.pdf", pageCount: 1 },
   ]);
 
-  const compat = await store.readSplitResult(persisted.id);
+  const compat = await store.readSplitResult(persisted.bundle.id);
   assert.ok(compat);
   assert.equal(compat?.mimeType, "application/zip");
-  assert.equal(compat?.fileName, persisted.fileName);
+  assert.equal(compat?.fileName, "foundation_split.zip");
   await assertZipContains(compat!.data, [
     { filename: "foundation_part_001_pages_1-1.pdf", pageCount: 1 },
     { filename: "foundation_part_002_pages_2-2.pdf", pageCount: 1 },
     { filename: "foundation_part_003_pages_3-3.pdf", pageCount: 1 },
   ]);
 
-  await store.deleteSplitResult(persisted.id);
+  await store.deleteSplitResult(persisted.bundle.id);
 }
 
 {
@@ -145,14 +150,15 @@ assert.ok(typeof indexedDB !== "undefined");
   });
 
   const { persisted } = await runSplit(inputRecord);
-  await store.writeSplitResult(persisted);
+  assert.ok(persisted);
+  await store.writeSplitResultBundle(persisted.bundle, persisted.artifacts);
 
-  const bundle = await store.readSplitResultBundle(persisted.id);
+  const bundle = await store.readSplitResultBundle(persisted.bundle.id);
   assert.ok(bundle);
   assert.equal(bundle?.status, "complete");
-  assert.equal((await store.readSplitArtifactsForBundle(persisted.id))?.length, 1);
+  assert.equal((await store.readSplitArtifactsForBundle(persisted.bundle.id))?.length, 1);
 
-  await store.deleteSplitResult(persisted.id);
+  await store.deleteSplitResult(persisted.bundle.id);
 }
 
 {
@@ -169,11 +175,11 @@ assert.ok(typeof indexedDB !== "undefined");
 
   const { persisted } = await runSplit(inputRecord);
   await assert.rejects(
-    () => failingStore.writeSplitResult(persisted),
+    () => failingStore.writeSplitResultBundle(persisted!.bundle, persisted!.artifacts),
     (error: unknown) => error instanceof Error && error.message.includes("artifacts failed"),
   );
-  assert.equal(await failingStore.readSplitResultBundle(persisted.id), null);
-  assert.equal(await failingStore.readSplitArtifactsForBundle(persisted.id), null);
+  assert.equal(await failingStore.readSplitResultBundle(persisted!.bundle.id), null);
+  assert.equal(await failingStore.readSplitArtifactsForBundle(persisted!.bundle.id), null);
 }
 
 {
@@ -190,10 +196,10 @@ assert.ok(typeof indexedDB !== "undefined");
 
   const { persisted } = await runSplit(inputRecord);
   await assert.rejects(
-    () => quotaStore.writeSplitResult(persisted),
+    () => quotaStore.writeSplitResultBundle(persisted!.bundle, persisted!.artifacts),
     (error: unknown) => error instanceof Error && (error as { code?: string }).code === "STORAGE_QUOTA_EXCEEDED",
   );
-  assert.equal(await quotaStore.readSplitResultBundle(persisted.id), null);
+  assert.equal(await quotaStore.readSplitResultBundle(persisted!.bundle.id), null);
 }
 
 {
@@ -202,16 +208,17 @@ assert.ok(typeof indexedDB !== "undefined");
 
   const store = createSplitResultsStore();
   const { persisted } = await runSplit(inputRecord);
-  await store.writeSplitResult(persisted);
+  assert.ok(persisted);
+  await store.writeSplitResultBundle(persisted.bundle, persisted.artifacts);
 
-  const artifact = await store.readSplitArtifact(persisted.id);
+  const artifact = await store.readSplitArtifact(persisted.bundle.id);
   assert.ok(artifact);
   await store.deleteSplitArtifact(artifact.id);
 
   assert.equal(await store.readSplitArtifact(artifact.id), null);
-  assert.equal(await store.readSplitResultBundle(persisted.id), null);
+  assert.equal(await store.readSplitResultBundle(persisted.bundle.id), null);
 
-  assert.equal(await store.deleteSplitResult(persisted.id), true);
+  assert.equal(await store.deleteSplitResult(persisted.bundle.id), true);
 }
 
 {
@@ -220,18 +227,38 @@ assert.ok(typeof indexedDB !== "undefined");
 
   const store = createSplitResultsStore();
   const { persisted } = await runSplit(inputRecord);
-  await store.writeLegacySplitResult(persisted);
+  assert.ok(persisted);
+  await store.writeLegacySplitResult({
+    id: persisted.bundle.id,
+    sourceRecordId: persisted.bundle.sourceRecordId,
+    fileName: persisted.bundle.sourceFileName,
+    mimeType: persisted.artifacts[0].mimeType,
+    compressAfterRequested: persisted.bundle.compressAfterRequested,
+    originalSplitPartsSize: persisted.bundle.originalSplitPartsSize,
+    finalPartsSize: persisted.bundle.finalPartsSize,
+    compressedPartsCount: persisted.bundle.compressedPartsCount,
+    fallbackPartsCount: persisted.bundle.fallbackPartsCount,
+    totalBytesSaved: persisted.bundle.totalBytesSaved,
+    originalSize: persisted.bundle.originalSize,
+    totalPartsSize: persisted.bundle.totalArtifactSize,
+    partsCount: persisted.bundle.partsCount,
+    strategy: persisted.bundle.strategy,
+    warnings: persisted.bundle.warnings,
+    data: persisted.artifacts[0].data,
+    createdAt: persisted.bundle.createdAt,
+    updatedAt: persisted.bundle.updatedAt,
+  });
 
-  const legacy = await store.readLegacySplitResult(persisted.id);
+  const legacy = await store.readLegacySplitResult(persisted.bundle.id);
   assert.ok(legacy);
-  assert.equal(legacy?.fileName, persisted.fileName);
+  assert.equal(legacy?.fileName, persisted.bundle.sourceFileName);
 
-  const bundle = await store.readSplitResultBundle(persisted.id);
+  const bundle = await store.readSplitResultBundle(persisted.bundle.id);
   assert.ok(bundle);
   assert.equal(bundle?.outputMode, "single-zip");
   assert.equal(bundle?.artifactIds.length, 1);
 
-  const compat = await store.readSplitResult(persisted.id);
+  const compat = await store.readSplitResult(persisted.bundle.id);
   assert.ok(compat);
   await assertZipContains(compat!.data, [
     { filename: "legacy_part_001_pages_1-1.pdf", pageCount: 1 },
@@ -239,8 +266,8 @@ assert.ok(typeof indexedDB !== "undefined");
     { filename: "legacy_part_003_pages_3-3.pdf", pageCount: 1 },
   ]);
 
-  assert.equal(await store.deleteLegacySplitResult(persisted.id), true);
-  assert.equal(await store.readLegacySplitResult(persisted.id), null);
+  assert.equal(await store.deleteLegacySplitResult(persisted.bundle.id), true);
+  assert.equal(await store.readLegacySplitResult(persisted.bundle.id), null);
 }
 
 console.log("phase5 slice 12 artifact factory foundation assertions passed");

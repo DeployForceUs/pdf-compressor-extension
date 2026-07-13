@@ -331,9 +331,9 @@ const testSplitDeps = {
           workerApi: {
             split: (request, isCancelled, onProgress) => createSplitZipArchive(request, isCancelled, onProgress, testSplitDeps),
           },
-          persistResult: async (record) => {
+          persistResult: async (bundle) => {
             persistCalls += 1;
-            return record;
+            return bundle;
           },
           isCancelled: async () => false,
           onProgress: async (_event: SplitProgressEvent) => undefined,

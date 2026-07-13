@@ -1,7 +1,16 @@
 import { PDFDocument } from "pdf-lib";
+import { unzipSync, zipSync } from "fflate";
 import { zipPdfParts } from "../archive/zip-parts";
 import { SPLIT_PDF_RECORD_ID } from "../pdf-records";
-import type { CompressionProgressEvent, SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../messaging";
+import {
+  normalizeSplitOutputMode,
+  type CompressionProgressEvent,
+  type SplitArtifactDescriptor,
+  type SplitOutputMode,
+  type SplitProgressEvent,
+  type SplitResultMetadata,
+  type SplitWarning,
+} from "../messaging";
 import { compressBalancedPdf, type CompressionOutcome, type CompressionRequest } from "./compressor";
 import { planSplit } from "./split-planner";
 import { parsePageRangeExpression, validatePageRangesInInputOrder } from "./page-range-parser";
@@ -28,13 +37,19 @@ export type SplitArchiveRequest = {
   inputBytes: ArrayBuffer;
   strategy: SplitStrategy;
   documentName?: string;
+  outputMode?: SplitOutputMode;
   compressAfter?: boolean;
   mupdfRuntimeUrl?: string;
 };
 
 export type SplitArchiveOutcome = {
-  zipBytes: ArrayBuffer;
+  zipBytes?: ArrayBuffer;
+  artifacts: SplitArtifactPayload[];
   result: SplitResultMetadata;
+};
+
+export type SplitArtifactPayload = SplitArtifactDescriptor & {
+  data: ArrayBuffer;
 };
 
 export type SplitArchiveDependencies = {
@@ -65,6 +80,74 @@ function sanitizeDocumentStem(documentName: string | undefined) {
 
 function buildZipFilename(documentName: string | undefined) {
   return `${sanitizeDocumentStem(documentName)}_split.zip`;
+}
+
+function buildPartZipFilename(partFilename: string) {
+  return partFilename.replace(/\.pdf$/i, ".zip");
+}
+
+function buildArtifactId(bundleId: string, partNumber: number | null, kind: SplitArtifactDescriptor["kind"]) {
+  if (partNumber === null) {
+    return bundleId;
+  }
+
+  return `${bundleId}:part:${String(partNumber).padStart(3, "0")}:${kind}`;
+}
+
+function toZipInput(entries: Array<{ filename: string; bytes: Uint8Array | ArrayBuffer }>) {
+  return Object.fromEntries(entries.map((entry) => [entry.filename, entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes)])) as Record<string, Uint8Array>;
+}
+
+function validateZipBytes(zipBytes: Uint8Array, expectedFilenames: string[]) {
+  if (!zipBytes.byteLength) {
+    throw new SplitRuntimeError("ZIP_CREATION_FAILED", "ZIP output is empty");
+  }
+
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzipSync(zipBytes);
+  } catch {
+    throw new SplitRuntimeError("ZIP_CREATION_FAILED", "ZIP output could not be reopened");
+  }
+
+  const actualFilenames = Object.keys(entries);
+  if (actualFilenames.length !== expectedFilenames.length) {
+    throw new SplitRuntimeError("ZIP_CREATION_FAILED", "ZIP entry count did not match input count");
+  }
+
+  for (let index = 0; index < expectedFilenames.length; index += 1) {
+    if (actualFilenames[index] !== expectedFilenames[index]) {
+      throw new SplitRuntimeError("ZIP_CREATION_FAILED", "ZIP entry order or filenames were not preserved");
+    }
+
+    const entryBytes = entries[actualFilenames[index]];
+    if (!entryBytes || !entryBytes.byteLength) {
+      throw new SplitRuntimeError("ZIP_CREATION_FAILED", "ZIP entry bytes were empty");
+    }
+  }
+}
+
+async function zipEntries(entries: Array<{ filename: string; bytes: Uint8Array | ArrayBuffer }>) {
+  if (!entries.length) {
+    throw new SplitRuntimeError("ZIP_CREATION_FAILED", "At least one ZIP entry is required");
+  }
+
+  const filenames = entries.map((entry) => entry.filename);
+
+  try {
+    const zipInput = toZipInput(entries);
+    const zipBytes = zipSync(zipInput, {
+      level: 6,
+    });
+    validateZipBytes(zipBytes, filenames);
+    return {
+      zipBytes,
+      filenames,
+      entryCount: filenames.length,
+    };
+  } catch (error) {
+    throw new SplitRuntimeError("ZIP_CREATION_FAILED", error instanceof Error ? error.message : "ZIP creation failed");
+  }
 }
 
 async function emitProgress(onProgress: ProgressReporter | undefined, event: SplitProgressEvent) {
@@ -506,6 +589,161 @@ async function finalizeParts(
   };
 }
 
+type ArtifactBuildResult = {
+  artifacts: SplitArtifactPayload[];
+  totalArtifactSize: number;
+  zipBytes?: ArrayBuffer;
+};
+
+function buildSplitResultMetadata(
+  request: SplitArchiveRequest,
+  selection: SplitArchiveSelection,
+  finalized: FinalizedParts,
+  artifacts: SplitArtifactPayload[],
+  totalArtifactSize: number,
+  outputMode: SplitOutputMode,
+): SplitResultMetadata {
+  const primaryArtifact = artifacts[0] ?? null;
+
+  return {
+    zipBlobId: SPLIT_PDF_RECORD_ID,
+    outputMode,
+    artifactIds: artifacts.map((artifact) => artifact.id),
+    artifacts: artifacts.map<SplitArtifactDescriptor>((artifact) => ({
+      id: artifact.id,
+      bundleId: artifact.bundleId,
+      kind: artifact.kind,
+      filename: artifact.filename,
+      mimeType: artifact.mimeType,
+      byteLength: artifact.byteLength,
+      partNumber: artifact.partNumber,
+      pageStart: artifact.pageStart,
+      pageEnd: artifact.pageEnd,
+      status: artifact.status,
+    })),
+    artifactCount: artifacts.length,
+    fileName: primaryArtifact?.filename ?? buildZipFilename(request.documentName),
+    mimeType: outputMode === "single-zip" && primaryArtifact ? primaryArtifact.mimeType : null,
+    size: totalArtifactSize,
+    compressAfterRequested: request.compressAfter === true,
+    originalSplitPartsSize: finalized.originalSplitPartsSize,
+    finalPartsSize: finalized.finalPartsSize,
+    compressedPartsCount: finalized.compressedPartsCount,
+    fallbackPartsCount: finalized.fallbackPartsCount,
+    totalBytesSaved: Math.max(0, request.inputBytes.byteLength - totalArtifactSize),
+    originalSize: request.inputBytes.byteLength,
+    totalPartsSize: finalized.finalPartsSize,
+    partsCount: finalized.parts.length,
+    strategy: request.strategy,
+    warnings: [...selection.warnings, ...finalized.warnings],
+    status: "complete",
+  };
+}
+
+async function buildArtifactsForOutputMode(
+  request: SplitArchiveRequest,
+  finalizedParts: SplitByPagesOutputPart[],
+  outputMode: SplitOutputMode,
+  isCancelled: AbortChecker | undefined,
+): Promise<ArtifactBuildResult> {
+  const bundleId = SPLIT_PDF_RECORD_ID;
+
+  switch (outputMode) {
+    case "single-zip": {
+      await checkCancelled(isCancelled);
+      const archive = await zipPdfParts(
+        finalizedParts.map((part) => ({
+          filename: part.filename,
+          bytes: part.bytes,
+        })),
+      );
+
+      const zipBytes = archive.zipBytes.slice().buffer;
+      return {
+        zipBytes,
+        totalArtifactSize: zipBytes.byteLength,
+        artifacts: [
+          {
+            id: bundleId,
+            bundleId,
+            kind: "zip",
+            filename: buildZipFilename(request.documentName),
+            mimeType: "application/zip",
+            byteLength: zipBytes.byteLength,
+            pageStart: finalizedParts[0]?.range.startPage,
+            pageEnd: finalizedParts[finalizedParts.length - 1]?.range.endPage,
+            partNumber: undefined,
+            status: "complete",
+            data: zipBytes,
+          },
+        ],
+      };
+    }
+    case "individual-pdfs": {
+      const artifacts: SplitArtifactPayload[] = [];
+      for (const part of finalizedParts) {
+        await checkCancelled(isCancelled);
+        const data = part.bytes.slice().buffer;
+        artifacts.push({
+          id: buildArtifactId(bundleId, part.partNumber, "pdf"),
+          bundleId,
+          kind: "pdf",
+          filename: part.filename,
+          mimeType: "application/pdf",
+          byteLength: data.byteLength,
+          partNumber: part.partNumber,
+          pageStart: part.range.startPage,
+          pageEnd: part.range.endPage,
+          status: "complete",
+          data,
+        });
+      }
+
+      return {
+        artifacts,
+        totalArtifactSize: artifacts.reduce((total, artifact) => total + artifact.byteLength, 0),
+      };
+    }
+    case "separate-zips": {
+      const artifacts: SplitArtifactPayload[] = [];
+
+      for (const part of finalizedParts) {
+        await checkCancelled(isCancelled);
+        const archive = await zipEntries([
+          {
+            filename: part.filename,
+            bytes: part.bytes,
+          },
+        ]);
+
+        const zipBytes = archive.zipBytes.slice().buffer;
+        artifacts.push({
+          id: buildArtifactId(bundleId, part.partNumber, "zip"),
+          bundleId,
+          kind: "zip",
+          filename: buildPartZipFilename(part.filename),
+          mimeType: "application/zip",
+          byteLength: zipBytes.byteLength,
+          partNumber: part.partNumber,
+          pageStart: part.range.startPage,
+          pageEnd: part.range.endPage,
+          status: "complete",
+          data: zipBytes,
+        });
+      }
+
+      return {
+        artifacts,
+        totalArtifactSize: artifacts.reduce((total, artifact) => total + artifact.byteLength, 0),
+      };
+    }
+    default: {
+      const exhausted: never = outputMode;
+      return exhausted;
+    }
+  }
+}
+
 export async function createSplitZipArchive(
   request: SplitArchiveRequest,
   isCancelled?: AbortChecker,
@@ -544,40 +782,24 @@ export async function createSplitZipArchive(
   const partsCount = finalized.parts.length;
 
   await checkCancelled(isCancelled);
-  await emitProgress(onProgress, buildProgress("creating-zip", 90, partsCount, partsCount, "Creating ZIP archive"));
+  const outputMode = normalizeSplitOutputMode(request.outputMode);
+  await emitProgress(
+    onProgress,
+    buildProgress(
+      outputMode === "single-zip" ? "creating-zip" : "creating-artifacts",
+      90,
+      partsCount,
+      partsCount,
+      outputMode === "single-zip" ? "Creating ZIP archive" : "Creating output artifacts",
+    ),
+  );
 
-  let zipBytes: Uint8Array;
-  try {
-    const archive = await zipPdfParts(finalized.parts.map((part) => ({ filename: part.filename, bytes: part.bytes })));
-    zipBytes = archive.zipBytes;
-  } catch (error) {
-    throw toSplitRuntimeError(error, "ZIP_CREATION_FAILED");
-  }
-
-  const zipArrayBuffer = zipBytes.slice().buffer;
-  const totalBytesSaved = Math.max(0, request.inputBytes.byteLength - zipArrayBuffer.byteLength);
-
-  const result: SplitArchiveOutcome["result"] = {
-    zipBlobId: SPLIT_PDF_RECORD_ID,
-    fileName: buildZipFilename(request.documentName),
-    mimeType: "application/zip",
-    size: zipArrayBuffer.byteLength,
-    compressAfterRequested: request.compressAfter === true,
-    originalSplitPartsSize: finalized.originalSplitPartsSize,
-    finalPartsSize: finalized.finalPartsSize,
-    compressedPartsCount: finalized.compressedPartsCount,
-    fallbackPartsCount: finalized.fallbackPartsCount,
-    totalBytesSaved,
-    originalSize: request.inputBytes.byteLength,
-    totalPartsSize: finalized.finalPartsSize,
-    partsCount,
-    strategy: request.strategy,
-    warnings: [...selection.warnings, ...finalized.warnings],
-    status: "complete",
-  };
+  const artifactBuild = await buildArtifactsForOutputMode(request, finalized.parts, outputMode, isCancelled);
+  const result = buildSplitResultMetadata(request, selection, finalized, artifactBuild.artifacts, artifactBuild.totalArtifactSize, outputMode);
 
   return {
-    zipBytes: zipArrayBuffer,
+    zipBytes: artifactBuild.zipBytes,
+    artifacts: artifactBuild.artifacts,
     result,
   };
 }

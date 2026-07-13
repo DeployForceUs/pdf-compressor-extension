@@ -163,11 +163,22 @@ export type SplitProgressStage =
   | "validating-part"
   | "compressing-part"
   | "creating-zip"
+  | "creating-artifacts"
   | "persisting"
   | "complete";
 
 export const SPLIT_OUTPUT_MODES = ["single-zip", "individual-pdfs", "separate-zips"] as const;
 export type SplitOutputMode = (typeof SPLIT_OUTPUT_MODES)[number];
+
+export const SPLIT_OUTPUT_MODE_DEFAULT: SplitOutputMode = "single-zip";
+
+export function isSplitOutputMode(value: unknown): value is SplitOutputMode {
+  return typeof value === "string" && (SPLIT_OUTPUT_MODES as readonly string[]).includes(value);
+}
+
+export function normalizeSplitOutputMode(value: unknown): SplitOutputMode {
+  return isSplitOutputMode(value) ? value : SPLIT_OUTPUT_MODE_DEFAULT;
+}
 
 export const SPLIT_ARTIFACT_KINDS = ["pdf", "zip"] as const;
 export type SplitArtifactKind = (typeof SPLIT_ARTIFACT_KINDS)[number];
@@ -259,6 +270,10 @@ export type SplitResultRecord = {
 
 export type SplitResultMetadata = {
   zipBlobId: string;
+  outputMode: SplitOutputMode;
+  artifactIds: string[];
+  artifacts: SplitArtifactDescriptor[];
+  artifactCount: number;
   fileName: string;
   mimeType: string | null;
   size: number;
@@ -279,6 +294,7 @@ export type SplitResultMetadata = {
 export type SplitLocalRequest = {
   type: "split:local";
   strategy: SplitStrategy;
+  outputMode?: SplitOutputMode;
   compressAfter?: boolean;
 };
 
@@ -299,6 +315,7 @@ export type SplitResultDeleteRequest = {
 export type BackgroundSplitStartRequest = {
   type: "background:split-start";
   strategy: SplitStrategy;
+  outputMode?: SplitOutputMode;
   compressAfter?: boolean;
 };
 
@@ -319,6 +336,7 @@ export type BackgroundSplitResultDeleteRequest = {
 export type OffscreenSplitRequest = {
   type: "offscreen:split";
   strategy: SplitStrategy;
+  outputMode?: SplitOutputMode;
   compressAfter?: boolean;
 };
 

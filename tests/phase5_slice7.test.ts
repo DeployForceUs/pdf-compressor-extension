@@ -5,8 +5,15 @@ import mupdf from "mupdf";
 import { SPLIT_PDF_RECORD_ID } from "../src/lib/pdf-records";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
-import { deleteSplitResult, readSplitResult, writeSplitResult } from "../src/lib/storage/pdf-split-results-db";
-import type { PdfRecord, SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../src/lib/messaging";
+import { deleteSplitResult, readSplitResult, writeSplitResultBundle } from "../src/lib/storage/pdf-split-results-db";
+import type {
+  PdfRecord,
+  SplitArtifactRecord,
+  SplitProgressEvent,
+  SplitResultBundle,
+  SplitResultMetadata,
+  SplitWarning,
+} from "../src/lib/messaging";
 import type { SplitRuntimeError } from "../src/lib/pdf/split-errors";
 
 async function createComplexPdf(pageComplexities: number[], name: string) {
@@ -75,7 +82,7 @@ async function runSplit(
   },
 ) {
   const progressEvents: SplitProgressEvent[] = [];
-  let persisted: unknown = null;
+  let persisted: { bundle: SplitResultBundle; artifacts: SplitArtifactRecord[] } | null = null;
 
   const response = await runSplitJob(
     inputRecord,
@@ -83,13 +90,13 @@ async function runSplit(
     {
       workerApi: createWorkerGateway(),
       persistResult: hooks?.persistResult
-        ? async (record) => {
-            persisted = await hooks.persistResult?.(record);
-            return record;
+        ? async (bundle, artifacts) => {
+            persisted = await hooks.persistResult?.({ bundle, artifacts });
+            return bundle;
           }
-        : async (record) => {
-            persisted = record;
-            return record;
+        : async (bundle, artifacts) => {
+            persisted = { bundle, artifacts };
+            return bundle;
           },
       isCancelled: hooks?.isCancelled ?? (() => false),
       onProgress: async (event) => {
@@ -130,12 +137,13 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
   assert.equal(response.result.warnings.length, 0);
   assert.equal(
     response.result.totalBytesSaved,
-    Math.max(0, response.result.originalSize - (persisted as { data: ArrayBuffer }).data.byteLength),
+    Math.max(0, response.result.originalSize - response.result.size),
   );
   assert.equal(progressEvents[0]?.stage, "validating");
   assert.equal(progressEvents.at(-1)?.stage, "complete");
-  assert.equal((persisted as SplitResultMetadata).warnings.length, 0);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  assert.ok(persisted);
+  assert.equal(persisted.bundle.warnings.length, 0);
+  await assertZipContains(persisted.artifacts[0].data, [
     { filename: "single_part_001_pages_1-1.pdf", pageCount: 1 },
   ]);
 }
@@ -168,8 +176,9 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
       "complete",
     ],
   );
-  assert.equal(response.result.size, (persisted as { data: ArrayBuffer }).data.byteLength);
-  await writeSplitResult(persisted as Parameters<typeof writeSplitResult>[0]);
+  assert.ok(persisted);
+  assert.equal(response.result.size, persisted.artifacts[0].data.byteLength);
+  await writeSplitResultBundle(persisted.bundle, persisted.artifacts);
   const roundTrip = await readSplitResult();
   assert.equal(roundTrip?.fileName, "balanced_split.zip");
   assert.equal(roundTrip?.warnings.length, 0);
@@ -188,13 +197,13 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
   }
   await deleteSplitResult();
   try {
-    await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+    await assertZipContains(persisted.artifacts[0].data, [
       { filename: "balanced_part_001_pages_1-2.pdf", pageCount: 2 },
       { filename: "balanced_part_002_pages_3-3.pdf", pageCount: 1 },
       { filename: "balanced_part_003_pages_4-5.pdf", pageCount: 2 },
     ]);
   } catch {
-    await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+    await assertZipContains(persisted.artifacts[0].data, [
       { filename: "balanced_part_001_pages_1-2.pdf", pageCount: 2 },
       { filename: "balanced_part_002_pages_3-4.pdf", pageCount: 2 },
       { filename: "balanced_part_003_pages_5-5.pdf", pageCount: 1 },
@@ -225,8 +234,9 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
       oversized: true,
     },
   ]);
-  assertWarningsEqual((persisted as SplitResultMetadata).warnings, response.result.warnings);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  assert.ok(persisted);
+  assertWarningsEqual(persisted.bundle.warnings as SplitWarning[], response.result.warnings);
+  await assertZipContains(persisted.artifacts[0].data, [
     { filename: "oversize-begin_part_001_pages_1-1.pdf", pageCount: 1 },
     { filename: "oversize-begin_part_002_pages_2-3.pdf", pageCount: 2 },
   ]);
@@ -255,7 +265,8 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
       oversized: true,
     },
   ]);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  assert.ok(persisted);
+  await assertZipContains(persisted.artifacts[0].data, [
     { filename: "oversize-middle_part_001_pages_1-1.pdf", pageCount: 1 },
     { filename: "oversize-middle_part_002_pages_2-2.pdf", pageCount: 1 },
     { filename: "oversize-middle_part_003_pages_3-4.pdf", pageCount: 2 },
@@ -285,7 +296,8 @@ function assertWarningsEqual(actual: SplitWarning[], expected: SplitWarning[]) {
       oversized: true,
     },
   ]);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  assert.ok(persisted);
+  await assertZipContains(persisted.artifacts[0].data, [
     { filename: "oversize-end_part_001_pages_1-2.pdf", pageCount: 2 },
     { filename: "oversize-end_part_002_pages_3-3.pdf", pageCount: 1 },
   ]);

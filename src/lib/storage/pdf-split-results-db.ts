@@ -1,5 +1,7 @@
 export {
   createSplitResultsStore,
+  buildSplitResultMetadataFromBundle,
+  buildSplitResultMetadataFromLegacyRecord,
   deleteLegacySplitResult,
   deleteSplitArtifact,
   deleteSplitResult,

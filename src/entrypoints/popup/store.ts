@@ -3,9 +3,12 @@ import type {
   CompressionEngineStatus,
   CompressionStage,
   CompressionStatus,
+  SplitArtifactDescriptor,
   SplitProgressStage,
+  SplitOutputMode,
   SplitWarning,
 } from "../../lib/messaging";
+import { SPLIT_OUTPUT_MODE_DEFAULT } from "../../lib/messaging";
 import type { SplitStrategy } from "../../lib/pdf/split-strategies";
 import { SELECTED_PDF_RECORD_ID } from "../../lib/pdf-records";
 
@@ -64,6 +67,7 @@ export type SplitSnapshot = {
   stage: SplitProgressStage | "idle";
   error: string;
   recordId: string | null;
+  outputMode: SplitOutputMode;
   currentPart: number | null;
   partsCount: number | null;
   progressMessage: string;
@@ -77,6 +81,7 @@ export type SplitSnapshot = {
   size: number | null;
   originalSize: number | null;
   totalPartsSize: number | null;
+  artifacts: SplitArtifactDescriptor[];
   strategy: SplitStrategy["type"];
   pagesPerPart: string;
   maxPartSizeMb: string;
@@ -151,6 +156,7 @@ const initialSplit: SplitSnapshot = {
   stage: "idle",
   error: "",
   recordId: null,
+  outputMode: SPLIT_OUTPUT_MODE_DEFAULT,
   currentPart: null,
   partsCount: null,
   progressMessage: "",
@@ -164,6 +170,7 @@ const initialSplit: SplitSnapshot = {
   size: null,
   originalSize: null,
   totalPartsSize: null,
+  artifacts: [],
   strategy: "by-pages",
   pagesPerPart: "20",
   maxPartSizeMb: "10",

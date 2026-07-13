@@ -7,7 +7,14 @@ import { createSplitZipArchive, type SplitArchiveDependencies } from "../src/lib
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../src/lib/storage/pdf-compression-db";
 import type { CompressionOutcome, CompressionRequest } from "../src/lib/pdf/compressor";
-import type { PdfRecord, SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../src/lib/messaging";
+import type {
+  PdfRecord,
+  SplitArtifactRecord,
+  SplitProgressEvent,
+  SplitResultBundle,
+  SplitResultMetadata,
+  SplitWarning,
+} from "../src/lib/messaging";
 import { SplitRuntimeError } from "../src/lib/pdf/split-errors";
 
 async function createPdf(pageComplexities: number[], name: string) {
@@ -105,7 +112,7 @@ async function runSplit(
   },
 ) {
   const progressEvents: SplitProgressEvent[] = [];
-  let persisted: unknown = null;
+  let persisted: { bundle: SplitResultBundle; artifacts: SplitArtifactRecord[] } | null = null;
 
   const response = await runSplitJob(
     inputRecord,
@@ -113,13 +120,13 @@ async function runSplit(
     {
       workerApi: createWorkerGateway(hooks?.compressPart),
       persistResult: hooks?.persistResult
-        ? async (record) => {
-            persisted = await hooks.persistResult?.(record);
-            return record;
+        ? async (bundle, artifacts) => {
+            persisted = await hooks.persistResult?.({ bundle, artifacts });
+            return bundle;
           }
-        : async (record) => {
-            persisted = record;
-            return record;
+        : async (bundle, artifacts) => {
+            persisted = { bundle, artifacts };
+            return bundle;
           },
       isCancelled: hooks?.isCancelled ?? (() => false),
       onProgress: async (event) => {
@@ -178,7 +185,7 @@ function getCompressionWarnings(result: SplitResultMetadata) {
       "complete",
     ],
   );
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  await assertZipContains(persisted!.artifacts[0].data, [
     { filename: "no-compress_part_001_pages_1-2.pdf", pageCount: 2 },
     { filename: "no-compress_part_002_pages_3-4.pdf", pageCount: 2 },
     { filename: "no-compress_part_003_pages_5-5.pdf", pageCount: 1 },
@@ -220,7 +227,7 @@ function getCompressionWarnings(result: SplitResultMetadata) {
     "compressible_part_001_pages_1-2.pdf",
     "compressible_part_002_pages_3-4.pdf",
   ]);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  await assertZipContains(persisted!.artifacts[0].data, [
     { filename: "compressible_part_001_pages_1-2.pdf", pageCount: 2 },
     { filename: "compressible_part_002_pages_3-4.pdf", pageCount: 2 },
   ]);
@@ -245,7 +252,7 @@ function getCompressionWarnings(result: SplitResultMetadata) {
     getCompressionWarnings(response.result).map((warning) => warning.code),
     ["COMPRESSED_PART_NOT_SMALLER_FALLBACK", "COMPRESSED_PART_NOT_SMALLER_FALLBACK"],
   );
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  await assertZipContains(persisted!.artifacts[0].data, [
     { filename: "larger-reject_part_001_pages_1-2.pdf", pageCount: 2 },
     { filename: "larger-reject_part_002_pages_3-4.pdf", pageCount: 2 },
   ]);
@@ -350,7 +357,7 @@ function getCompressionWarnings(result: SplitResultMetadata) {
   const firstCompressing = progressEvents.find((event) => event.stage === "compressing-part" && event.currentPart === 1);
   assert.equal(firstCompressing?.sourceByteSize !== undefined, true);
   assert.equal(firstCompressing?.compressedCandidateByteSize, undefined);
-  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+  await assertZipContains(persisted!.artifacts[0].data, [
     { filename: "timeout-fallback_part_001_pages_1-2.pdf", pageCount: 2 },
     { filename: "timeout-fallback_part_002_pages_3-4.pdf", pageCount: 2 },
   ]);

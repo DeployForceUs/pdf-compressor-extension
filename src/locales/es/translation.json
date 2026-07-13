@@ -83,6 +83,15 @@
   "split": {
     "title": "Dividir PDF",
     "strategy": "Estrategia de división",
+    "outputMode": "Modo de salida",
+    "outputModes": {
+      "singleZip": "Un ZIP",
+      "singleZipDescription": "Todas las partes dentro de un solo archivo ZIP",
+      "individualPdfs": "PDF individuales",
+      "individualPdfsDescription": "Descarga cada PDF dividido por separado",
+      "separateZips": "ZIP separados",
+      "separateZipsDescription": "Un archivo ZIP para cada PDF dividido"
+    },
     "byPages": "Por páginas",
     "bySize": "Por tamaño de archivo",
     "manual": "Selección manual",
@@ -97,8 +106,12 @@
     "complete": "División completada",
     "partsCreated": "{{count}} partes creadas",
     "downloadZip": "Descargar archivo ZIP",
+    "downloadArtifact": "Descargar",
     "originalSize": "Tamaño original",
     "zipSize": "Tamaño ZIP",
+    "outputSize": "Tamaño de salida",
+    "artifacts": "Archivos",
+    "artifactsCreated": "{{count}} artefactos",
     "saved": "Ahorrado",
     "warnings": "Advertencias",
     "noWarnings": "Sin advertencias",
@@ -111,6 +124,7 @@
       "compressingPart": "Comprimiendo parte {{current}} de {{total}}",
       "validatingPart": "Validando parte {{current}} de {{total}}",
       "creatingZip": "Creando ZIP",
+      "creatingArtifacts": "Creando artefactos",
       "savingResult": "Guardando resultado",
       "complete": "Completado",
       "parts": "{{current}} de {{total}}",
@@ -134,6 +148,12 @@
       "compressedPartNotSmallerFallbackDetail": "{{fileName}} usó la parte original porque el candidato comprimido no era más pequeño. Origen {{source}}, seleccionado {{selected}}, candidato {{candidate}}.",
       "notAvailable": "n/d"
     },
+    "artifactKinds": {
+      "pdf": "PDF",
+      "zip": "ZIP"
+    },
+    "artifactPageRange": "Páginas {{start}}-{{end}}",
+    "artifactPageRangeUnknown": "Páginas n/d",
     "errors": {
       "invalidPagesPerPart": "Ingresa un valor válido para páginas por parte.",
       "invalidMaxSize": "Ingresa un tamaño máximo válido en MB.",

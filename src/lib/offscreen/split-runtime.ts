@@ -1,45 +1,33 @@
-import type { PdfRecord, SplitProgressEvent, SplitStartResponse } from "../messaging";
+import {
+  normalizeSplitOutputMode,
+  type PdfRecord,
+  type SplitProgressEvent,
+  type SplitStartResponse,
+  type SplitResultBundle,
+  type SplitArtifactRecord,
+} from "../messaging";
 import { SPLIT_PDF_RECORD_ID } from "../pdf-records";
 import type { CompressionWorkerApi } from "./worker";
 import { SplitRuntimeError, toSplitRuntimeError } from "../pdf/split-errors";
 import type { SplitArchiveRequest } from "../pdf/split-archive";
-import type { SplitResultRecord, SplitLocalRequest, SplitResultMetadata } from "../messaging";
+import type { SplitLocalRequest, SplitResultMetadata } from "../messaging";
+import { buildSplitResultMetadataFromBundle } from "../storage/pdf-split-bundles-db";
 
 type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: SplitProgressEvent) => void | Promise<void>;
 type SplitWorkerGateway = Pick<CompressionWorkerApi, "split">;
 export type SplitRuntimeRequest = {
   strategy: SplitLocalRequest["strategy"];
+  outputMode?: SplitLocalRequest["outputMode"];
   compressAfter?: boolean;
 };
 
 export type SplitRuntimeDependencies = {
   workerApi: SplitWorkerGateway;
-  persistResult: (record: SplitResultRecord) => Promise<SplitResultRecord>;
+  persistResult: (bundle: SplitResultBundle, artifacts: SplitArtifactRecord[]) => Promise<SplitResultBundle>;
   isCancelled: CancellationChecker;
   onProgress: ProgressReporter;
 };
-
-function toSplitMetadata(record: SplitResultRecord): SplitResultMetadata {
-  return {
-    zipBlobId: record.id,
-    fileName: record.fileName,
-    mimeType: record.mimeType,
-    size: record.data.byteLength,
-    compressAfterRequested: record.compressAfterRequested,
-    originalSplitPartsSize: record.originalSplitPartsSize,
-    finalPartsSize: record.finalPartsSize,
-    compressedPartsCount: record.compressedPartsCount,
-    fallbackPartsCount: record.fallbackPartsCount,
-    totalBytesSaved: record.totalBytesSaved,
-    originalSize: record.originalSize,
-    totalPartsSize: record.totalPartsSize,
-    partsCount: record.partsCount,
-    strategy: record.strategy,
-    warnings: record.warnings ?? [],
-    status: "complete",
-  };
-}
 
 async function emitProgress(onProgress: ProgressReporter, event: SplitProgressEvent) {
   await onProgress(event);
@@ -73,10 +61,12 @@ export async function runSplitJob(
   });
 
   const inputBytes = toUint8Array(inputRecord.data).buffer;
+  const outputMode = normalizeSplitOutputMode(request.outputMode);
   const splitRequest: SplitArchiveRequest = {
     inputBytes,
     strategy: request.strategy,
     documentName: inputRecord.name,
+    outputMode,
     compressAfter: request.compressAfter,
   };
 
@@ -112,31 +102,44 @@ export async function runSplitJob(
   });
 
   const now = Date.now();
-  let persisted: SplitResultRecord;
+  const artifacts = outcome.artifacts.map<SplitArtifactRecord>((artifact) => ({
+    ...artifact,
+    data: artifact.data,
+    status: "complete",
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  const bundle: SplitResultBundle = {
+    id: outcome.result.zipBlobId,
+    sourceRecordId: inputRecord.id,
+    sourceFileName: inputRecord.name,
+    outputMode: outcome.result.outputMode,
+    strategy: outcome.result.strategy,
+    partsCount: outcome.result.partsCount,
+    originalSize: outcome.result.originalSize,
+    totalArtifactSize: outcome.result.size,
+    warnings: outcome.result.warnings,
+    artifactIds: [...outcome.result.artifactIds],
+    compressAfterRequested: request.compressAfter === true,
+    originalSplitPartsSize: outcome.result.originalSplitPartsSize,
+    finalPartsSize: outcome.result.finalPartsSize,
+    compressedPartsCount: outcome.result.compressedPartsCount,
+    fallbackPartsCount: outcome.result.fallbackPartsCount,
+    totalBytesSaved: outcome.result.totalBytesSaved,
+    status: "complete",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  let persisted: SplitResultBundle;
   try {
-    persisted = await deps.persistResult({
-      id: outcome.result.zipBlobId,
-      sourceRecordId: inputRecord.id,
-      fileName: outcome.result.fileName,
-      mimeType: outcome.result.mimeType,
-      compressAfterRequested: request.compressAfter === true,
-      originalSplitPartsSize: outcome.result.originalSplitPartsSize,
-      finalPartsSize: outcome.result.finalPartsSize,
-      compressedPartsCount: outcome.result.compressedPartsCount,
-      fallbackPartsCount: outcome.result.fallbackPartsCount,
-      totalBytesSaved: outcome.result.totalBytesSaved,
-      originalSize: outcome.result.originalSize,
-      totalPartsSize: outcome.result.totalPartsSize,
-      partsCount: outcome.result.partsCount,
-      strategy: outcome.result.strategy,
-      warnings: outcome.result.warnings,
-      data: outcome.zipBytes,
-      createdAt: now,
-      updatedAt: now,
-    });
+    persisted = await deps.persistResult(bundle, artifacts);
   } catch (error) {
     throw toSplitRuntimeError(error, "STORAGE_QUOTA_EXCEEDED");
   }
+
+  const result: SplitResultMetadata = buildSplitResultMetadataFromBundle(persisted, artifacts);
 
   await emitProgress(deps.onProgress, {
     type: "split:progress",
@@ -148,7 +151,6 @@ export async function runSplitJob(
     message: "Split complete",
   });
 
-  const result = toSplitMetadata(persisted);
   return {
     ok: true,
     zipBlobId: result.zipBlobId,

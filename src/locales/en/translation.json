@@ -83,6 +83,15 @@
   "split": {
     "title": "Split PDF",
     "strategy": "Split strategy",
+    "outputMode": "Output mode",
+    "outputModes": {
+      "singleZip": "One ZIP",
+      "singleZipDescription": "All parts inside one ZIP archive",
+      "individualPdfs": "Individual PDFs",
+      "individualPdfsDescription": "Download each split PDF separately",
+      "separateZips": "Separate ZIPs",
+      "separateZipsDescription": "One ZIP archive for each split PDF"
+    },
     "byPages": "By pages",
     "bySize": "By file size",
     "manual": "Manual selection",
@@ -97,8 +106,12 @@
     "complete": "Split complete",
     "partsCreated": "{{count}} parts created",
     "downloadZip": "Download ZIP archive",
+    "downloadArtifact": "Download",
     "originalSize": "Original size",
     "zipSize": "ZIP size",
+    "outputSize": "Output size",
+    "artifacts": "Files",
+    "artifactsCreated": "{{count}} artifacts",
     "saved": "Saved",
     "warnings": "Warnings",
     "noWarnings": "No warnings",
@@ -111,6 +124,7 @@
       "compressingPart": "Compressing part {{current}} of {{total}}",
       "validatingPart": "Validating part {{current}} of {{total}}",
       "creatingZip": "Creating ZIP",
+      "creatingArtifacts": "Creating artifacts",
       "savingResult": "Saving result",
       "complete": "Complete",
       "parts": "{{current}} of {{total}}",
@@ -134,6 +148,12 @@
       "compressedPartNotSmallerFallbackDetail": "{{fileName}} used the original part because the compressed candidate was not smaller. Source {{source}}, selected {{selected}}, candidate {{candidate}}.",
       "notAvailable": "n/a"
     },
+    "artifactKinds": {
+      "pdf": "PDF",
+      "zip": "ZIP"
+    },
+    "artifactPageRange": "Pages {{start}}-{{end}}",
+    "artifactPageRangeUnknown": "Pages n/a",
     "errors": {
       "invalidPagesPerPart": "Enter a valid pages-per-part value.",
       "invalidMaxSize": "Enter a valid maximum size in MB.",

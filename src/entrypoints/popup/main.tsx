@@ -25,6 +25,7 @@ import type {
   CompressionResultDeleteResponse,
   CompressionResultReadResponse,
   CompressionStartResponse,
+  SplitArtifactDescriptor,
   SplitCancelResponse,
   SplitErrorEvent,
   SplitProgressEvent,
@@ -40,12 +41,21 @@ import type {
 import { sendMessage } from "../../lib/messaging";
 import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
 import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
-import { readSplitResult } from "../../lib/storage/pdf-split-results-db";
-import { deleteSplitResult } from "../../lib/storage/pdf-split-results-db";
+import {
+  buildSplitResultMetadataFromBundle,
+  buildSplitResultMetadataFromLegacyRecord,
+  deleteSplitResult,
+  readSplitArtifact,
+  readSplitArtifactsForBundle,
+  readSplitResult,
+  readSplitResultBundle,
+} from "../../lib/storage/pdf-split-results-db";
 import { persistSelectedPdfRecord } from "./selected-pdf-persistence";
 import {
+  assertDownloadableSplitArtifactBytes,
+  buildSplitArtifactRender,
+  buildSplitOutputModeOptions,
   buildSplitRequestFromForm,
-  splitDownloadFileName,
   formatSplitProgressDisplay,
   formatSplitWarning,
   type SplitFormState,
@@ -145,23 +155,6 @@ function assertDownloadablePdf(record: Awaited<ReturnType<typeof readCompression
   const header = new TextDecoder().decode(new Uint8Array(record.data).slice(0, 5));
   if (header !== "%PDF-") {
     throw new Error("Compressed PDF record does not start with %PDF-");
-  }
-
-  return record.data;
-}
-
-function assertDownloadableZip(record: Awaited<ReturnType<typeof readSplitResult>>): ArrayBuffer {
-  if (!record) {
-    throw new Error("Split ZIP archive was not found in IndexedDB");
-  }
-
-  if (!(record.data instanceof ArrayBuffer)) {
-    throw new Error("Split ZIP archive data is not an ArrayBuffer");
-  }
-
-  const header = new TextDecoder().decode(new Uint8Array(record.data).slice(0, 2));
-  if (header !== "PK") {
-    throw new Error("Split ZIP archive does not start with PK");
   }
 
   return record.data;
@@ -464,6 +457,7 @@ function Popup() {
       stage: "complete",
       error: "",
       recordId: result.zipBlobId,
+      outputMode: result.outputMode,
       currentPart: result.partsCount,
       partsCount: result.partsCount,
       progressMessage: "Split complete",
@@ -477,6 +471,7 @@ function Popup() {
       size: result.size,
       originalSize: result.originalSize,
       totalPartsSize: result.totalPartsSize,
+      artifacts: result.artifacts,
       strategy: result.strategy.type,
       compressAfterRequested: result.compressAfterRequested,
       originalSplitPartsSize: result.originalSplitPartsSize,
@@ -535,26 +530,20 @@ function Popup() {
 
   async function restoreSplitResult() {
     try {
-      const result = await readSplitResult();
-      if (result) {
-        applySplitResult({
-          zipBlobId: result.id,
-          fileName: result.fileName,
-      mimeType: result.mimeType,
-      size: result.data.byteLength,
-      compressAfterRequested: result.compressAfterRequested,
-          originalSplitPartsSize: result.originalSplitPartsSize,
-          finalPartsSize: result.finalPartsSize,
-          compressedPartsCount: result.compressedPartsCount,
-          fallbackPartsCount: result.fallbackPartsCount,
-          totalBytesSaved: result.totalBytesSaved,
-          originalSize: result.originalSize,
-          totalPartsSize: result.totalPartsSize,
-          partsCount: result.partsCount,
-          strategy: result.strategy,
-          warnings: result.warnings ?? [],
-          status: "complete",
-        });
+      const bundle = await readSplitResultBundle();
+      if (bundle) {
+        const artifacts = await readSplitArtifactsForBundle(bundle.id);
+        if (!artifacts) {
+          return;
+        }
+
+        applySplitResult(buildSplitResultMetadataFromBundle(bundle, artifacts));
+        return;
+      }
+
+      const legacy = await readSplitResult();
+      if (legacy) {
+        applySplitResult(buildSplitResultMetadataFromLegacyRecord(legacy));
       }
     } catch (error) {
       setSplit({
@@ -706,6 +695,7 @@ function Popup() {
 
     const request = buildSplitRequestFromForm({
       strategy: split.strategy,
+      outputMode: split.outputMode,
       pagesPerPart: split.pagesPerPart,
       maxPartSizeMb: split.maxPartSizeMb,
       manualRanges: split.manualRanges,
@@ -735,6 +725,7 @@ function Popup() {
       stage: "idle",
       error: "",
       recordId: null,
+      outputMode: split.outputMode,
       currentPart: null,
       partsCount: null,
       progressMessage: "",
@@ -748,6 +739,7 @@ function Popup() {
       size: null,
       originalSize: null,
       totalPartsSize: null,
+      artifacts: [],
       warnings: [],
       resultAvailable: false,
       compressAfterRequested: split.compressAfter,
@@ -763,6 +755,7 @@ function Popup() {
         {
           type: "split:local",
           strategy: request.strategy,
+          outputMode: request.outputMode,
           compressAfter: request.compressAfter,
         },
       );
@@ -798,20 +791,20 @@ function Popup() {
     }
   }
 
-  async function downloadSplitZip() {
+  async function downloadSplitArtifact(artifact: SplitArtifactDescriptor) {
     try {
-      const record = await readSplitResult(split.zipBlobId ?? undefined);
+      const record = await readSplitArtifact(artifact.id);
 
       if (!record) {
-        throw new Error("No split ZIP is available for download");
+        throw new Error("No split artifact is available for download");
       }
 
-      const bytes = assertDownloadableZip(record);
-      const blob = new Blob([bytes], { type: "application/zip" });
+      const bytes = assertDownloadableSplitArtifactBytes(artifact, record.data);
+      const blob = new Blob([bytes], { type: artifact.mimeType });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = splitDownloadFileName(split.fileName);
+      anchor.download = artifact.filename;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -1243,6 +1236,7 @@ function Popup() {
   );
   const splitProgressMetaLabel = split.status === "idle" ? splitStatusLabel : splitProgressSummaryValue.label;
   const splitOriginalValue = split.originalSize !== null ? formatBytes(split.originalSize, locale) : "—";
+  const splitSizeLabel = split.outputMode === "single-zip" ? t("split.zipSize") : t("split.outputSize");
   const splitZipValue = split.size !== null ? formatBytes(split.size, locale) : "—";
   const splitSavedValue =
     split.totalBytesSaved !== null
@@ -1251,6 +1245,10 @@ function Popup() {
         : t("compression.noSizeReduction")
       : "—";
   const splitWarningsCount = split.warnings.length;
+  const splitOutputModeOptions = buildSplitOutputModeOptions({
+    t,
+    formatBytes: (value) => formatBytes(value, locale),
+  });
 
   return (
     <main className="app">
@@ -1403,6 +1401,33 @@ function Popup() {
 
               <div className="split-card__status">{splitStatusLabel}</div>
 
+              <div className="split-mode">
+                <div className="split-mode__label">{t("split.outputMode")}</div>
+                <div className="split-mode__options" role="radiogroup" aria-label={t("split.outputMode")}>
+                  {splitOutputModeOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className={
+                        split.outputMode === option.value
+                          ? "split-mode__option split-mode__option--active"
+                          : "split-mode__option"
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="split-output-mode"
+                        value={option.value}
+                        checked={split.outputMode === option.value}
+                        onChange={() => setSplit({ outputMode: option.value, error: "" })}
+                        disabled={splitControlsDisabled}
+                      />
+                      <span className="split-mode__option-title">{option.label}</span>
+                      <span className="split-mode__option-detail">{option.description}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div className="split-card__strategies" role="tablist" aria-label={t("split.strategy")}>
                 {[
                   ["by-pages", t("split.byPages")],
@@ -1498,7 +1523,7 @@ function Popup() {
                   <span className="metadata-row__value">{splitOriginalValue}</span>
                 </div>
                 <div className="metadata-row">
-                  <span className="metadata-row__label">{t("split.zipSize")}</span>
+                  <span className="metadata-row__label">{splitSizeLabel}</span>
                   <span className="metadata-row__value">{splitZipValue}</span>
                 </div>
                 <div className="metadata-row">
@@ -1509,6 +1534,14 @@ function Popup() {
                   <span className="metadata-row__label">{t("split.result")}</span>
                   <span className="metadata-row__value">{split.partsCount !== null ? t("split.partsCreated", { count: split.partsCount }) : "—"}</span>
                 </div>
+                {split.outputMode !== "single-zip" ? (
+                  <div className="metadata-row">
+                    <span className="metadata-row__label">{t("split.artifacts")}</span>
+                    <span className="metadata-row__value">
+                      {split.artifacts.length > 0 ? t("split.artifactsCreated", { count: split.artifacts.length }) : "—"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="split-actions">
@@ -1520,12 +1553,47 @@ function Popup() {
                     {t("split.cancel")}
                   </button>
                 ) : null}
-                {splitHasResult ? (
-                  <button type="button" className="secondary" onClick={() => void downloadSplitZip()}>
+                {splitHasResult && split.outputMode === "single-zip" && split.artifacts[0] ? (
+                  <button type="button" className="secondary" onClick={() => void downloadSplitArtifact(split.artifacts[0])}>
                     {t("split.downloadZip")}
                   </button>
                 ) : null}
               </div>
+
+              {splitHasResult && split.outputMode !== "single-zip" ? (
+                <div className="split-artifacts" aria-live="polite">
+                  <div className="split-artifacts__header">
+                    <span>{t("split.artifacts")}</span>
+                    <span>{t("split.artifactsCreated", { count: split.artifacts.length })}</span>
+                  </div>
+                  <div className="split-artifacts__list">
+                    {split.artifacts.map((artifact) => {
+                      const rendered = buildSplitArtifactRender(artifact, {
+                        t,
+                        formatBytes: (value) => formatBytes(value, locale),
+                      });
+
+                      return (
+                        <div key={artifact.id} className="split-artifact">
+                          <div className="split-artifact__main">
+                            <div className="split-artifact__title">{rendered.filename}</div>
+                            <div className="split-artifact__detail">
+                              {rendered.kind}
+                              {" · "}
+                              {rendered.size}
+                              {" · "}
+                              {rendered.pageRange}
+                            </div>
+                          </div>
+                          <button type="button" className="secondary split-artifact__download" onClick={() => void downloadSplitArtifact(artifact)}>
+                            {rendered.downloadLabel}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {splitHasResult && splitWarningsCount > 0 ? (
                 <div className="split-warnings" aria-live="polite">

@@ -39,8 +39,17 @@ const api: CompressionWorkerApi = {
 
   async split(request: SplitArchiveRequest, isCancelled: CancellationChecker, onProgress: SplitProgressReporter) {
     const outcome = await createSplitZipArchive(request, isCancelled, onProgress);
+    const transferables = new Set<ArrayBuffer>();
 
-    return transfer(outcome, [outcome.zipBytes]);
+    if (outcome.zipBytes) {
+      transferables.add(outcome.zipBytes);
+    }
+
+    for (const artifact of outcome.artifacts) {
+      transferables.add(artifact.data);
+    }
+
+    return transfer(outcome, [...transferables]);
   },
 };
 

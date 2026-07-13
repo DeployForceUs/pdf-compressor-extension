@@ -5,6 +5,7 @@ import type {
   SplitArtifactDescriptor,
   SplitArtifactRecord,
   SplitResultBundle,
+  SplitResultMetadata,
   SplitResultRecord,
 } from "../messaging";
 import { SplitRuntimeError } from "../pdf/split-errors";
@@ -518,6 +519,52 @@ function buildLegacyRecordFromBundle(bundle: SplitResultBundle, artifact: SplitA
     createdAt: bundle.createdAt,
     updatedAt: bundle.updatedAt,
   };
+}
+
+export function buildSplitResultMetadataFromBundle(
+  bundle: SplitResultBundle,
+  artifacts: SplitArtifactRecord[],
+): SplitResultMetadata {
+  const primaryArtifact = artifacts[0] ?? null;
+
+  return {
+    zipBlobId: bundle.id,
+    outputMode: bundle.outputMode,
+    artifactIds: [...bundle.artifactIds],
+    artifacts: artifacts.map<SplitArtifactDescriptor>((artifact) => ({
+      id: artifact.id,
+      bundleId: artifact.bundleId,
+      kind: artifact.kind,
+      filename: artifact.filename,
+      mimeType: artifact.mimeType,
+      byteLength: artifact.byteLength,
+      partNumber: artifact.partNumber,
+      pageStart: artifact.pageStart,
+      pageEnd: artifact.pageEnd,
+      status: artifact.status,
+    })),
+    artifactCount: artifacts.length,
+    fileName: primaryArtifact?.filename ?? bundle.sourceFileName,
+    mimeType: artifacts.length === 1 ? primaryArtifact?.mimeType ?? null : null,
+    size: bundle.totalArtifactSize,
+    compressAfterRequested: bundle.compressAfterRequested,
+    originalSplitPartsSize: bundle.originalSplitPartsSize,
+    finalPartsSize: bundle.finalPartsSize,
+    compressedPartsCount: bundle.compressedPartsCount,
+    fallbackPartsCount: bundle.fallbackPartsCount,
+    totalBytesSaved: bundle.totalBytesSaved,
+    originalSize: bundle.originalSize,
+    totalPartsSize: bundle.finalPartsSize,
+    partsCount: bundle.partsCount,
+    strategy: bundle.strategy,
+    warnings: [...bundle.warnings],
+    status: "complete",
+  };
+}
+
+export function buildSplitResultMetadataFromLegacyRecord(record: SplitResultRecord): SplitResultMetadata {
+  const artifact = buildArtifactFromLegacyRecord(record, record.id);
+  return buildSplitResultMetadataFromBundle(buildBundleFromLegacyRecord(record, record.fileName), [artifact]);
 }
 
 function createStoreHooks(hooks: SplitResultsStoreTestHooks = {}) {

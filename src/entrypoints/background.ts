@@ -151,7 +151,12 @@ export default defineBackground(() => {
         }
         case "split:local": {
           await ensureOffscreenDocument();
-          return forwardToOffscreen<BackgroundResponse>({ type: "offscreen:split", strategy: message.strategy, compressAfter: message.compressAfter } as OffscreenSplitRequest);
+          return forwardToOffscreen<BackgroundResponse>({
+            type: "offscreen:split",
+            strategy: message.strategy,
+            outputMode: message.outputMode,
+            compressAfter: message.compressAfter,
+          } as OffscreenSplitRequest);
         }
         case "split:cancel": {
           await ensureOffscreenDocument();
