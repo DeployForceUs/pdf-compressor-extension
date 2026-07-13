@@ -11,7 +11,7 @@ import {
   parseStrictPositiveDecimal,
   parseStrictPositiveInteger,
 } from "../src/entrypoints/popup/split-ui";
-import { usePopupStore } from "../src/entrypoints/popup/store";
+import { normalizeSplitSnapshot, usePopupStore } from "../src/entrypoints/popup/store";
 
 function makeT(dictionary: Record<string, unknown>) {
   return (key: string, options: Record<string, unknown> = {}) => {
@@ -37,6 +37,82 @@ function makeT(dictionary: Record<string, unknown>) {
 const tEn = makeT(en as Record<string, unknown>);
 const tEs = makeT(es as Record<string, unknown>);
 const formatBytes = (value: number) => `${value} B`;
+
+{
+  const normalized = normalizeSplitSnapshot(undefined);
+  assert.equal(normalized.outputMode, "single-zip");
+  assert.deepEqual(normalized.artifacts, []);
+  assert.deepEqual(normalized.warnings, []);
+}
+
+{
+  const legacySnapshot = normalizeSplitSnapshot({
+    ...usePopupStore.getState().split,
+    status: "complete",
+    outputMode: "single-zip",
+    artifacts: [
+      {
+        id: "legacy-artifact",
+        bundleId: "legacy-bundle",
+        kind: "zip",
+        filename: "legacy.zip",
+        mimeType: "application/zip",
+        byteLength: 1,
+        status: "complete",
+      },
+    ],
+    warnings: [
+      {
+        code: "COMPRESSION_FAILED_FALLBACK",
+        partNumber: 1,
+        fileName: "legacy.pdf",
+        sourceByteSize: 10,
+        selectedByteSize: 10,
+        fallbackUsed: true,
+      },
+    ],
+  });
+
+  assert.equal(legacySnapshot.outputMode, "single-zip");
+  assert.equal(legacySnapshot.artifacts.length, 1);
+  assert.equal(legacySnapshot.warnings.length, 1);
+}
+
+{
+  const bundleSnapshot = normalizeSplitSnapshot({
+    ...usePopupStore.getState().split,
+    status: "complete",
+    outputMode: "individual-pdfs",
+    artifacts: [
+      {
+        id: "bundle-artifact-1",
+        bundleId: "bundle",
+        kind: "pdf",
+        filename: "part_001.pdf",
+        mimeType: "application/pdf",
+        byteLength: 1,
+        status: "complete",
+      },
+      {
+        id: "bundle-artifact-2",
+        bundleId: "bundle",
+        kind: "pdf",
+        filename: "part_002.pdf",
+        mimeType: "application/pdf",
+        byteLength: 1,
+        status: "complete",
+      },
+    ],
+    warnings: [],
+  });
+
+  assert.equal(bundleSnapshot.outputMode, "individual-pdfs");
+  assert.equal(bundleSnapshot.artifacts.length, 2);
+  assert.deepEqual(
+    bundleSnapshot.artifacts.map((artifact) => artifact.filename),
+    ["part_001.pdf", "part_002.pdf"],
+  );
+}
 
 {
   const options = buildSplitOutputModeOptions({

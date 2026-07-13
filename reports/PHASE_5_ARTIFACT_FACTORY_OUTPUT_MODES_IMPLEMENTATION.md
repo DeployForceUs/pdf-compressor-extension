@@ -109,6 +109,29 @@ The bundle store is still the parent record. The artifact store holds the downlo
 - Kept the single-zip result button for the default mode.
 - Added per-artifact download buttons for individual PDFs and separate ZIPs.
 
+# Popup Crash Fix
+
+After commit `26a01aca4c93fdea742c6c17c7fc08a5fa8d1de8`, the Popup could crash on first open with `Cannot read properties of undefined (reading 'length')`.
+
+The source-map stack pointed at the split result render block in `src/entrypoints/popup/main.tsx`:
+
+- `splitWarningsCount = split.warnings.length` around line `1247`
+- `split.artifacts.length > 0` around line `1541`
+- `split.artifacts.length` in the artifact header around line `1567`
+
+Root cause:
+
+- the new split result view assumed `warnings` and `artifacts` were always initialized arrays;
+- first-open and restore paths could still pass through partially shaped split state;
+- the render path dereferenced `.length` before normalization.
+
+Fix:
+
+- added `normalizeSplitSnapshot()` in `src/entrypoints/popup/store.ts`;
+- normalized split state in the store setter/reset path;
+- normalized split state in the Popup selector before render;
+- normalized bundle metadata arrays in `src/lib/storage/pdf-split-bundles-db.ts`.
+
 # Localization Changes
 
 - Added output-mode labels and descriptions.
@@ -141,6 +164,7 @@ The bundle store is still the parent record. The artifact store holds the downlo
 # Tests Added
 
 - Extended request/state coverage in `tests/phase5_slice6b_a.test.ts`.
+- Added first-open / legacy / bundle split snapshot normalization coverage in `tests/phase5_slice6b_a.test.ts`.
 - Extended single-zip/runtime coverage in `tests/phase5_slice6a.test.ts`.
 - Extended split persistence coverage in `tests/phase5_slice7.test.ts`.
 - Extended compression fallback coverage in `tests/phase5_slice8a.test.ts`.
@@ -170,6 +194,7 @@ The bundle store is still the parent record. The artifact store holds the downlo
 - `npm run check`: passed.
 - `npm run build`: passed.
 - Targeted Phase 4/5 tests listed above: passed.
+- Popup crash normalization regression coverage: passed.
 
 # Manual Chrome Results
 
@@ -189,4 +214,3 @@ Not performed in this environment. The implementation is ready for a browser smo
 # Final Decision
 
 IMPLEMENTED_MANUAL_VALIDATION_PENDING
-

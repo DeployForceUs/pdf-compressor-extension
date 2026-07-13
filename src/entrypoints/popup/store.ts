@@ -121,6 +121,10 @@ export type PopupStoreState = {
   setDragActive: (dragActive: boolean) => void;
 };
 
+function asSplitArray<T>(value: T[] | undefined | null): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 const initialPdf: SelectedPdfSnapshot = {
   status: "idle",
   selected: false,
@@ -192,6 +196,22 @@ const initialDiagnostic: DiagnosticSnapshot = {
   error: "",
 };
 
+export function normalizeSplitSnapshot(snapshot: Partial<SplitSnapshot> | null | undefined): SplitSnapshot {
+  const next = snapshot ?? {};
+
+  return {
+    ...initialSplit,
+    ...next,
+    outputMode: next.outputMode ?? SPLIT_OUTPUT_MODE_DEFAULT,
+    artifacts: asSplitArray(next.artifacts),
+    warnings: asSplitArray(next.warnings),
+    pagesPerPart: typeof next.pagesPerPart === "string" ? next.pagesPerPart : initialSplit.pagesPerPart,
+    maxPartSizeMb: typeof next.maxPartSizeMb === "string" ? next.maxPartSizeMb : initialSplit.maxPartSizeMb,
+    manualRanges: typeof next.manualRanges === "string" ? next.manualRanges : initialSplit.manualRanges,
+    strategy: next.strategy ?? initialSplit.strategy,
+  };
+}
+
 export const usePopupStore = create<PopupStoreState>((set) => ({
   pdf: initialPdf,
   compression: initialCompression,
@@ -231,21 +251,21 @@ export const usePopupStore = create<PopupStoreState>((set) => ({
     })),
   setSplit: (next) =>
     set((state) => ({
-      split: {
+      split: normalizeSplitSnapshot({
         ...state.split,
         ...next,
-      },
+      }),
     })),
   resetSplit: () =>
     set((state) => ({
-      split: {
+      split: normalizeSplitSnapshot({
         ...initialSplit,
         strategy: state.split.strategy,
         pagesPerPart: state.split.pagesPerPart,
         maxPartSizeMb: state.split.maxPartSizeMb,
         manualRanges: state.split.manualRanges,
         compressAfter: state.split.compressAfter,
-      },
+      }),
     })),
   setBackground: (next) =>
     set((state) => ({

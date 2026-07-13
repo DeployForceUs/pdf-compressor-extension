@@ -525,13 +525,16 @@ export function buildSplitResultMetadataFromBundle(
   bundle: SplitResultBundle,
   artifacts: SplitArtifactRecord[],
 ): SplitResultMetadata {
-  const primaryArtifact = artifacts[0] ?? null;
+  const normalizedArtifacts = Array.isArray(artifacts) ? artifacts : [];
+  const normalizedWarnings = Array.isArray(bundle.warnings) ? bundle.warnings : [];
+  const normalizedArtifactIds = Array.isArray(bundle.artifactIds) ? bundle.artifactIds : [];
+  const primaryArtifact = normalizedArtifacts[0] ?? null;
 
   return {
     zipBlobId: bundle.id,
     outputMode: bundle.outputMode,
-    artifactIds: [...bundle.artifactIds],
-    artifacts: artifacts.map<SplitArtifactDescriptor>((artifact) => ({
+    artifactIds: [...normalizedArtifactIds],
+    artifacts: normalizedArtifacts.map<SplitArtifactDescriptor>((artifact) => ({
       id: artifact.id,
       bundleId: artifact.bundleId,
       kind: artifact.kind,
@@ -543,9 +546,9 @@ export function buildSplitResultMetadataFromBundle(
       pageEnd: artifact.pageEnd,
       status: artifact.status,
     })),
-    artifactCount: artifacts.length,
+    artifactCount: normalizedArtifacts.length,
     fileName: primaryArtifact?.filename ?? bundle.sourceFileName,
-    mimeType: artifacts.length === 1 ? primaryArtifact?.mimeType ?? null : null,
+    mimeType: normalizedArtifacts.length === 1 ? primaryArtifact?.mimeType ?? null : null,
     size: bundle.totalArtifactSize,
     compressAfterRequested: bundle.compressAfterRequested,
     originalSplitPartsSize: bundle.originalSplitPartsSize,
@@ -557,7 +560,7 @@ export function buildSplitResultMetadataFromBundle(
     totalPartsSize: bundle.finalPartsSize,
     partsCount: bundle.partsCount,
     strategy: bundle.strategy,
-    warnings: [...bundle.warnings],
+    warnings: [...normalizedWarnings],
     status: "complete",
   };
 }

@@ -60,7 +60,7 @@ import {
   formatSplitWarning,
   type SplitFormState,
 } from "./split-ui";
-import { SELECTED_PDF_RECORD_ID, usePopupStore, type SplitSnapshot } from "./store";
+import { SELECTED_PDF_RECORD_ID, normalizeSplitSnapshot, usePopupStore, type SplitSnapshot } from "./store";
 import "../../styles/popup.css";
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
@@ -301,7 +301,7 @@ function Popup() {
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
   const compression = usePopupStore((state) => state.compression);
-  const split = usePopupStore((state) => state.split);
+  const split = normalizeSplitSnapshot(usePopupStore((state) => state.split));
   const background = usePopupStore((state) => state.background);
   const offscreen = usePopupStore((state) => state.offscreen);
   const storage = usePopupStore((state) => state.storage);
@@ -451,7 +451,7 @@ function Popup() {
   }
 
   function applySplitResult(result: SplitResultMetadata, status: "complete" | "cancelled" = "complete") {
-    setSplit({
+    setSplit(normalizeSplitSnapshot({
       status,
       progress: 100,
       stage: "complete",
@@ -479,9 +479,9 @@ function Popup() {
       compressedPartsCount: result.compressedPartsCount,
       fallbackPartsCount: result.fallbackPartsCount,
       totalBytesSaved: result.totalBytesSaved,
-      warnings: result.warnings ?? [],
+      warnings: result.warnings,
       resultAvailable: true,
-    });
+    }));
   }
 
   function applySplitProgress(event: SplitProgressEvent) {
