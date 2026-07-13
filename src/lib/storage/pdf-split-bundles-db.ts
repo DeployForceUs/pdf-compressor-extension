@@ -40,6 +40,11 @@ type SplitResultsMemoryState = {
   artifacts: Map<string, SplitArtifactRecord>;
 };
 
+type SplitResultsObjectStore = {
+  put: (value: unknown) => Promise<unknown>;
+  delete: (key: string) => Promise<unknown>;
+};
+
 export type SplitResultsStoreWriteStep = {
   store: SplitStoreName;
   phase: "pending" | "complete";
@@ -76,6 +81,14 @@ function normalizePersistenceError(error: unknown): never {
   }
 
   throw error;
+}
+
+function safeAbortTransaction(transaction: { abort: () => void }) {
+  try {
+    transaction.abort();
+  } catch {
+    // The transaction may already be inactive or aborted.
+  }
 }
 
 function createMemoryState(): SplitResultsMemoryState {
@@ -249,7 +262,7 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
 
   async function writeLegacy(record: SplitResultRecord) {
     try {
-      await db.put(LEGACY_STORE, record, record.id);
+      await db.put(LEGACY_STORE, record);
       return record;
     } catch (error) {
       normalizePersistenceError(error);
@@ -291,12 +304,9 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
   }
 
   async function writeBundleAndArtifacts(bundle: SplitResultBundle, artifacts: SplitArtifactRecord[]) {
-    const transaction = db.transaction([LEGACY_STORE, BUNDLE_STORE, ARTIFACT_STORE], "readwrite");
-    const legacyStore = transaction.objectStore(LEGACY_STORE);
-    const bundleStore = transaction.objectStore(BUNDLE_STORE);
-    const artifactStore = transaction.objectStore(ARTIFACT_STORE);
     const now = Date.now();
     const totalArtifactSize = artifacts.reduce((total, artifact) => total + artifact.byteLength, 0);
+    let transaction: ReturnType<SplitResultsDb["transaction"]> | null = null;
 
     try {
       const pendingBundle: SplitResultBundle = {
@@ -316,14 +326,18 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
       }));
 
       maybeFailOnWrite(hooks, { store: BUNDLE_STORE, phase: "pending", key: bundle.id });
-      await bundleStore.put(pendingBundle);
-
       for (const artifact of pendingArtifacts) {
         maybeFailOnWrite(hooks, { store: ARTIFACT_STORE, phase: "pending", key: artifact.id });
-        await artifactStore.put(artifact);
       }
 
-      await hooks.beforeCommit?.(pendingBundle, pendingArtifacts);
+      if (hooks.beforeCommit) {
+        await hooks.beforeCommit(pendingBundle, pendingArtifacts);
+      }
+
+      transaction = db.transaction([LEGACY_STORE, BUNDLE_STORE, ARTIFACT_STORE], "readwrite");
+      const legacyStore = transaction.objectStore(LEGACY_STORE) as SplitResultsObjectStore;
+      const bundleStore = transaction.objectStore(BUNDLE_STORE) as SplitResultsObjectStore;
+      const artifactStore = transaction.objectStore(ARTIFACT_STORE) as SplitResultsObjectStore;
 
       const completeBundle: SplitResultBundle = {
         ...pendingBundle,
@@ -337,20 +351,23 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
       }));
 
       maybeFailOnWrite(hooks, { store: BUNDLE_STORE, phase: "complete", key: bundle.id });
-      await bundleStore.put(completeBundle);
+      const writeRequests: Array<Promise<unknown>> = [bundleStore.put(completeBundle)];
 
       for (const artifact of completeArtifacts) {
         maybeFailOnWrite(hooks, { store: ARTIFACT_STORE, phase: "complete", key: artifact.id });
-        await artifactStore.put(artifact);
+        writeRequests.push(artifactStore.put(artifact));
       }
 
       maybeFailOnWrite(hooks, { store: LEGACY_STORE, phase: "complete", key: bundle.id });
-      await legacyStore.delete(bundle.id);
+      writeRequests.push(legacyStore.delete(bundle.id));
 
+      await Promise.all(writeRequests);
       await transaction.done;
       return completeBundle;
     } catch (error) {
-      transaction.abort();
+      if (transaction) {
+        safeAbortTransaction(transaction);
+      }
       normalizePersistenceError(error);
     }
   }
@@ -382,7 +399,7 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
       await transaction.done;
       return deleted;
     } catch (error) {
-      transaction.abort();
+      safeAbortTransaction(transaction);
       normalizePersistenceError(error);
     }
   }
@@ -410,7 +427,7 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
       await transaction.done;
       return deleted;
     } catch (error) {
-      transaction.abort();
+      safeAbortTransaction(transaction);
       normalizePersistenceError(error);
     }
   }

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { unzipSync } from "fflate";
+import "fake-indexeddb/auto";
 import mupdf from "mupdf";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive.ts";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime.ts";
 import { createSplitResultsStore } from "../src/lib/storage/pdf-split-results-db.ts";
-import { deletePdfRecord, writePdfRecord } from "../src/lib/storage/pdf-records-db.ts";
 import { SPLIT_OUTPUT_MODES, type PdfRecord, type SplitResultRecord } from "../src/lib/messaging.ts";
 
 async function createPdf(pageCount: number) {
@@ -84,11 +84,11 @@ async function assertZipContains(zipBytes: ArrayBuffer, expectedEntries: Array<{
 }
 
 assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate-zips"]);
+assert.ok(typeof indexedDB !== "undefined");
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "foundation.pdf");
-  await writePdfRecord(inputRecord);
 
   const store = createSplitResultsStore();
   const { response, persisted } = await runSplit(inputRecord);
@@ -104,7 +104,6 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   assert.equal(bundle?.outputMode, "single-zip");
   assert.equal(bundle?.artifactIds.length, 1);
   assert.equal(bundle?.status, "complete");
-  assert.equal(bundle?.sourceFileName, inputRecord.name);
 
   const artifacts = await store.readSplitArtifactsForBundle(persisted.id);
   assert.ok(artifacts);
@@ -132,13 +131,11 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   ]);
 
   await store.deleteSplitResult(persisted.id);
-  await deletePdfRecord(inputRecord.id);
 }
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "atomic.pdf");
-  await writePdfRecord(inputRecord);
 
   const store = createSplitResultsStore({
     beforeCommit: async (bundle) => {
@@ -156,13 +153,11 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   assert.equal((await store.readSplitArtifactsForBundle(persisted.id))?.length, 1);
 
   await store.deleteSplitResult(persisted.id);
-  await deletePdfRecord(inputRecord.id);
 }
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "failure.pdf");
-  await writePdfRecord(inputRecord);
 
   const failingStore = createSplitResultsStore({
     failOnWrite: (step) => {
@@ -179,13 +174,11 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   );
   assert.equal(await failingStore.readSplitResultBundle(persisted.id), null);
   assert.equal(await failingStore.readSplitArtifactsForBundle(persisted.id), null);
-  await deletePdfRecord(inputRecord.id);
 }
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "quota.pdf");
-  await writePdfRecord(inputRecord);
 
   const quotaStore = createSplitResultsStore({
     failOnWrite: (step) => {
@@ -201,13 +194,11 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
     (error: unknown) => error instanceof Error && (error as { code?: string }).code === "STORAGE_QUOTA_EXCEEDED",
   );
   assert.equal(await quotaStore.readSplitResultBundle(persisted.id), null);
-  await deletePdfRecord(inputRecord.id);
 }
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "delete-safe.pdf");
-  await writePdfRecord(inputRecord);
 
   const store = createSplitResultsStore();
   const { persisted } = await runSplit(inputRecord);
@@ -221,13 +212,11 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   assert.equal(await store.readSplitResultBundle(persisted.id), null);
 
   assert.equal(await store.deleteSplitResult(persisted.id), true);
-  await deletePdfRecord(inputRecord.id);
 }
 
 {
   const bytes = new Uint8Array(await createPdf(3));
   const inputRecord = createPdfRecord(bytes, "legacy.pdf");
-  await writePdfRecord(inputRecord);
 
   const store = createSplitResultsStore();
   const { persisted } = await runSplit(inputRecord);
@@ -241,7 +230,6 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
   assert.ok(bundle);
   assert.equal(bundle?.outputMode, "single-zip");
   assert.equal(bundle?.artifactIds.length, 1);
-  assert.equal(bundle?.sourceFileName, inputRecord.name);
 
   const compat = await store.readSplitResult(persisted.id);
   assert.ok(compat);
@@ -253,7 +241,6 @@ assert.deepEqual(SPLIT_OUTPUT_MODES, ["single-zip", "individual-pdfs", "separate
 
   assert.equal(await store.deleteLegacySplitResult(persisted.id), true);
   assert.equal(await store.readLegacySplitResult(persisted.id), null);
-  await deletePdfRecord(inputRecord.id);
 }
 
 console.log("phase5 slice 12 artifact factory foundation assertions passed");

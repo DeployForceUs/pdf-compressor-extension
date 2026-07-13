@@ -3,6 +3,8 @@ Slice 1 migrates Phase 5 Split persistence from a single blob record to a parent
 
 The split engine still executes once. `compressAfter` still runs once per eligible part. Validation still runs once per final part. The only change is the storage contract behind the existing single-ZIP result.
 
+This slice also includes the GitHub review hotfix for IndexedDB robustness: the legacy inline-key write path now writes the value only, transaction aborts no longer mask the original persistence error, and the new storage tests run against a browser-like IndexedDB shim.
+
 Current behavior remains:
 
 - Split produces one ZIP archive containing all parts.
@@ -71,8 +73,8 @@ Persistence now writes a complete bundle and its artifacts through one transacti
 Behavior:
 
 1. Build the final artifact set first.
-2. Stage parent bundle and children as pending.
-3. Finalize them to complete.
+2. Run any pre-commit hook before the IndexedDB transaction opens.
+3. Write the final bundle and artifact records inside one transactional boundary.
 4. Commit once.
 5. Expose the result only after commit succeeds.
 
@@ -83,7 +85,7 @@ If persistence fails:
 - no partial artifact is visible
 - quota failures normalize to `STORAGE_QUOTA_EXCEEDED`
 
-The in-memory test backend mirrors this behavior with staged copies and commit-at-end semantics.
+The in-memory test backend mirrors this behavior with staged copies and commit-at-end semantics. The IndexedDB-backed coverage now uses `fake-indexeddb` so the legacy inline-key write and transaction cleanup behavior are exercised in a browser-like environment.
 
 # Worker and Offscreen Responsibilities
 Current responsibilities remain separated:
@@ -168,6 +170,8 @@ Added focused coverage for:
 - pending restore filtering
 - bundle delete and orphan cleanup
 - legacy record read/adaptation/delete
+- browser-like IndexedDB coverage for the legacy inline-key write path
+- safe abort behavior so the original IndexedDB error is preserved during cleanup
 
 Also fixed the existing `phase5_slice6a` helper so it supplies MuPDF loading the same way the other split tests do.
 
@@ -206,6 +210,11 @@ Tests:
 Report:
 
 - `reports/PHASE_5_ARTIFACT_FACTORY_SLICE_1_FOUNDATION_REPORT.md`
+
+Package metadata:
+
+- `package.json`
+- `package-lock.json`
 
 # Risks
 - Bundle/artifact id alignment must stay strict as future output modes are added.
