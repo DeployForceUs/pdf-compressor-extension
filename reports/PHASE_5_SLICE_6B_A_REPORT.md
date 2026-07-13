@@ -11,9 +11,11 @@
 # Files Modified
 - `src/entrypoints/popup/main.tsx`
 - `src/entrypoints/popup/store.ts`
+- `src/entrypoints/popup/split-ui.ts`
 - `src/locales/en/translation.json`
 - `src/locales/es/translation.json`
 - `src/styles/popup.css`
+- `tests/phase5_slice6b_a.test.ts`
 
 # Popup Components Added
 - Split PDF card inside the existing popup shell.
@@ -36,6 +38,8 @@
   - strategy inputs
   - running/loading/cancelled/completed/error status
   - progress and stage
+  - current part, total part count, and live progress message
+  - source byte size, candidate byte size, selected byte size, and fallback flag
   - result metadata
   - runtime warnings
 - Added reset behavior that clears stale split results when a new PDF is selected or removed.
@@ -68,6 +72,7 @@
   - Saving result
   - Complete
 - The popup uses the existing progress events and does not invent a second progress model.
+- The popup stores the real `currentPart` and `partsCount` values from each runtime event and renders them directly.
 
 # Cancel Flow
 - Wired the Split cancel button to the existing `background:split-cancel` flow.
@@ -86,6 +91,32 @@
 - Manual Chrome acceptance is deferred.
 - No new compression logic was introduced.
 - No split-by-size algorithm changes were made.
+
+# Strict Numeric Validation
+- Added strict parsing helpers for:
+  - positive integers
+  - positive finite decimals
+- Rejected partial inputs such as `20abc`, `10mb`, and `1.5xyz`.
+- Rejected empty strings, zero, negative values, `NaN`, and `Infinity`.
+- `pagesPerPart` now accepts only a fully valid positive integer string.
+- `maxPartSizeMb` now accepts only a fully valid positive numeric string.
+
+# Localization Fix
+- Replaced hard-coded English progress and warning strings in the popup helper with translation-backed rendering.
+- Added split progress and warning keys to both English and Spanish locale catalogs.
+- Byte diagnostics now use the existing byte formatter instead of raw integers where practical.
+- Spanish popup output no longer depends on raw English strings for split progress diagnostics or warnings.
+
+# Tests Added
+- `tests/phase5_slice6b_a.test.ts`
+- Coverage added for:
+  - current part / total parts state preservation
+  - rendered progress summary from stored state
+  - strict positive integer validation
+  - strict positive decimal validation
+  - valid and invalid split form inputs
+  - localized progress rendering
+  - localized warning rendering
 
 # MANUAL_CHROME_VALIDATION_REQUIRED
 - Required for the final visible popup acceptance pass.
@@ -116,6 +147,9 @@
 - [x] ZIP download is wired to persisted split output
 - [x] Warnings are visible without blocking completion
 - [x] Popup split state is covered by a Node-side test file
+- [x] Popup split progress stores current part and total parts directly
+- [x] Split form validation rejects partial numeric strings
+- [x] Split progress and warnings are localized
 - [x] `npm run check` passes
 - [x] `npm run build` passes
 - [ ] Manual Chrome validation
@@ -130,5 +164,5 @@
 
 # Git Information
 - Branch: `feature/phase5-pdf-split`
-- Original Slice 6B-A commit: `c6b11c4e40b2d1483a4f3b0e36315109d35559fe`
+- Original Slice 6B-A commit: `3ffd7249d68fe2aab0f1b92b694c50f7059a5a6d`
 - Slice 6B-A hotfix commit: included in this commit

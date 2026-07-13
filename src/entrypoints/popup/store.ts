@@ -63,13 +63,19 @@ export type SplitSnapshot = {
   stage: SplitProgressStage | "idle";
   error: string;
   recordId: string | null;
+  currentPart: number | null;
+  partsCount: number | null;
+  progressMessage: string;
+  sourceByteSize: number | null;
+  compressedCandidateByteSize: number | null;
+  selectedByteSize: number | null;
+  fallbackUsed: boolean | null;
   zipBlobId: string | null;
   fileName: string | null;
   mimeType: string | null;
   size: number | null;
   originalSize: number | null;
   totalPartsSize: number | null;
-  partsCount: number | null;
   strategy: SplitStrategy["type"];
   pagesPerPart: string;
   maxPartSizeMb: string;
@@ -143,13 +149,19 @@ const initialSplit: SplitSnapshot = {
   stage: "idle",
   error: "",
   recordId: null,
+  currentPart: null,
+  partsCount: null,
+  progressMessage: "",
+  sourceByteSize: null,
+  compressedCandidateByteSize: null,
+  selectedByteSize: null,
+  fallbackUsed: null,
   zipBlobId: null,
   fileName: null,
   mimeType: null,
   size: null,
   originalSize: null,
   totalPartsSize: null,
-  partsCount: null,
   strategy: "by-pages",
   pagesPerPart: "20",
   maxPartSizeMb: "10",

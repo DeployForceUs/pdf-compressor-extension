@@ -43,9 +43,8 @@ import { deleteSplitResult } from "../../lib/storage/pdf-split-results-db";
 import {
   buildSplitRequestFromForm,
   splitDownloadFileName,
-  splitProgressLabel,
-  splitProgressSummary,
-  splitWarningLabel,
+  formatSplitProgressDisplay,
+  formatSplitWarning,
   type SplitFormState,
 } from "./split-ui";
 import { SELECTED_PDF_RECORD_ID, usePopupStore, type SplitSnapshot } from "./store";
@@ -464,13 +463,19 @@ function Popup() {
       stage: "complete",
       error: "",
       recordId: result.zipBlobId,
+      currentPart: result.partsCount,
+      partsCount: result.partsCount,
+      progressMessage: "Split complete",
+      sourceByteSize: null,
+      compressedCandidateByteSize: null,
+      selectedByteSize: null,
+      fallbackUsed: null,
       zipBlobId: result.zipBlobId,
       fileName: result.fileName,
       mimeType: result.mimeType,
       size: result.size,
       originalSize: result.originalSize,
       totalPartsSize: result.totalPartsSize,
-      partsCount: result.partsCount,
       strategy: result.strategy.type,
       compressAfterRequested: result.compressAfterRequested,
       originalSplitPartsSize: result.originalSplitPartsSize,
@@ -490,6 +495,13 @@ function Popup() {
       stage: event.stage,
       error: "",
       recordId: event.recordId,
+      currentPart: event.currentPart,
+      partsCount: event.partsCount,
+      progressMessage: event.message,
+      sourceByteSize: event.sourceByteSize ?? null,
+      compressedCandidateByteSize: event.compressedCandidateByteSize ?? null,
+      selectedByteSize: event.selectedByteSize ?? null,
+      fallbackUsed: event.fallbackUsed ?? null,
     });
   }
 
@@ -527,9 +539,9 @@ function Popup() {
         applySplitResult({
           zipBlobId: result.id,
           fileName: result.fileName,
-          mimeType: result.mimeType,
-          size: result.data.byteLength,
-          compressAfterRequested: result.compressAfterRequested,
+      mimeType: result.mimeType,
+      size: result.data.byteLength,
+      compressAfterRequested: result.compressAfterRequested,
           originalSplitPartsSize: result.originalSplitPartsSize,
           finalPartsSize: result.finalPartsSize,
           compressedPartsCount: result.compressedPartsCount,
@@ -722,13 +734,19 @@ function Popup() {
       stage: "idle",
       error: "",
       recordId: null,
+      currentPart: null,
+      partsCount: null,
+      progressMessage: "",
+      sourceByteSize: null,
+      compressedCandidateByteSize: null,
+      selectedByteSize: null,
+      fallbackUsed: null,
       zipBlobId: null,
       fileName: null,
       mimeType: null,
       size: null,
       originalSize: null,
       totalPartsSize: null,
-      partsCount: null,
       warnings: [],
       resultAvailable: false,
       compressAfterRequested: split.compressAfter,
@@ -1192,17 +1210,24 @@ function Popup() {
     pdf.status === "ready" &&
     !sharedBusy &&
     (!split.compressAfter || compression.engineStatus === "ready");
-  const splitProgressSummaryValue = split.recordId
-    ? splitProgressSummary({
-        type: "split:progress",
-        recordId: split.recordId,
-        stage: split.stage === "idle" ? "validating" : split.stage,
-        progress: split.progress,
-        partsCount: split.partsCount ?? 0,
-        currentPart: split.partsCount ?? 0,
-        message: splitStatusLabel,
-      })
-    : null;
+  const splitProgressSummaryValue = formatSplitProgressDisplay(
+    {
+      stage: split.stage,
+      progress: split.progress,
+      message: split.progressMessage || splitStatusLabel,
+      currentPart: split.currentPart ?? 0,
+      partsCount: split.partsCount ?? 0,
+      sourceByteSize: split.sourceByteSize ?? undefined,
+      compressedCandidateByteSize: split.compressedCandidateByteSize ?? undefined,
+      selectedByteSize: split.selectedByteSize ?? undefined,
+      fallbackUsed: split.fallbackUsed ?? undefined,
+    },
+    {
+      t,
+      formatBytes: (value) => formatBytes(value, locale),
+    },
+  );
+  const splitProgressMetaLabel = split.status === "idle" ? splitStatusLabel : splitProgressSummaryValue.label;
   const splitOriginalValue = split.originalSize !== null ? formatBytes(split.originalSize, locale) : "—";
   const splitZipValue = split.size !== null ? formatBytes(split.size, locale) : "—";
   const splitSavedValue =
@@ -1455,21 +1480,12 @@ function Popup() {
                 </div>
                 <div className="split-progress__meta">
                   <span>{`${Math.round(split.progress)}%`}</span>
-                  <span>{splitProgressSummaryValue ? splitProgressSummaryValue.parts : t("split.progress")}</span>
+                  <span>{splitProgressMetaLabel}</span>
                 </div>
               </div>
 
               <div className="split-progress__detail">
-                {splitProgressLabel({
-                  type: "split:progress",
-                  recordId: split.recordId ?? "",
-                  stage: split.stage === "idle" ? "validating" : split.stage,
-                  progress: split.progress,
-                  partsCount: split.partsCount ?? 0,
-                  currentPart: split.partsCount ?? 0,
-                  message: splitStatusLabel,
-                })}
-                {splitProgressSummaryValue?.detail ? <span>{splitProgressSummaryValue.detail}</span> : null}
+                {splitProgressSummaryValue.detail ? <span>{splitProgressSummaryValue.detail}</span> : null}
               </div>
 
               <div className="split-grid">
@@ -1516,18 +1532,19 @@ function Popup() {
                   <div className="split-warnings__list">
                     {split.warnings.map((warning) => (
                       <div key={`${warning.code}-${warning.fileName}-${warning.partNumber}`} className="split-warning">
-                        <div className="split-warning__title">{splitWarningLabel(warning)}</div>
-                        <div className="split-warning__detail">
-                          {"pageNumber" in warning
-                            ? `Page ${warning.pageNumber} · ${formatBytes(warning.actualGeneratedByteSize, locale)} / ${formatBytes(
-                                warning.requestedMaximumByteSize,
-                                locale,
-                              )} · ${warning.fileName}`
-                            : `${warning.fileName} · source ${formatBytes(warning.sourceByteSize, locale)} · selected ${formatBytes(
-                                warning.selectedByteSize,
-                                locale,
-                              )}${typeof warning.compressedCandidateByteSize === "number" ? ` · candidate ${formatBytes(warning.compressedCandidateByteSize, locale)}` : ""}`}
-                        </div>
+                        {(() => {
+                          const rendered = formatSplitWarning(warning, {
+                            t,
+                            formatBytes: (value) => formatBytes(value, locale),
+                          });
+
+                          return (
+                            <>
+                              <div className="split-warning__title">{rendered.title}</div>
+                              <div className="split-warning__detail">{rendered.detail}</div>
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

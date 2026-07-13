@@ -1,6 +1,39 @@
 import assert from "node:assert/strict";
-import { buildSplitRequestFromForm, splitProgressSummary, splitWarningLabel } from "../src/entrypoints/popup/split-ui";
+import en from "../src/locales/en/translation.json";
+import es from "../src/locales/es/translation.json";
+import {
+  buildSplitRequestFromForm,
+  formatSplitProgressDisplay,
+  formatSplitWarning,
+  parseStrictPositiveDecimal,
+  parseStrictPositiveInteger,
+} from "../src/entrypoints/popup/split-ui";
 import { usePopupStore } from "../src/entrypoints/popup/store";
+
+function makeT(dictionary: Record<string, unknown>) {
+  return (key: string, options: Record<string, unknown> = {}) => {
+    const parts = key.split(".");
+    let value: unknown = dictionary;
+
+    for (const part of parts) {
+      if (typeof value !== "object" || value === null || !(part in value)) {
+        throw new Error(`Missing translation key: ${key}`);
+      }
+
+      value = (value as Record<string, unknown>)[part];
+    }
+
+    if (typeof value !== "string") {
+      throw new Error(`Translation key is not a string: ${key}`);
+    }
+
+    return value.replace(/\{\{(\w+)\}\}/g, (_match, token: string) => String(options[token] ?? ""));
+  };
+}
+
+const tEn = makeT(en as Record<string, unknown>);
+const tEs = makeT(es as Record<string, unknown>);
+const formatBytes = (value: number) => `${value} B`;
 
 {
   const split = usePopupStore.getState().split;
@@ -10,6 +43,33 @@ import { usePopupStore } from "../src/entrypoints/popup/store";
   assert.equal(split.maxPartSizeMb, "10");
   assert.equal(split.manualRanges, "");
   assert.equal(split.compressAfter, false);
+  assert.equal(split.currentPart, null);
+  assert.equal(split.partsCount, null);
+  assert.equal(split.progressMessage, "");
+}
+
+{
+  assert.equal(parseStrictPositiveInteger("1"), 1);
+  assert.equal(parseStrictPositiveInteger("20"), 20);
+  assert.equal(parseStrictPositiveInteger("20abc"), null);
+  assert.equal(parseStrictPositiveInteger(" 20"), null);
+  assert.equal(parseStrictPositiveInteger("20 "), null);
+  assert.equal(parseStrictPositiveInteger("0"), null);
+  assert.equal(parseStrictPositiveInteger("-1"), null);
+  assert.equal(parseStrictPositiveInteger("1.5"), null);
+  assert.equal(parseStrictPositiveInteger(""), null);
+}
+
+{
+  assert.equal(parseStrictPositiveDecimal("1"), 1);
+  assert.equal(parseStrictPositiveDecimal("1.5"), 1.5);
+  assert.equal(parseStrictPositiveDecimal("10mb"), null);
+  assert.equal(parseStrictPositiveDecimal("1.5xyz"), null);
+  assert.equal(parseStrictPositiveDecimal("0"), null);
+  assert.equal(parseStrictPositiveDecimal("0.0"), null);
+  assert.equal(parseStrictPositiveDecimal("-1"), null);
+  assert.equal(parseStrictPositiveDecimal("Infinity"), null);
+  assert.equal(parseStrictPositiveDecimal(""), null);
 }
 
 {
@@ -61,7 +121,7 @@ import { usePopupStore } from "../src/entrypoints/popup/store";
   assert.equal(
     buildSplitRequestFromForm({
       strategy: "by-pages",
-      pagesPerPart: "0",
+      pagesPerPart: "20abc",
       maxPartSizeMb: "10",
       manualRanges: "",
       compressAfter: false,
@@ -73,7 +133,18 @@ import { usePopupStore } from "../src/entrypoints/popup/store";
     buildSplitRequestFromForm({
       strategy: "by-max-size",
       pagesPerPart: "10",
-      maxPartSizeMb: "abc",
+      maxPartSizeMb: "10mb",
+      manualRanges: "",
+      compressAfter: false,
+    }).issue,
+    "INVALID_MAX_PART_SIZE",
+  );
+
+  assert.equal(
+    buildSplitRequestFromForm({
+      strategy: "by-max-size",
+      pagesPerPart: "10",
+      maxPartSizeMb: "0",
       manualRanges: "",
       compressAfter: false,
     }).issue,
@@ -93,38 +164,88 @@ import { usePopupStore } from "../src/entrypoints/popup/store";
 }
 
 {
-  const summary = splitProgressSummary({
-    type: "split:progress",
-    recordId: "split",
-    stage: "compressing-part",
-    progress: 42,
-    partsCount: 3,
-    currentPart: 2,
-    message: "Compressing part 2 of 3",
-    sourceByteSize: 2048,
-    compressedCandidateByteSize: 1024,
-    selectedByteSize: 1024,
-    fallbackUsed: false,
+  usePopupStore.setState({
+    split: {
+      ...usePopupStore.getState().split,
+      status: "running",
+      progress: 42,
+      stage: "creating-part",
+      error: "",
+      recordId: "split",
+      currentPart: 2,
+      partsCount: 7,
+      progressMessage: "Creating part 2 of 7",
+      sourceByteSize: 2048,
+      compressedCandidateByteSize: 1024,
+      selectedByteSize: 1024,
+      fallbackUsed: false,
+    },
   });
 
-  assert.equal(summary.parts, "2 of 3");
-  assert.ok(summary.detail.includes("source 2048 bytes"));
-  assert.ok(summary.detail.includes("candidate 1024 bytes"));
-  assert.ok(summary.detail.includes("selected 1024 bytes"));
+  const split = usePopupStore.getState().split;
+  assert.equal(split.currentPart, 2);
+  assert.equal(split.partsCount, 7);
+  assert.notEqual(split.currentPart, split.partsCount);
+
+  const display = formatSplitProgressDisplay(split, {
+    t: tEn,
+    formatBytes,
+  });
+
+  assert.equal(display.label, "Creating part 2 of 7");
+  assert.ok(display.detail.includes("Source 2048 B"));
+  assert.ok(display.detail.includes("Candidate 1024 B"));
+  assert.ok(display.detail.includes("Selected 1024 B"));
+  assert.ok(display.detail.includes("No fallback"));
 }
 
 {
-  assert.equal(
-    splitWarningLabel({
+  const display = formatSplitProgressDisplay(
+    {
+      stage: "compressing-part",
+      progress: 42,
+      message: "Compressing part 2 of 7",
+      currentPart: 2,
+      partsCount: 7,
+      sourceByteSize: 2048,
+      compressedCandidateByteSize: 1024,
+      selectedByteSize: 1024,
+      fallbackUsed: true,
+    },
+    {
+      t: tEs,
+      formatBytes,
+    },
+  );
+
+  assert.equal(display.label, "Comprimiendo parte 2 de 7");
+  assert.ok(display.detail.includes("Origen 2048 B"));
+  assert.ok(display.detail.includes("Candidato 1024 B"));
+  assert.ok(display.detail.includes("Seleccionado 1024 B"));
+  assert.ok(display.detail.includes("Se usó alternativa"));
+}
+
+{
+  const warning = formatSplitWarning(
+    {
       code: "COMPRESSION_FAILED_FALLBACK",
       fileName: "example_part_001_pages_1-2.pdf",
       partNumber: 1,
       sourceByteSize: 1024,
       selectedByteSize: 1024,
       fallbackUsed: true,
-    }),
-    "example_part_001_pages_1-2.pdf fell back after compression failed",
+    },
+    {
+      t: tEs,
+      formatBytes,
+    },
   );
+
+  assert.equal(warning.title, "La compresión falló, se usa la parte original");
+  assert.ok(warning.detail.includes("example_part_001_pages_1-2.pdf"));
+  assert.ok(warning.detail.includes("Origen 1024 B"));
+  assert.ok(warning.detail.includes("seleccionado 1024 B"));
+  assert.ok(warning.detail.includes("candidato n/d"));
 }
 
 console.log("phase5 slice 6b-a popup split ui assertions passed");

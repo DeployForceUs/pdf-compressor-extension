@@ -10,16 +10,75 @@ export type SplitFormState = {
 };
 
 export type SplitFormIssue = "INVALID_PAGES_PER_PART" | "INVALID_MAX_PART_SIZE" | "INVALID_PAGE_RANGE";
+
 export type SplitFormError = {
   issue: SplitFormIssue;
 };
 
+export type SplitUiText = {
+  t: (key: string, options?: Record<string, unknown>) => string;
+  formatBytes: (value: number) => string;
+};
+
+export type SplitProgressSnapshot = Pick<
+  SplitProgressEvent,
+  | "progress"
+  | "message"
+  | "currentPart"
+  | "partsCount"
+  | "sourceByteSize"
+  | "compressedCandidateByteSize"
+  | "selectedByteSize"
+  | "fallbackUsed"
+> & {
+  stage: SplitProgressEvent["stage"] | "idle";
+};
+
+export type SplitProgressRender = {
+  label: string;
+  detail: string;
+};
+
+export type SplitWarningRender = {
+  title: string;
+  detail: string;
+};
+
+const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
+const POSITIVE_DECIMAL_OR_INTEGER_PATTERN = /^(?:[1-9]\d*|0)(?:\.\d+)?$/;
+
+export function parseStrictPositiveInteger(value: string): number | null {
+  if (!POSITIVE_INTEGER_PATTERN.test(value)) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function parseStrictPositiveDecimal(value: string): number | null {
+  if (!POSITIVE_DECIMAL_OR_INTEGER_PATTERN.test(value)) {
+    return null;
+  }
+
+  if (Number.isNaN(Number(value)) || !Number.isFinite(Number(value))) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return parsed > 0 ? parsed : null;
+}
+
+function toSplitFormError(issue: SplitFormIssue): SplitFormError {
+  return { issue };
+}
+
 export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalRequest | SplitFormError {
   switch (form.strategy) {
     case "by-pages": {
-      const pagesPerPart = Number.parseInt(form.pagesPerPart, 10);
-      if (!Number.isInteger(pagesPerPart) || pagesPerPart <= 0) {
-        return { issue: "INVALID_PAGES_PER_PART" };
+      const pagesPerPart = parseStrictPositiveInteger(form.pagesPerPart);
+      if (pagesPerPart === null) {
+        return toSplitFormError("INVALID_PAGES_PER_PART");
       }
 
       return {
@@ -32,9 +91,9 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
       };
     }
     case "by-max-size": {
-      const maxPartSizeMb = Number.parseFloat(form.maxPartSizeMb);
-      if (!Number.isFinite(maxPartSizeMb) || maxPartSizeMb <= 0) {
-        return { issue: "INVALID_MAX_PART_SIZE" };
+      const maxPartSizeMb = parseStrictPositiveDecimal(form.maxPartSizeMb);
+      if (maxPartSizeMb === null) {
+        return toSplitFormError("INVALID_MAX_PART_SIZE");
       }
 
       return {
@@ -49,7 +108,7 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
     case "manual-ranges": {
       const ranges = form.manualRanges.trim();
       if (!ranges) {
-        return { issue: "INVALID_PAGE_RANGE" };
+        return toSplitFormError("INVALID_PAGE_RANGE");
       }
 
       return {
@@ -61,52 +120,136 @@ export function buildSplitRequestFromForm(form: SplitFormState): SplitLocalReque
         compressAfter: form.compressAfter || undefined,
       };
     }
-    default: {
-      return { issue: "INVALID_PAGE_RANGE" };
-    }
+    default:
+      return toSplitFormError("INVALID_PAGE_RANGE");
   }
 }
 
-export function splitProgressLabel(event: SplitProgressEvent): string {
-  return event.message;
-}
+export function formatSplitProgressDisplay(event: SplitProgressSnapshot, i18n: SplitUiText): SplitProgressRender {
+  const partsLabel =
+    event.partsCount !== null
+      ? i18n.t("split.progress.parts", {
+          current: event.currentPart ?? 0,
+          total: event.partsCount,
+        })
+      : i18n.t("split.progress.partsUnknown", {
+          current: event.currentPart ?? 0,
+        });
 
-export function splitProgressSummary(event: SplitProgressEvent) {
-  const parts = event.partsCount > 0 ? `${event.currentPart} of ${event.partsCount}` : `${event.currentPart}`;
+  let label = partsLabel;
+  switch (event.stage) {
+    case "validating":
+      label = i18n.t("split.progress.validating");
+      break;
+    case "planning-parts":
+      label = i18n.t("split.progress.planningParts");
+      break;
+    case "creating-part":
+      label = i18n.t("split.progress.creatingPart", {
+        current: event.currentPart ?? 0,
+        total: event.partsCount ?? 0,
+      });
+      break;
+    case "compressing-part":
+      label = i18n.t("split.progress.compressingPart", {
+        current: event.currentPart ?? 0,
+        total: event.partsCount ?? 0,
+      });
+      break;
+    case "validating-part":
+      label = i18n.t("split.progress.validatingPart", {
+        current: event.currentPart ?? 0,
+        total: event.partsCount ?? 0,
+      });
+      break;
+    case "creating-zip":
+      label = i18n.t("split.progress.creatingZip");
+      break;
+    case "persisting":
+      label = i18n.t("split.progress.savingResult");
+      break;
+    case "complete":
+      label = i18n.t("split.progress.complete");
+      break;
+    default:
+      break;
+  }
+
   const detail: string[] = [];
-
   if (typeof event.sourceByteSize === "number") {
-    detail.push(`source ${event.sourceByteSize} bytes`);
+    detail.push(i18n.t("split.progress.sourceBytes", { size: i18n.formatBytes(event.sourceByteSize) }));
   }
-
   if (typeof event.compressedCandidateByteSize === "number") {
-    detail.push(`candidate ${event.compressedCandidateByteSize} bytes`);
+    detail.push(i18n.t("split.progress.candidateBytes", { size: i18n.formatBytes(event.compressedCandidateByteSize) }));
   }
-
   if (typeof event.selectedByteSize === "number") {
-    detail.push(`selected ${event.selectedByteSize} bytes`);
+    detail.push(i18n.t("split.progress.selectedBytes", { size: i18n.formatBytes(event.selectedByteSize) }));
   }
-
   if (typeof event.fallbackUsed === "boolean") {
-    detail.push(event.fallbackUsed ? "fallback used" : "no fallback");
+    detail.push(
+      event.fallbackUsed
+        ? i18n.t("split.progress.fallbackUsed")
+        : i18n.t("split.progress.noFallback"),
+    );
   }
 
   return {
-    parts,
+    label,
     detail: detail.join(" · "),
   };
 }
 
-export function splitWarningLabel(warning: SplitWarning): string {
+export function formatSplitWarning(warning: SplitWarning, i18n: SplitUiText): SplitWarningRender {
   switch (warning.code) {
     case "SINGLE_PAGE_EXCEEDS_LIMIT":
-      return `Page ${warning.pageNumber} exceeded the requested limit`;
+      return {
+        title: i18n.t("split.warnings.singlePageExceedsLimit"),
+        detail: i18n.t("split.warnings.singlePageExceedsLimitDetail", {
+          page: warning.pageNumber,
+          actual: i18n.formatBytes(warning.actualGeneratedByteSize),
+          requested: i18n.formatBytes(warning.requestedMaximumByteSize),
+          fileName: warning.fileName,
+        }),
+      };
     case "COMPRESSION_FAILED_FALLBACK":
-      return `${warning.fileName} fell back after compression failed`;
+      return {
+        title: i18n.t("split.warnings.compressionFailedFallback"),
+        detail: i18n.t("split.warnings.compressionFailedFallbackDetail", {
+          fileName: warning.fileName,
+          source: i18n.formatBytes(warning.sourceByteSize),
+          selected: i18n.formatBytes(warning.selectedByteSize),
+          candidate:
+            typeof warning.compressedCandidateByteSize === "number"
+              ? i18n.formatBytes(warning.compressedCandidateByteSize)
+              : i18n.t("split.warnings.notAvailable"),
+        }),
+      };
     case "COMPRESSED_PART_INVALID_FALLBACK":
-      return `${warning.fileName} fell back after validation failed`;
+      return {
+        title: i18n.t("split.warnings.compressedPartInvalidFallback"),
+        detail: i18n.t("split.warnings.compressedPartInvalidFallbackDetail", {
+          fileName: warning.fileName,
+          source: i18n.formatBytes(warning.sourceByteSize),
+          selected: i18n.formatBytes(warning.selectedByteSize),
+          candidate:
+            typeof warning.compressedCandidateByteSize === "number"
+              ? i18n.formatBytes(warning.compressedCandidateByteSize)
+              : i18n.t("split.warnings.notAvailable"),
+        }),
+      };
     case "COMPRESSED_PART_NOT_SMALLER_FALLBACK":
-      return `${warning.fileName} fell back because the compressed part was not smaller`;
+      return {
+        title: i18n.t("split.warnings.compressedPartNotSmallerFallback"),
+        detail: i18n.t("split.warnings.compressedPartNotSmallerFallbackDetail", {
+          fileName: warning.fileName,
+          source: i18n.formatBytes(warning.sourceByteSize),
+          selected: i18n.formatBytes(warning.selectedByteSize),
+          candidate:
+            typeof warning.compressedCandidateByteSize === "number"
+              ? i18n.formatBytes(warning.compressedCandidateByteSize)
+              : i18n.t("split.warnings.notAvailable"),
+        }),
+      };
     default: {
       const exhausted: never = warning;
       return exhausted;
