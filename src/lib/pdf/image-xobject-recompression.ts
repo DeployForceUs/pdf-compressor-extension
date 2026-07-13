@@ -9,6 +9,7 @@ type MuPdfPdfObject = InstanceType<MuPdfNamespace["PDFObject"]>;
 type MuPdfBuffer = InstanceType<MuPdfNamespace["Buffer"]>;
 type MuPdfImage = InstanceType<MuPdfNamespace["Image"]>;
 type MuPdfPixmap = InstanceType<MuPdfNamespace["Pixmap"]>;
+type AbortChecker = () => boolean | Promise<boolean>;
 
 export type ImageRecompressionFailure = {
   objectReference: string;
@@ -240,6 +241,10 @@ function buildFailure(message: string) {
   return new Error(message);
 }
 
+function compressionFailure(code: "CANCELLED", message: string) {
+  return { code, message };
+}
+
 function fingerprintCandidate(candidate: ClassifiedImageCandidate) {
   return [
     candidate.pageNumber,
@@ -250,12 +255,53 @@ function fingerprintCandidate(candidate: ClassifiedImageCandidate) {
   ].join("|");
 }
 
+export function createRecompressionProgressGuard(candidateCount: number) {
+  const maxIterations = Math.max(8, candidateCount * 2 + 8);
+  let iterations = 0;
+  let lastFingerprint: string | null = null;
+
+  return {
+    beforeIteration(candidateFingerprint: string) {
+      iterations += 1;
+      if (iterations > maxIterations) {
+        throw buildFailure(
+          `Image recompression exceeded the safe iteration limit (${maxIterations}) without completing`,
+        );
+      }
+
+      if (lastFingerprint === candidateFingerprint) {
+        throw buildFailure(
+          `Image recompression selected the same candidate repeatedly without making progress: ${candidateFingerprint}`,
+        );
+      }
+
+      lastFingerprint = candidateFingerprint;
+    },
+    requireProgress(progressMade: boolean, candidateFingerprint: string) {
+      if (!progressMade) {
+        throw buildFailure(`Image recompression iteration made no progress for ${candidateFingerprint}`);
+      }
+    },
+  };
+}
+
+async function throwIfCancelled(isCancelled?: AbortChecker) {
+  if (!isCancelled) {
+    return;
+  }
+
+  if (await isCancelled()) {
+    throw compressionFailure("CANCELLED", "Compression was cancelled");
+  }
+}
+
 export async function recompressSafeImageCandidates(
   mupdf: MuPdfNamespace,
   inputBytes: ArrayBuffer,
   pdfDocument: MuPdfPdfDocument,
   classification: ImageCandidateClassificationSummary,
   quality = DEFAULT_JPEG_QUALITY,
+  isCancelled?: AbortChecker,
 ): Promise<SafeImageRecompressionResult> {
   const pageCount = pdfDocument.countPages();
   const baselineDocument = mupdf.Document.openDocument(inputBytes);
@@ -282,11 +328,14 @@ export async function recompressSafeImageCandidates(
   const processedFingerprints = new Set<string>();
   const failures: ImageRecompressionFailure[] = [];
   let abandonRecompression = false;
+  const progressGuard = createRecompressionProgressGuard(classification.totalImages);
 
   for (;;) {
     if (abandonRecompression) {
       break;
     }
+
+    await throwIfCancelled(isCancelled);
 
     const liveDiscovery = discoverImageXObjects(pdfDocument);
     const liveClassification = classifyImageCandidates(liveDiscovery);
@@ -303,6 +352,7 @@ export async function recompressSafeImageCandidates(
 
     const candidate = nextCandidate;
     const candidateFingerprint = fingerprintCandidate(candidate);
+    progressGuard.beforeIteration(candidateFingerprint);
     const targetObject = findPdfObjectByReference(pdfDocument, candidate.pageNumber, candidate.objectReference);
     if (!targetObject) {
       failedRecompressionCount += 1;
@@ -312,10 +362,14 @@ export async function recompressSafeImageCandidates(
         message: "Image object could not be resolved in the live document",
       });
       processedFingerprints.add(candidateFingerprint);
+      progressGuard.requireProgress(true, candidateFingerprint);
       continue;
     }
 
+    let progressMade = false;
     try {
+      await throwIfCancelled(isCancelled);
+
       if (!targetObject.isIndirect()) {
         failedRecompressionCount += 1;
         failures.push({
@@ -324,41 +378,53 @@ export async function recompressSafeImageCandidates(
           message: "Image object is not indirect and cannot be rewritten in place",
         });
         processedFingerprints.add(candidateFingerprint);
-        continue;
-      }
+        progressMade = true;
+      } else {
+        const originalStreamBytes = readRawStreamBytes(targetObject);
+        originalImageBytes += originalStreamBytes.byteLength;
 
-      const originalStreamBytes = readRawStreamBytes(targetObject);
-      originalImageBytes += originalStreamBytes.byteLength;
+        await throwIfCancelled(isCancelled);
 
-      const { image, pixmap } = loadImagePixmap(pdfDocument, targetObject);
-      try {
-        const jpegBytes = pixmap.asJPEG(quality);
-        if (jpegBytes.byteLength >= originalStreamBytes.byteLength) {
-          skippedBecauseNewStreamWasNotSmallerCount += 1;
-          continue;
+        const { image, pixmap } = loadImagePixmap(pdfDocument, targetObject);
+        try {
+          await throwIfCancelled(isCancelled);
+
+          const jpegBytes = pixmap.asJPEG(quality);
+          if (jpegBytes.byteLength >= originalStreamBytes.byteLength) {
+            skippedBecauseNewStreamWasNotSmallerCount += 1;
+            processedFingerprints.add(candidateFingerprint);
+            progressMade = true;
+          } else {
+            rewriteTargetImage(pdfDocument, targetObject, jpegBytes);
+
+            const candidateBytes = saveDocumentBytes(pdfDocument);
+            await throwIfCancelled(isCancelled);
+
+            const header = getHeaderPreview(new Uint8Array(candidateBytes));
+            if (header !== "%PDF-") {
+              throw buildFailure("Recompressed output did not start with %PDF-");
+            }
+
+            workingBytes = candidateBytes;
+            rewrittenObjectReferences.push({
+              pageNumber: candidate.pageNumber,
+              objectReference: candidate.objectReference,
+            });
+            successfullyRecompressedCount += 1;
+            rewrittenImageBytes += jpegBytes.byteLength;
+            processedFingerprints.add(candidateFingerprint);
+            progressMade = true;
+          }
+        } finally {
+          pixmap.destroy();
+          image.destroy();
         }
-
-        rewriteTargetImage(pdfDocument, targetObject, jpegBytes);
-
-        const candidateBytes = saveDocumentBytes(pdfDocument);
-        const header = getHeaderPreview(new Uint8Array(candidateBytes));
-        if (header !== "%PDF-") {
-          throw buildFailure("Recompressed output did not start with %PDF-");
-        }
-
-        workingBytes = candidateBytes;
-        rewrittenObjectReferences.push({
-          pageNumber: candidate.pageNumber,
-          objectReference: candidate.objectReference,
-        });
-        successfullyRecompressedCount += 1;
-        rewrittenImageBytes += jpegBytes.byteLength;
-        processedFingerprints.add(candidateFingerprint);
-      } finally {
-        pixmap.destroy();
-        image.destroy();
       }
     } catch (error) {
+      if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "CANCELLED") {
+        throw error;
+      }
+
       failedRecompressionCount += 1;
       failures.push({
         objectReference: candidate.objectReference,
@@ -367,9 +433,12 @@ export async function recompressSafeImageCandidates(
       });
       processedFingerprints.add(candidateFingerprint);
       abandonRecompression = true;
+      progressMade = true;
     } finally {
       targetObject.destroy();
     }
+
+    progressGuard.requireProgress(progressMade, candidateFingerprint);
   }
 
   let finalBytes = workingBytes;

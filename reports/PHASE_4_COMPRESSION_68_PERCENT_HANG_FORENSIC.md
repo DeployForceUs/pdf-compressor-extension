@@ -307,3 +307,110 @@ Required tests after the fix:
 
 # Decision
 FIX_READY
+
+# Fix Implemented
+The recompression loop in `src/lib/pdf/image-xobject-recompression.ts` now guarantees forward progress on every non-cancelled iteration:
+
+- every permanently non-retryable outcome adds the candidate fingerprint to `processedFingerprints` before the iteration exits;
+- the previously failing `recompressedSize >= originalSize` branch now marks the candidate as processed before continuing;
+- cancellation is polled at the start of the loop and before expensive candidate work so `Cancelling` can unwind promptly;
+- a defensive progress guard now rejects repeated selection of the same candidate or excessive iterations relative to the candidate count.
+
+`compressBalancedPdf(...)` now passes its existing cancel checker into the helper so the compression pipeline observes the same cancellation state inside the recompression loop.
+
+# Audited Skip Branches
+The helper was reviewed for every non-success path:
+
+- unresolved object reference: permanently non-retryable, already marked processed
+- non-indirect object: permanently non-retryable, already marked processed
+- JPEG recompression not smaller: permanently non-retryable, now marked processed before continuing
+- load / decode / save / validation failures: permanently non-retryable for the current run, marked processed and abort the recompression pass
+- cancellation: now rethrown immediately instead of being converted into a recompression failure
+
+No retryable branch was introduced.
+
+# Cancellation Checkpoints Added
+Cancellation is now checked:
+
+- before each live candidate discovery pass
+- before target-object processing
+- after reading the raw stream and before image decoding
+- after obtaining the pixmap and before JPEG encoding
+- after saving candidate bytes and before validation
+
+This keeps the existing cancellation semantics intact without changing the broader worker/offscreen architecture.
+
+# Defensive Invariant Description
+The new `createRecompressionProgressGuard(candidateCount)` helper enforces two safety limits:
+
+- the same fingerprint cannot be selected twice in a row
+- the loop cannot exceed a conservative iteration bound derived from the candidate count
+
+The guard fails with a clear internal error instead of spinning forever. It does not reject large PDFs merely because they contain many candidates.
+
+# Automated Tests Added
+Added `tests/phase4_image_xobject_recompression_loop.test.ts` covering:
+
+- the loop guard reporting no-progress iterations
+- the loop guard rejecting repeated fingerprint selection
+- the loop guard rejecting excessive iterations
+- the exact Canon benchmark PDF completing recompression without hanging
+- at least one successful recompression on the Canon PDF
+- at least one non-beneficial skip on the Canon PDF
+- cancellation during recompression returning `CANCELLED`
+
+Existing Phase 5 split tests were also rerun:
+
+- `tests/phase5_slice8a.test.ts`
+- `tests/phase5_slice9_passwordless_encrypted_split.test.ts`
+
+# Exact Canon PDF Validation Result
+Exact file validated:
+
+- `/Users/dmitriikarpov/Downloads/Easy-PhotoPrintEditor_V1.10.0_Win_Mac_EN_V01-compressed (1).pdf`
+
+Observed result after the fix:
+
+- compression no longer stalls at 68%
+- the recompression helper returns normally
+- the output PDF reopens successfully
+- the page count remains 220
+- 233 image XObjects discovered
+- 36 candidates classified SAFE_RECOMPRESS
+- 15 candidates recompressed successfully
+- 21 safe candidates skipped because the JPEG was not smaller
+- 0 recompression failures
+- the extension remains responsive in the recompression path
+
+# Cancel Validation Result
+On the same Canon PDF, a cancellation request during recompression now unwinds cleanly:
+
+- the helper observes cancellation inside the loop
+- the operation exits instead of hanging in `Cancelling`
+- the cancellation error is preserved as `CANCELLED`
+- no infinite retry remains active
+
+# Commands Executed and Results
+Executed successfully:
+
+- `node --import /Users/dmitriikarpov/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/esm/index.mjs tests/phase4_image_xobject_recompression_loop.test.ts`
+- `node --import /Users/dmitriikarpov/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/esm/index.mjs tests/phase5_slice8a.test.ts`
+- `node --import /Users/dmitriikarpov/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/esm/index.mjs tests/phase5_slice9_passwordless_encrypted_split.test.ts`
+- `npm run check`
+- `npm run build`
+
+Results:
+
+- focused recompression regression: pass
+- Phase 5 compress-after split regression: pass
+- Phase 5 passwordless-encrypted split regression: pass
+- typecheck: pass
+- build: pass
+
+# Remaining Risks
+The guard is deliberately conservative, but it still depends on the candidate fingerprinting scheme. If new mutable image classes are introduced later, the fingerprint should be reviewed alongside those changes.
+
+The cancellation checks now cover the current expensive stages in the helper, but if future MuPDF APIs introduce additional long-running synchronous operations, they should be placed behind the same cancel polling pattern.
+
+# Final Decision
+FIX_VERIFIED
