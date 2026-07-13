@@ -152,25 +152,42 @@ export type SplitProgressStage =
   | "planning-parts"
   | "creating-part"
   | "validating-part"
+  | "compressing-part"
   | "creating-zip"
   | "persisting"
   | "complete";
 
-export type SplitWarning = {
-  code: "SINGLE_PAGE_EXCEEDS_LIMIT";
-  pageNumber: number;
-  actualGeneratedByteSize: number;
-  requestedMaximumByteSize: number;
-  fileName: string;
-  partNumber: number;
-  oversized: true;
-};
+export type SplitWarning =
+  | {
+      code: "SINGLE_PAGE_EXCEEDS_LIMIT";
+      pageNumber: number;
+      actualGeneratedByteSize: number;
+      requestedMaximumByteSize: number;
+      fileName: string;
+      partNumber: number;
+      oversized: true;
+    }
+  | {
+      code: "COMPRESSION_FAILED_FALLBACK" | "COMPRESSED_PART_INVALID_FALLBACK" | "COMPRESSED_PART_NOT_SMALLER_FALLBACK";
+      partNumber: number;
+      fileName: string;
+      sourceByteSize: number;
+      compressedCandidateByteSize?: number;
+      selectedByteSize: number;
+      fallbackUsed: true;
+    };
 
 export type SplitResultRecord = {
   id: string;
   sourceRecordId: string;
   fileName: string;
   mimeType: string | null;
+  compressAfterRequested: boolean;
+  originalSplitPartsSize: number;
+  finalPartsSize: number;
+  compressedPartsCount: number;
+  fallbackPartsCount: number;
+  totalBytesSaved: number;
   originalSize: number;
   totalPartsSize: number;
   partsCount: number;
@@ -186,6 +203,12 @@ export type SplitResultMetadata = {
   fileName: string;
   mimeType: string | null;
   size: number;
+  compressAfterRequested: boolean;
+  originalSplitPartsSize: number;
+  finalPartsSize: number;
+  compressedPartsCount: number;
+  fallbackPartsCount: number;
+  totalBytesSaved: number;
   originalSize: number;
   totalPartsSize: number;
   partsCount: number;
@@ -262,6 +285,10 @@ export type SplitProgressEvent = {
   partsCount: number;
   currentPart: number;
   message: string;
+  sourceByteSize?: number;
+  compressedCandidateByteSize?: number;
+  selectedByteSize?: number;
+  fallbackUsed?: boolean;
 };
 
 export type SplitResultEvent = {

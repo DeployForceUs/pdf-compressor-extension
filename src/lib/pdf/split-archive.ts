@@ -1,7 +1,8 @@
 import { PDFDocument } from "pdf-lib";
 import { zipPdfParts } from "../archive/zip-parts";
 import { SPLIT_PDF_RECORD_ID } from "../pdf-records";
-import type { SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../messaging";
+import type { CompressionProgressEvent, SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../messaging";
+import { compressBalancedPdf, type CompressionOutcome, type CompressionRequest } from "./compressor";
 import { planSplit } from "./split-planner";
 import { parsePageRangeExpression, validatePageRangesInInputOrder } from "./page-range-parser";
 import { buildSplitPart, type SplitByPagesOutputPart } from "./splitter";
@@ -10,12 +11,24 @@ import { SplitRuntimeError, toSplitRuntimeError } from "./split-errors";
 
 type AbortChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: SplitProgressEvent) => void | Promise<void>;
+type CompressionProgressReporter = (event: CompressionProgressEvent) => void | Promise<void>;
+type CompressionPartRunner = (
+  request: CompressionRequest,
+  isCancelled: AbortChecker,
+  onProgress: CompressionProgressReporter,
+) => Promise<CompressionOutcome>;
+
+type CompressionFallbackCode =
+  | "COMPRESSION_FAILED_FALLBACK"
+  | "COMPRESSED_PART_INVALID_FALLBACK"
+  | "COMPRESSED_PART_NOT_SMALLER_FALLBACK";
 
 export type SplitArchiveRequest = {
   inputBytes: ArrayBuffer;
   strategy: SplitStrategy;
   documentName?: string;
   compressAfter?: boolean;
+  mupdfRuntimeUrl?: string;
 };
 
 export type SplitArchiveOutcome = {
@@ -23,9 +36,22 @@ export type SplitArchiveOutcome = {
   result: SplitResultMetadata;
 };
 
+export type SplitArchiveDependencies = {
+  compressPart?: CompressionPartRunner;
+};
+
 type SplitArchiveSelection = {
   parts: SplitByPagesOutputPart[];
   warnings: SplitWarning[];
+};
+
+type FinalizedParts = {
+  parts: SplitByPagesOutputPart[];
+  warnings: SplitWarning[];
+  compressedPartsCount: number;
+  fallbackPartsCount: number;
+  originalSplitPartsSize: number;
+  finalPartsSize: number;
 };
 
 function sanitizeDocumentStem(documentName: string | undefined) {
@@ -59,6 +85,7 @@ function buildProgress(
   partsCount: number,
   currentPart: number,
   message: string,
+  details: Partial<Pick<SplitProgressEvent, "sourceByteSize" | "compressedCandidateByteSize" | "selectedByteSize" | "fallbackUsed">> = {},
 ): SplitProgressEvent {
   return {
     type: "split:progress",
@@ -68,7 +95,27 @@ function buildProgress(
     partsCount,
     currentPart,
     message,
+    ...details,
   };
+}
+
+function toArrayBuffer(bytes: Uint8Array) {
+  return bytes.slice().buffer;
+}
+
+async function defaultCompressionRunner(
+  request: CompressionRequest,
+  isCancelled: AbortChecker,
+  onProgress: CompressionProgressReporter,
+) {
+  return compressBalancedPdf(request, isCancelled, onProgress);
+}
+
+async function validatePdfBytes(bytes: Uint8Array, expectedPageCount: number) {
+  const reopened = await PDFDocument.load(bytes);
+  if (reopened.getPageCount() !== expectedPageCount) {
+    throw new Error(`Expected ${expectedPageCount} pages but reopened PDF had ${reopened.getPageCount()} pages`);
+  }
 }
 
 async function resolveRangesForResolvedStrategies(
@@ -99,13 +146,20 @@ async function resolveRangesForResolvedStrategies(
   }
 }
 
-async function measurePart(
+async function buildResolvedSplitParts(
   sourceDocument: PDFDocument,
-  range: SplitPageRange,
+  ranges: SplitPageRange[],
   documentName: string | undefined,
-  partNumber: number,
-) {
-  return buildSplitPart(sourceDocument, range, documentName, partNumber);
+  isCancelled: AbortChecker | undefined,
+): Promise<SplitByPagesOutputPart[]> {
+  const parts: SplitByPagesOutputPart[] = [];
+
+  for (let index = 0; index < ranges.length; index += 1) {
+    await checkCancelled(isCancelled);
+    parts.push(await buildSplitPart(sourceDocument, ranges[index], documentName, index + 1));
+  }
+
+  return parts;
 }
 
 async function selectMaxSizeParts(
@@ -138,12 +192,12 @@ async function selectMaxSizeParts(
   while (startPage <= sourcePageCount) {
     await checkCancelled(isCancelled);
 
+    const candidateCache = new Map<number, SplitByPagesOutputPart>();
     const singlePageRange: SplitPageRange = {
       startPage,
       endPage: startPage,
     };
-    const candidateCache = new Map<number, Awaited<ReturnType<typeof measurePart>>>();
-    const singlePagePart = await measurePart(sourceDocument, singlePageRange, documentName, partNumber);
+    const singlePagePart = await buildSplitPart(sourceDocument, singlePageRange, documentName, partNumber);
     candidateCache.set(startPage, singlePagePart);
 
     if (singlePagePart.bytes.byteLength > maxPartSizeBytes) {
@@ -173,7 +227,7 @@ async function selectMaxSizeParts(
       const mid = Math.floor((low + high) / 2);
       let candidate = candidateCache.get(mid);
       if (!candidate) {
-        candidate = await measurePart(
+        candidate = await buildSplitPart(
           sourceDocument,
           {
             startPage,
@@ -199,7 +253,7 @@ async function selectMaxSizeParts(
       const nextEndPage = bestPart.range.endPage + 1;
       let nextCandidate = candidateCache.get(nextEndPage);
       if (!nextCandidate) {
-        nextCandidate = await measurePart(
+        nextCandidate = await buildSplitPart(
           sourceDocument,
           {
             startPage,
@@ -236,29 +290,15 @@ async function resolveSplitSelection(
   switch (request.strategy.type) {
     case "by-pages": {
       const ranges = await resolveRangesForResolvedStrategies(sourcePageCount, request.strategy);
-      const parts: SplitArchiveSelection["parts"] = [];
-
-      for (let index = 0; index < ranges.length; index += 1) {
-        await checkCancelled(isCancelled);
-        parts.push(await buildSplitPart(sourceDocument, ranges[index], request.documentName, index + 1));
-      }
-
       return {
-        parts,
+        parts: await buildResolvedSplitParts(sourceDocument, ranges, request.documentName, isCancelled),
         warnings: [],
       };
     }
     case "manual-ranges": {
       const ranges = await resolveRangesForResolvedStrategies(sourcePageCount, request.strategy);
-      const parts: SplitArchiveSelection["parts"] = [];
-
-      for (let index = 0; index < ranges.length; index += 1) {
-        await checkCancelled(isCancelled);
-        parts.push(await buildSplitPart(sourceDocument, ranges[index], request.documentName, index + 1));
-      }
-
       return {
-        parts,
+        parts: await buildResolvedSplitParts(sourceDocument, ranges, request.documentName, isCancelled),
         warnings: [],
       };
     }
@@ -271,13 +311,214 @@ async function resolveSplitSelection(
   }
 }
 
+function buildCompressionRequest(
+  request: SplitArchiveRequest,
+  part: SplitByPagesOutputPart,
+  partNumber: number,
+): CompressionRequest {
+  return {
+    input: toArrayBuffer(part.bytes),
+    mupdfRuntimeUrl: request.mupdfRuntimeUrl ?? "chrome-extension://test/mupdf.js",
+    recordId: `${SPLIT_PDF_RECORD_ID}:part:${partNumber}`,
+    sourceRecordId: SPLIT_PDF_RECORD_ID,
+    fileName: part.filename,
+    mimeType: "application/pdf",
+    mode: "Balanced",
+    timeoutMs: 30_000,
+  };
+}
+
+function compressionFallbackWarning(
+  code: CompressionFallbackCode,
+  part: SplitByPagesOutputPart,
+  selectedByteSize: number,
+  compressedCandidateByteSize?: number,
+): SplitWarning {
+  return {
+    code,
+    partNumber: part.partNumber,
+    fileName: part.filename,
+    sourceByteSize: part.bytes.byteLength,
+    compressedCandidateByteSize,
+    selectedByteSize,
+    fallbackUsed: true,
+  };
+}
+
+async function finalizeParts(
+  request: SplitArchiveRequest,
+  selectedParts: SplitByPagesOutputPart[],
+  isCancelled: AbortChecker | undefined,
+  onProgress: ProgressReporter | undefined,
+  compressionRunner: CompressionPartRunner,
+): Promise<FinalizedParts> {
+  const finalized: SplitByPagesOutputPart[] = [];
+  const warnings: SplitWarning[] = [];
+  let compressedPartsCount = 0;
+  let fallbackPartsCount = 0;
+  let originalSplitPartsSize = 0;
+  let finalPartsSize = 0;
+
+  for (let index = 0; index < selectedParts.length; index += 1) {
+    const part = selectedParts[index];
+    const sourceByteSize = part.bytes.byteLength;
+    originalSplitPartsSize += sourceByteSize;
+
+    await checkCancelled(isCancelled);
+    await emitProgress(
+      onProgress,
+      buildProgress(
+        "creating-part",
+        20 + Math.floor((index / Math.max(selectedParts.length, 1)) * 40),
+        selectedParts.length,
+        part.partNumber,
+        `Creating part ${part.partNumber} of ${selectedParts.length}`,
+        {
+          sourceByteSize,
+        },
+      ),
+    );
+
+    await emitProgress(
+      onProgress,
+      buildProgress(
+        "validating-part",
+        30 + Math.floor((index / Math.max(selectedParts.length, 1)) * 30),
+        selectedParts.length,
+        part.partNumber,
+        `Validated part ${part.partNumber} of ${selectedParts.length}`,
+        {
+          sourceByteSize,
+          selectedByteSize: sourceByteSize,
+          fallbackUsed: false,
+        },
+      ),
+    );
+
+    let selectedBytes = part.bytes;
+    let compressedCandidateByteSize: number | undefined;
+    let fallbackWarning: SplitWarning | null = null;
+
+    if (request.compressAfter) {
+      await checkCancelled(isCancelled);
+      let compressedOutcome: CompressionOutcome | null = null;
+
+      try {
+        compressedOutcome = await compressionRunner(
+          buildCompressionRequest(request, part, index + 1),
+          isCancelled ?? (() => false),
+          async () => undefined,
+        );
+      } catch (error) {
+        const runtimeError = toSplitRuntimeError(error);
+        if (runtimeError.code === "CANCELLED" || runtimeError.code === "TIMEOUT") {
+          throw runtimeError;
+        }
+
+        fallbackWarning = compressionFallbackWarning("COMPRESSION_FAILED_FALLBACK", part, sourceByteSize);
+      }
+
+      await checkCancelled(isCancelled);
+
+      if (compressedOutcome && !fallbackWarning) {
+        compressedCandidateByteSize = compressedOutcome.outputBytes.byteLength;
+        const candidateBytes = new Uint8Array(compressedOutcome.outputBytes);
+
+        await checkCancelled(isCancelled);
+
+        try {
+          await validatePdfBytes(candidateBytes, part.pageCount);
+        } catch {
+          fallbackWarning = compressionFallbackWarning(
+            "COMPRESSED_PART_INVALID_FALLBACK",
+            part,
+            sourceByteSize,
+            compressedCandidateByteSize,
+          );
+        }
+
+        if (!fallbackWarning && compressedCandidateByteSize >= sourceByteSize) {
+          fallbackWarning = compressionFallbackWarning(
+            "COMPRESSED_PART_NOT_SMALLER_FALLBACK",
+            part,
+            sourceByteSize,
+            compressedCandidateByteSize,
+          );
+        }
+
+        if (!fallbackWarning) {
+          selectedBytes = candidateBytes;
+          compressedPartsCount += 1;
+        }
+      }
+
+      if (fallbackWarning) {
+        fallbackPartsCount += 1;
+        warnings.push(fallbackWarning);
+      }
+
+      await emitProgress(
+        onProgress,
+        buildProgress(
+          "compressing-part",
+          45 + Math.floor((index / Math.max(selectedParts.length, 1)) * 25),
+          selectedParts.length,
+          part.partNumber,
+          `Compressing part ${part.partNumber} of ${selectedParts.length}`,
+          {
+            sourceByteSize,
+            compressedCandidateByteSize,
+            selectedByteSize: selectedBytes.byteLength,
+            fallbackUsed: fallbackWarning !== null,
+          },
+        ),
+      );
+    }
+
+    if (request.compressAfter) {
+      await emitProgress(
+        onProgress,
+        buildProgress(
+          "validating-part",
+          60 + Math.floor((index / Math.max(selectedParts.length, 1)) * 20),
+          selectedParts.length,
+          part.partNumber,
+          `Validated part ${part.partNumber} of ${selectedParts.length}`,
+          {
+            sourceByteSize,
+            selectedByteSize: selectedBytes.byteLength,
+            fallbackUsed: fallbackWarning !== null,
+            compressedCandidateByteSize,
+          },
+        ),
+      );
+    }
+
+    finalPartsSize += selectedBytes.byteLength;
+    finalized.push({
+      ...part,
+      bytes: selectedBytes,
+    });
+  }
+
+  return {
+    parts: finalized,
+    warnings,
+    compressedPartsCount,
+    fallbackPartsCount,
+    originalSplitPartsSize,
+    finalPartsSize,
+  };
+}
+
 export async function createSplitZipArchive(
   request: SplitArchiveRequest,
   isCancelled?: AbortChecker,
   onProgress?: ProgressReporter,
+  deps: SplitArchiveDependencies = {},
 ): Promise<SplitArchiveOutcome> {
-  if (request.compressAfter) {
-    throw new SplitRuntimeError("SPLIT_FAILED", "compressAfter is not implemented in Slice 7");
+  if (request.compressAfter && !request.mupdfRuntimeUrl && !deps.compressPart) {
+    throw new SplitRuntimeError("SPLIT_FAILED", "compressAfter requires mupdfRuntimeUrl");
   }
 
   await checkCancelled(isCancelled);
@@ -295,55 +536,46 @@ export async function createSplitZipArchive(
   await checkCancelled(isCancelled);
 
   const selection = await resolveSplitSelection(sourceDocument, sourcePageCount, request, isCancelled);
-  const partsCount = selection.parts.length;
-  const totalPartsSize = selection.parts.reduce((total, part) => total + part.bytes.byteLength, 0);
+  const finalized = await finalizeParts(
+    request,
+    selection.parts,
+    isCancelled,
+    onProgress,
+    deps.compressPart ?? defaultCompressionRunner,
+  );
 
-  for (let index = 0; index < selection.parts.length; index += 1) {
-    const part = selection.parts[index];
-    await emitProgress(
-      onProgress,
-      buildProgress(
-        "creating-part",
-        20 + Math.floor((index / Math.max(partsCount, 1)) * 40),
-        partsCount,
-        part.partNumber,
-        `Creating part ${part.partNumber} of ${partsCount}`,
-      ),
-    );
-    await emitProgress(
-      onProgress,
-      buildProgress(
-        "validating-part",
-        35 + Math.floor((index / Math.max(partsCount, 1)) * 40),
-        partsCount,
-        part.partNumber,
-        `Validated part ${part.partNumber} of ${partsCount}`,
-      ),
-    );
-  }
+  const partsCount = finalized.parts.length;
 
   await checkCancelled(isCancelled);
   await emitProgress(onProgress, buildProgress("creating-zip", 90, partsCount, partsCount, "Creating ZIP archive"));
 
   let zipBytes: Uint8Array;
   try {
-    const archive = await zipPdfParts(selection.parts.map((part) => ({ filename: part.filename, bytes: part.bytes })));
+    const archive = await zipPdfParts(finalized.parts.map((part) => ({ filename: part.filename, bytes: part.bytes })));
     zipBytes = archive.zipBytes;
   } catch (error) {
     throw toSplitRuntimeError(error, "ZIP_CREATION_FAILED");
   }
 
   const zipArrayBuffer = zipBytes.slice().buffer;
+  const totalBytesSaved = Math.max(0, finalized.originalSplitPartsSize - finalized.finalPartsSize);
+
   const result: SplitArchiveOutcome["result"] = {
     zipBlobId: SPLIT_PDF_RECORD_ID,
     fileName: buildZipFilename(request.documentName),
     mimeType: "application/zip",
     size: zipArrayBuffer.byteLength,
+    compressAfterRequested: request.compressAfter === true,
+    originalSplitPartsSize: finalized.originalSplitPartsSize,
+    finalPartsSize: finalized.finalPartsSize,
+    compressedPartsCount: finalized.compressedPartsCount,
+    fallbackPartsCount: finalized.fallbackPartsCount,
+    totalBytesSaved,
     originalSize: request.inputBytes.byteLength,
-    totalPartsSize,
+    totalPartsSize: finalized.finalPartsSize,
     partsCount,
     strategy: request.strategy,
-    warnings: selection.warnings,
+    warnings: [...selection.warnings, ...finalized.warnings],
     status: "complete",
   };
 

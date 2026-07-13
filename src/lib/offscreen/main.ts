@@ -228,7 +228,17 @@ function getSplitWorkerGateway() {
       isCancelled: Parameters<CompressionWorkerApi["split"]>[1],
       onProgress: Parameters<CompressionWorkerApi["split"]>[2],
     ) {
-      return worker.split(transfer(request, [request.inputBytes]), proxy(isCancelled), proxy(onProgress));
+      return worker.split(
+        transfer(
+          {
+            ...request,
+            mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
+          },
+          [request.inputBytes],
+        ),
+        proxy(isCancelled),
+        proxy(onProgress),
+      );
     },
   };
 }
@@ -298,6 +308,12 @@ function toSplitMetadata(result: Awaited<ReturnType<typeof writeSplitResult>>): 
     fileName: result.fileName,
     mimeType: result.mimeType,
     size: result.data.byteLength,
+    compressAfterRequested: result.compressAfterRequested,
+    originalSplitPartsSize: result.originalSplitPartsSize,
+    finalPartsSize: result.finalPartsSize,
+    compressedPartsCount: result.compressedPartsCount,
+    fallbackPartsCount: result.fallbackPartsCount,
+    totalBytesSaved: result.totalBytesSaved,
     originalSize: result.originalSize,
     totalPartsSize: result.totalPartsSize,
     partsCount: result.partsCount,
