@@ -7,12 +7,13 @@
 - Implemented:
   - compress-after pipeline for by-pages, manual-ranges, and by-max-size
   - reuse of the existing Phase 4 production compression helper as the default runtime compressor
-  - per-part compression validation and fallback selection
-  - oversized single-page warning preservation
-  - progress emission for `compressing-part`
-  - persisted split metadata expansion for compression diagnostics
-  - Node-only compression storage fallback remains isolated for headless tests
-  - headless regression coverage for selection, fallback, cancellation, ZIP reopening, metadata, and storage smoke
+- per-part compression validation and fallback selection
+- oversized single-page warning preservation
+- progress emission for `compressing-part` before compression starts
+- persisted split metadata expansion for compression diagnostics
+- Node-only compression storage fallback remains isolated for headless tests
+- headless regression coverage for selection, fallback, cancellation, ZIP reopening, metadata, and storage smoke
+- timeout fallback keeps the split job alive and preserves the original part
 - Intentionally not implemented:
   - popup split UI
   - visual Chrome acceptance
@@ -74,7 +75,7 @@
 
 # Fallback Matrix
 - `COMPRESSION_FAILED_FALLBACK`
-  - compression threw before a candidate could be validated
+  - compression threw before a candidate could be validated, including `TIMEOUT`
 - `COMPRESSED_PART_INVALID_FALLBACK`
   - the compressed candidate did not reopen successfully or page count did not match
 - `COMPRESSED_PART_NOT_SMALLER_FALLBACK`
@@ -96,10 +97,12 @@
   - without `compressAfter`: `validating -> planning-parts -> creating-part -> validating-part -> ... -> creating-zip -> persisting -> complete`
   - with `compressAfter`: `validating -> planning-parts -> creating-part -> validating-part -> compressing-part -> validating-part -> ... -> creating-zip -> persisting -> complete`
 - `compressing-part` emits:
+  - first event before compression starts
   - `sourceByteSize`
-  - `compressedCandidateByteSize` when available
-  - `selectedByteSize`
-  - `fallbackUsed`
+  - post-compression diagnostics are surfaced on the following `validating-part` event:
+    - `compressedCandidateByteSize` when available
+    - `selectedByteSize`
+    - `fallbackUsed`
 
 # Cancellation Granularity
 - Checked before split selection starts.
@@ -170,11 +173,13 @@
 - [x] compress-after true falls back when the candidate is larger
 - [x] compress-after true falls back when the candidate is invalid
 - [x] compress-after true falls back when compression throws
+- [x] compress-after true falls back when compression times out
 - [x] compress-after true falls back when page counts do not match
 - [x] by-pages works with compress-after
 - [x] manual-ranges works with compress-after
 - [x] by-max-size works with compress-after and preserves oversized-page warnings
 - [x] cancellation is honored between compressed parts
+- [x] initial `compressing-part` progress is emitted before compression starts
 - [x] ZIP reopens successfully
 - [x] persisted metadata includes compression diagnostics
 - [x] split result storage round-trip works in headless Node tests
@@ -184,4 +189,5 @@
 
 # Git
 - Branch: `feature/phase5-pdf-split`
-- Commit hash: pending
+- Original Slice 8A commit: `3db3464`
+- Slice 8A hotfix commit: included in this hotfix commit; the final hash is reported in the completion output

@@ -401,6 +401,20 @@ async function finalizeParts(
 
     if (request.compressAfter) {
       await checkCancelled(isCancelled);
+      await emitProgress(
+        onProgress,
+        buildProgress(
+          "compressing-part",
+          45 + Math.floor((index / Math.max(selectedParts.length, 1)) * 25),
+          selectedParts.length,
+          part.partNumber,
+          `Compressing part ${part.partNumber} of ${selectedParts.length}`,
+          {
+            sourceByteSize,
+          },
+        ),
+      );
+
       let compressedOutcome: CompressionOutcome | null = null;
 
       try {
@@ -411,7 +425,7 @@ async function finalizeParts(
         );
       } catch (error) {
         const runtimeError = toSplitRuntimeError(error);
-        if (runtimeError.code === "CANCELLED" || runtimeError.code === "TIMEOUT") {
+        if (runtimeError.code === "CANCELLED") {
           throw runtimeError;
         }
 
@@ -456,23 +470,6 @@ async function finalizeParts(
         fallbackPartsCount += 1;
         warnings.push(fallbackWarning);
       }
-
-      await emitProgress(
-        onProgress,
-        buildProgress(
-          "compressing-part",
-          45 + Math.floor((index / Math.max(selectedParts.length, 1)) * 25),
-          selectedParts.length,
-          part.partNumber,
-          `Compressing part ${part.partNumber} of ${selectedParts.length}`,
-          {
-            sourceByteSize,
-            compressedCandidateByteSize,
-            selectedByteSize: selectedBytes.byteLength,
-            fallbackUsed: fallbackWarning !== null,
-          },
-        ),
-      );
     }
 
     if (request.compressAfter) {

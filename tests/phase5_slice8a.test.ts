@@ -7,7 +7,7 @@ import { runSplitJob } from "../src/lib/offscreen/split-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../src/lib/storage/pdf-compression-db";
 import type { CompressionOutcome, CompressionRequest } from "../src/lib/pdf/compressor";
 import type { PdfRecord, SplitProgressEvent, SplitResultMetadata, SplitWarning } from "../src/lib/messaging";
-import type { SplitRuntimeError } from "../src/lib/pdf/split-errors";
+import { SplitRuntimeError } from "../src/lib/pdf/split-errors";
 
 async function createPdf(pageComplexities: number[], name: string) {
   const pdf = await PDFDocument.create();
@@ -183,8 +183,10 @@ function getCompressionWarnings(result: SplitResultMetadata) {
 {
   const inputRecord = await createSelectedPdfRecord([60, 60, 60, 60], "compressible.pdf");
   const compressCalls: CompressionRequest[] = [];
+  const timeline: string[] = [];
   const compressPart: CompressionRunner = async (request) => {
     compressCalls.push(request);
+    timeline.push(`compress:${request.fileName}`);
     const outputBytes = await createCandidatePdf(2, 0, `smaller-${compressCalls.length}`);
     return buildCompressionOutcome(request, outputBytes.buffer, 2);
   };
@@ -193,6 +195,9 @@ function getCompressionWarnings(result: SplitResultMetadata) {
     pagesPerPart: 2,
   }, {
     compressPart,
+    onProgress: (event) => {
+      timeline.push(`progress:${event.stage}:${event.currentPart}`);
+    },
   });
 
   assert.equal(response.result.compressAfterRequested, true);
@@ -200,7 +205,12 @@ function getCompressionWarnings(result: SplitResultMetadata) {
   assert.equal(response.result.fallbackPartsCount, 0);
   assert.equal(response.result.totalBytesSaved > 0, true);
   assert.equal(getCompressionWarnings(response.result).length, 0);
-  assert.ok(progressEvents.some((event) => event.stage === "compressing-part"));
+  const firstCompressing = progressEvents.find((event) => event.stage === "compressing-part" && event.currentPart === 1);
+  assert.ok(firstCompressing);
+  assert.equal(firstCompressing?.sourceByteSize !== undefined, true);
+  assert.equal(firstCompressing?.compressedCandidateByteSize, undefined);
+  assert.ok(progressEvents.some((event) => event.stage === "validating-part" && event.compressedCandidateByteSize !== undefined));
+  assert.ok(timeline.indexOf("progress:compressing-part:1") < timeline.indexOf("compress:compressible_part_001_pages_1-2.pdf"));
   assert.deepEqual(compressCalls.map((call) => call.fileName), [
     "compressible_part_001_pages_1-2.pdf",
     "compressible_part_002_pages_3-4.pdf",
@@ -301,6 +311,44 @@ function getCompressionWarnings(result: SplitResultMetadata) {
     getCompressionWarnings(response.result).map((warning) => warning.code),
     ["COMPRESSION_FAILED_FALLBACK", "COMPRESSION_FAILED_FALLBACK"],
   );
+}
+
+{
+  const inputRecord = await createSelectedPdfRecord([50, 50, 50, 50], "timeout-fallback.pdf");
+  const timeline: string[] = [];
+  const compressPart: CompressionRunner = async (request) => {
+    timeline.push(`compress:${request.fileName}`);
+
+    if (request.fileName.includes("pages_1-2")) {
+      throw new SplitRuntimeError("TIMEOUT", "synthetic compression timeout");
+    }
+
+    const outputBytes = await createCandidatePdf(2, 0, `timeout-${request.fileName}`);
+    return buildCompressionOutcome(request, outputBytes.buffer, 2);
+  };
+
+  const { response, progressEvents, persisted } = await runSplit(inputRecord, {
+    type: "by-pages",
+    pagesPerPart: 2,
+  }, {
+    compressPart,
+    onProgress: (event) => {
+      timeline.push(`progress:${event.stage}:${event.currentPart}`);
+    },
+  });
+
+  assert.equal(response.result.compressAfterRequested, true);
+  assert.equal(response.result.compressedPartsCount, 1);
+  assert.equal(response.result.fallbackPartsCount, 1);
+  assert.ok(response.result.warnings.some((warning) => warning.code === "COMPRESSION_FAILED_FALLBACK"));
+  assert.ok(timeline.indexOf("progress:compressing-part:1") < timeline.indexOf("compress:timeout-fallback_part_001_pages_1-2.pdf"));
+  const firstCompressing = progressEvents.find((event) => event.stage === "compressing-part" && event.currentPart === 1);
+  assert.equal(firstCompressing?.sourceByteSize !== undefined, true);
+  assert.equal(firstCompressing?.compressedCandidateByteSize, undefined);
+  await assertZipContains((persisted as { data: ArrayBuffer }).data, [
+    { filename: "timeout-fallback_part_001_pages_1-2.pdf", pageCount: 2 },
+    { filename: "timeout-fallback_part_002_pages_3-4.pdf", pageCount: 2 },
+  ]);
 }
 
 {
