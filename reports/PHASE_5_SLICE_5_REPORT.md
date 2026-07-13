@@ -1,7 +1,7 @@
 # Summary
 - Objective: implement Phase 5 Slice 5, ZIP Packaging.
 - Implementation status: completed.
-- Completion status: pending validation and commit.
+- Completion status: done.
 
 # Scope
 - Implemented:
@@ -55,11 +55,11 @@
 
 # Validation
 - Tests executed:
-  - pending
+  - `npx -y tsx tests/phase5_slice5.test.ts`
 - `npm run check`:
-  - pending
+  - passed
 - `npm run build`:
-  - pending
+  - passed
 
 # Risks
 - ZIP ordering relies on the archive helper preserving object insertion order from the validated part list.
@@ -89,4 +89,4 @@
 
 # Git
 - Branch: `feature/phase5-pdf-split`
-- Commit hash: pending
+- Commit hash: `a809f9c`

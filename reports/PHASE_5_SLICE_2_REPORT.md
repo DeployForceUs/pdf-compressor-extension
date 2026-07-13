@@ -1,110 +1,103 @@
-# Phase 5 Slice 2 Report
+# Summary
+- Objective: implement a read-only Split Planner for Phase 5 Slice 2.
+- Implementation status: completed.
+- Completion status: done and previously committed in `2d9df4c`.
 
-## Scope Completed
+# Scope
+- Implemented:
+  - split strategy types
+  - page-range parsing
+  - normalization and ordering
+  - overlap, duplicate, and out-of-bounds validation
+  - by-pages planning
+  - by-max-size strategy abstraction with deferred planning
+  - unit assertions for planner behavior
+- Intentionally not implemented:
+  - PDF generation
+  - Worker integration
+  - Offscreen integration
+  - Background integration
+  - Popup integration
+  - IndexedDB changes
+  - download flow
+  - compression
+  - ZIP packaging
+  - license gating
+  - size-based planning algorithm
 
-Implemented the read-only Split Planner layer only:
-- by-pages planning
-- manual page-range parsing, normalization, ordering, and validation
-- by-max-size strategy abstraction with a deferred planning placeholder
-- machine-readable planner errors
-- unit assertions for planner behavior
+# Files Created
+- `src/lib/pdf/split-strategies.ts`
+- `src/lib/pdf/page-range-parser.ts`
+- `src/lib/pdf/split-planner.ts`
+- `tests/phase5_slice2.test.ts`
+- `reports/PHASE_5_SLICE_2_REPORT.md`
 
-No Worker, Offscreen, Background, Popup, IndexedDB, Download, Compression, ZIP, or license-gating code was modified.
+# Files Modified
+- None after the implementation commit.
 
-## Implemented Modules
+# Public Interfaces Added or Changed
+- `SplitStrategy`
+  - `by-pages`
+  - `manual-ranges`
+  - `by-max-size`
+- `SplitPageRange`
+- `SplitPlannedPart`
+- `SplitPlannerError`
+- `SplitPlannerErrorCode`
+- `SplitPlan`
+- `SplitPlanningRequest`
+- `planSplit(request)`
+- `parsePageRangeExpression(expression)`
+- `normalizePageRanges(ranges)`
+- `validatePageRanges(ranges, totalPages)`
+- `parseAndValidatePageRanges(expression, totalPages)`
 
-- [`src/lib/pdf/split-strategies.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/split-strategies.ts)
-  - shared Split types
-  - `SplitPlannerError`
-  - strategy union
-  - plan/result types
+# Architecture Notes
+- The planner is read-only and does not generate PDFs.
+- Page-range parsing is isolated from planning so later slices can reuse the parser independently.
+- Manual ranges are normalized into ascending order before validation to keep overlap detection deterministic.
+- By-max-size is intentionally deferred as a stable contract placeholder so Slice 7 can add sizing logic without changing public types.
+- The planner does not touch compression or runtime messaging surfaces.
 
-- [`src/lib/pdf/page-range-parser.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/page-range-parser.ts)
-  - page-range expression parser
-  - normalization helpers
-  - validation helpers
-  - overlap, duplicate, and out-of-bounds detection
-
-- [`src/lib/pdf/split-planner.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/split-planner.ts)
-  - strategy dispatcher
-  - by-pages planner
-  - manual-range planner
-  - by-max-size deferred placeholder
-
-- [`tests/phase5_slice2.test.ts`](/Users/dmitriikarpov/pdf-compressor-extension/tests/phase5_slice2.test.ts)
-  - assertion-based slice-2 checks for the planner layer
-
-## Behavior Implemented
-
-### By pages
-
-For a 100-page document with `pagesPerPart = 20`, the planner returns:
-- 1-20
-- 21-40
-- 41-60
-- 61-80
-- 81-100
-
-### Manual page ranges
-
-Supported input:
-- `1-5`
-- `6-12`
-- `13`
-- `14-30`
-
-Validated behavior:
-- ordering
-- normalization
-- overlap detection
-- duplicate detection
-- out-of-bounds detection
-- malformed range detection
-
-### By maximum size
-
-Implemented as a stable strategy abstraction only.
-- The planner validates the strategy and returns a deferred placeholder.
-- No sizing algorithm was added.
-- The public shape is ready for Slice 7 to fill in sizing without changing the strategy contract.
-
-## Machine-Readable Errors
-
-Implemented planner-level error codes:
-- `INVALID_TOTAL_PAGES`
-- `INVALID_PAGES_PER_PART`
-- `INVALID_PAGE_RANGE`
-- `PAGE_RANGE_OUT_OF_BOUNDS`
-- `OVERLAPPING_PAGE_RANGES`
-- `DUPLICATE_PAGE`
-- `INVALID_MAX_PART_SIZE`
-
-## Test Results
-
-- `npx -y tsx tests/phase5_slice2.test.ts`
+# Validation
+- Tests executed:
+  - `npx -y tsx tests/phase5_slice2.test.ts`
+- `npm run check` result:
   - passed
-- `npm run check`
-  - passed
-- `npm run build`
+- `npm run build` result:
   - passed
 
-## Files Created
+# Risks
+- Manual range parsing must remain strict so malformed input does not slip through later slices.
+- Deferred max-size planning could be misread as incomplete unless the contract stays documented.
+- Planner error codes must stay stable because later runtime slices will depend on them.
 
-- [`src/lib/pdf/split-strategies.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/split-strategies.ts)
-- [`src/lib/pdf/page-range-parser.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/page-range-parser.ts)
-- [`src/lib/pdf/split-planner.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/split-planner.ts)
-- [`tests/phase5_slice2.test.ts`](/Users/dmitriikarpov/pdf-compressor-extension/tests/phase5_slice2.test.ts)
-- [`reports/PHASE_5_SLICE_2_REPORT.md`](/Users/dmitriikarpov/pdf-compressor-extension/reports/PHASE_5_SLICE_2_REPORT.md)
+# Known Limitations
+- No PDF objects are created or inspected.
+- No actual size-based splitting algorithm exists yet.
+- No integration with the extension runtime exists yet.
+- No UI wiring exists yet.
 
-## Files Modified
+# Follow-up Work
+- Slice 3: split by pages.
+- Slice 4: manual selection.
+- Slice 5: ZIP packaging.
+- Slice 6: runtime integration.
+- Slice 7: split by file size.
+- Slice 8: compress after split.
+- Slice 9: acceptance.
 
-- [`src/lib/pdf/page-range-parser.ts`](/Users/dmitriikarpov/pdf-compressor-extension/src/lib/pdf/page-range-parser.ts)
-- [`tests/phase5_slice2.test.ts`](/Users/dmitriikarpov/pdf-compressor-extension/tests/phase5_slice2.test.ts)
+# Acceptance Checklist
+- [x] No runtime behavior changes
+- [x] No UI changes
+- [x] No PDF generation
+- [x] Split Planner is read-only
+- [x] Manual page ranges parse and validate correctly
+- [x] By-pages strategy produces contiguous parts
+- [x] By-max-size strategy has a stable deferred interface
+- [x] `npm run check` passes
+- [x] `npm run build` passes
 
-## Notes
-
-- The planner does not generate PDFs.
-- The planner does not call the Worker.
-- The planner does not touch the popup, storage, ZIP, or compression pipeline.
-- The by-max-size strategy remains intentionally deferred for Slice 7.
-
+# Git
+- Branch: `feature/phase5-pdf-split`
+- Commit hash: `2d9df4c`
