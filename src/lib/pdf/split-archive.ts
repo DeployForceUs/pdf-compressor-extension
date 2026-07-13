@@ -519,12 +519,14 @@ export async function createSplitZipArchive(
   await checkCancelled(isCancelled);
 
   const loadMuPdf = deps.loadMuPdf ?? (() => loadMuPdfModule(request.mupdfRuntimeUrl));
+  let mupdfPromise: ReturnType<typeof loadMuPdf> | null = null;
+  const loadMuPdfOnce = () => (mupdfPromise ??= loadMuPdf());
 
   const sourceLoad = await loadSplitSourceDocument(request.inputBytes, {
-    loadMuPdf,
+    loadMuPdf: loadMuPdfOnce,
   });
   const sourceDocument = sourceLoad.pdfDocument;
-  const mupdf = await loadMuPdf();
+  const mupdf = await loadMuPdfOnce();
 
   const sourcePageCount = sourceDocument.getPageCount();
   await checkCancelled(isCancelled);

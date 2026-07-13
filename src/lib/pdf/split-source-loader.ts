@@ -79,28 +79,27 @@ export async function loadSplitSourceDocument(
     });
   }
 
-  let sourceDocument: MuPdfDocument;
+  let sourceDocument: MuPdfDocument | null = null;
   try {
     sourceDocument = mupdf.Document.openDocument(sourceBytes);
-  } catch (error) {
-    throw new SplitRuntimeError("INVALID_PDF", "Input file is not a valid PDF", {
-      cause: toLoadErrorMessage(error),
-    });
-  }
+    if (sourceDocument.needsPassword()) {
+      throw new SplitRuntimeError("ENCRYPTED_PDF", "Password-protected PDFs are not supported in Split");
+    }
 
-  if (sourceDocument.needsPassword()) {
-    throw new SplitRuntimeError("ENCRYPTED_PDF", "Password-protected PDFs are not supported in Split");
-  }
-
-  try {
     return {
       pdfDocument: await PDFDocument.load(sourceBytes, { ignoreEncryption: true }),
       encrypted: true,
     };
   } catch (error) {
+    if (error instanceof SplitRuntimeError) {
+      throw error;
+    }
+
     throw new SplitRuntimeError("INVALID_PDF", "Input file is not a valid PDF", {
       cause: toLoadErrorMessage(error),
     });
+  } finally {
+    sourceDocument?.destroy();
   }
 }
 
@@ -137,23 +136,29 @@ export async function validateGeneratedSplitPartBytes(
     );
   }
 
-  let mupdfDocument: MuPdfDocument;
+  let mupdfDocument: MuPdfDocument | null = null;
   try {
     mupdfDocument = mupdf.Document.openDocument(bytes);
+
+    if (mupdfDocument.needsPassword()) {
+      throw new SplitRuntimeError("PART_VALIDATION_FAILED", `Split part ${label} requires a password`);
+    }
+
+    if (mupdfDocument.countPages() !== expectedPageCount) {
+      throw new SplitRuntimeError(
+        "PART_VALIDATION_FAILED",
+        `Split part ${label} opened in MuPDF with ${mupdfDocument.countPages()} pages instead of ${expectedPageCount}`,
+      );
+    }
   } catch (error) {
+    if (error instanceof SplitRuntimeError) {
+      throw error;
+    }
+
     throw new SplitRuntimeError("PART_VALIDATION_FAILED", `Split part ${label} could not be opened by MuPDF`, {
       cause: toLoadErrorMessage(error),
     });
-  }
-
-  if (mupdfDocument.needsPassword()) {
-    throw new SplitRuntimeError("PART_VALIDATION_FAILED", `Split part ${label} requires a password`);
-  }
-
-  if (mupdfDocument.countPages() !== expectedPageCount) {
-    throw new SplitRuntimeError(
-      "PART_VALIDATION_FAILED",
-      `Split part ${label} opened in MuPDF with ${mupdfDocument.countPages()} pages instead of ${expectedPageCount}`,
-    );
+  } finally {
+    mupdfDocument?.destroy();
   }
 }

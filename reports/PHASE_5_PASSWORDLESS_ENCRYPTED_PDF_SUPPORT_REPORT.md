@@ -33,6 +33,14 @@ Behavior:
 - MuPDF is injected from the caller, so the browser bundle does not pull in the native Node module
 - the same helper validates generated split parts with both `pdf-lib` and MuPDF
 
+Lifecycle note from review follow-up:
+
+- MuPDF `Document` objects are explicitly released with `destroy()`
+- source inspection and output validation both use `try/finally`
+- the Split job reuses one MuPDF module promise per job instead of resolving the module twice
+- the module itself is not destroyed
+- focused lifecycle tests were added for source cleanup, part validation cleanup, and failure-path cleanup
+
 # Encryption Detection
 
 Encryption detection is explicit:
@@ -210,6 +218,7 @@ Automated validation is complete, but the manual Chrome acceptance pass is still
 - Manual Chrome acceptance is not yet re-run in this commit state.
 - Page count display remains a UI gap and can still confuse users about readiness.
 - Passworded PDFs are intentionally still rejected.
+- The lifecycle fix is only as broad as the current MuPDF `Document.destroy()` contract; if the binding changes, this helper should be re-validated against the shipped typings.
 
 # Acceptance Checklist
 
@@ -225,6 +234,7 @@ Automated validation is complete, but the manual Chrome acceptance pass is still
 - [x] `npm run check`
 - [x] `npm run build`
 - [x] Focused compatibility test passed
+- [x] MuPDF lifecycle cleanup test passed
 - [ ] Manual Chrome acceptance pass
 
 # Git
