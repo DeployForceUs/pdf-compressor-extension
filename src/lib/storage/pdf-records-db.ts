@@ -23,9 +23,10 @@ function createMemoryDb(): PdfRecordsDb {
     },
     async put(storeName, value, key) {
       const store = memoryStores.get(storeName) ?? new Map<string, PdfRecord>();
-      store.set(String(key), value);
+      const resolvedKey = key ?? value.id;
+      store.set(String(resolvedKey), value);
       memoryStores.set(storeName, store);
-      return typeof key === "string" ? key : value.id;
+      return typeof resolvedKey === "string" ? resolvedKey : value.id;
     },
     async delete(storeName, key) {
       memoryStores.get(storeName)?.delete(String(key));
@@ -56,7 +57,7 @@ export async function writePdfRecord(record: PdfRecord): Promise<PdfRecord> {
     ...record,
     data: [...record.data],
   };
-  await db.put(STORE_NAME, stored, stored.id);
+  await db.put(STORE_NAME, stored);
   return stored;
 }
 

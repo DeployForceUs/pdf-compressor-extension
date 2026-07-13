@@ -42,6 +42,7 @@ import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
 import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
 import { readSplitResult } from "../../lib/storage/pdf-split-results-db";
 import { deleteSplitResult } from "../../lib/storage/pdf-split-results-db";
+import { persistSelectedPdfRecord } from "./selected-pdf-persistence";
 import {
   buildSplitRequestFromForm,
   splitDownloadFileName,
@@ -855,9 +856,8 @@ function Popup() {
     try {
       await ensureOffscreenDocument();
 
-      const storeResponse = await sendMessage<PdfStoreResponse>({
-        type: "pdf:store",
-        record: {
+      const { storeResponse, readBack } = await persistSelectedPdfRecord(
+        {
           id: recordId,
           name: fileName,
           size: fileSize,
@@ -866,11 +866,19 @@ function Popup() {
           pageCount,
           data: byteArray,
         },
-      });
-      const readBack = await sendMessage<PdfReadResponse>({
-        type: "pdf:read",
-        recordId,
-      });
+        {
+          store: (record) =>
+            sendMessage<PdfStoreResponse | { ok: false; error: string }>({
+              type: "pdf:store",
+              record,
+            }),
+          read: (recordId) =>
+            sendMessage<PdfReadResponse>({
+              type: "pdf:read",
+              recordId,
+            }),
+        },
+      );
 
       console.info("[pdf-compressor] PDF record persistence debug", {
         writtenRecordId: recordId,

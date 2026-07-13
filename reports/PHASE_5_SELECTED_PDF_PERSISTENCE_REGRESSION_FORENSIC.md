@@ -13,6 +13,17 @@ In a browser-compatible IndexedDB backend this throws `DataError`. The popup the
 
 This is not a split regression, not a version conflict, and not caused by the Artifact Factory storage changes.
 
+# Fix Implemented
+The selected PDF persistence path now writes the inline-key IndexedDB record correctly:
+
+```ts
+await db.put(STORE_NAME, stored);
+```
+
+The popup selection flow also stops immediately if `pdf:store` returns an error response. It no longer continues into `pdf:read` after a storage failure, so the original normalized storage error remains the one the user sees.
+
+The memory fallback in `src/lib/storage/pdf-records-db.ts` now resolves the key from `value.id` when no explicit key is passed, which keeps the Node test path aligned with the inline-key IndexedDB contract.
+
 # Manual Chrome Evidence
 Observed after extension reload and selecting a valid PDF:
 
@@ -141,6 +152,17 @@ await db.put(STORE_NAME, stored);
 
 That is the minimal correction needed for this regression.
 
+# IndexedDB Write Audit
+Audited writes in `src/lib/storage/pdf-records-db.ts`:
+
+- `writePdfRecord()` now uses inline-key form with no explicit key argument
+- `readPdfRecord()` remains a simple keyed read
+- `deletePdfRecord()` remains a keyed delete
+
+No other selected-PDF persistence helper was broadened. Split storage and Artifact Factory code were not changed for this fix.
+
+The related popup selection flow now uses a small helper in `src/entrypoints/popup/selected-pdf-persistence.ts` so the store/read sequence is explicit and the error path stops after a failed store response.
+
 # Regression Tests Required
 Required coverage after the fix:
 
@@ -151,6 +173,45 @@ Required coverage after the fix:
 - `DataError` no longer thrown for valid selected PDFs
 - Split UI remains gated on successful selected-PDF persistence
 
+# Regression Tests
+Added coverage in `tests/phase5_selected_pdf_persistence.test.ts` for:
+
+- fresh database write succeeds
+- immediate read returns the record
+- filename matches
+- byte length matches
+- page count survives
+- close/reopen read succeeds
+- existing pre-created database write/read succeeds
+- delete succeeds
+- deleted record is no longer returned
+- valid write no longer throws `DataError`
+- failed `pdf:store` response does not continue into `pdf:read`
+- original storage error remains visible
+
+Existing coverage also continues to pass for:
+
+- Artifact Factory foundation
+- Split UI metadata
+- passwordless encrypted PDF support
+- split planning, packaging, and stabilization
+
+# Manual Chrome Validation Required
+After this fix, manual Chrome validation is still required:
+
+1. Reload the extension.
+2. Select a valid PDF.
+3. Confirm the popup shows `Ready`.
+4. Confirm `Pages` displays correctly.
+5. Confirm `By pages`, `By file size`, and `Manual selection` are visible.
+6. Confirm `Split PDF` is enabled.
+7. Run one single-ZIP Split.
+8. Download and open the ZIP.
+9. Close and reopen the popup.
+10. Confirm the selected PDF and Split result restore correctly.
+11. Remove/reset the result.
+12. Reopen the popup and confirm the stale result is gone.
+
 # Files Inspected
 - `src/lib/storage/pdf-records-db.ts`
 - `src/lib/offscreen/main.ts`
@@ -159,6 +220,7 @@ Required coverage after the fix:
 - `src/lib/storage/pdf-split-bundles-db.ts`
 - `src/lib/pdf-records.ts`
 - `tests/phase5_slice12_artifact_factory_foundation.test.ts`
+- `tests/phase5_selected_pdf_persistence.test.ts`
 - `package.json`
 - `package-lock.json`
 
@@ -169,3 +231,6 @@ Required coverage after the fix:
 
 # Decision
 FIX_READY
+
+# Git
+The fix is committed on `feature/phase5-pdf-split` and pushed to `origin`.
