@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PDFDocument } from "pdf-lib";
 import { unzipSync } from "fflate";
+import mupdf from "mupdf";
 import { SPLIT_PDF_RECORD_ID } from "../src/lib/pdf-records";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
@@ -31,7 +32,11 @@ async function createSelectedPdfRecord(pageCount: number, name: string): Promise
 
 function createWorkerGateway() {
   return {
-    split: createSplitZipArchive,
+    split: (
+      request: Parameters<typeof createSplitZipArchive>[0],
+      isCancelled: Parameters<typeof createSplitZipArchive>[1],
+      onProgress: Parameters<typeof createSplitZipArchive>[2],
+    ) => createSplitZipArchive(request, isCancelled, onProgress, { loadMuPdf: async () => mupdf }),
   };
 }
 

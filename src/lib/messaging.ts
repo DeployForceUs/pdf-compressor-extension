@@ -166,6 +166,56 @@ export type SplitProgressStage =
   | "persisting"
   | "complete";
 
+export const SPLIT_OUTPUT_MODES = ["single-zip", "individual-pdfs", "separate-zips"] as const;
+export type SplitOutputMode = (typeof SPLIT_OUTPUT_MODES)[number];
+
+export const SPLIT_ARTIFACT_KINDS = ["pdf", "zip"] as const;
+export type SplitArtifactKind = (typeof SPLIT_ARTIFACT_KINDS)[number];
+
+export const SPLIT_ARTIFACT_STATUSES = ["pending", "complete"] as const;
+export type SplitArtifactStatus = (typeof SPLIT_ARTIFACT_STATUSES)[number];
+
+export type SplitArtifactDescriptor = {
+  id: string;
+  bundleId: string;
+  kind: SplitArtifactKind;
+  filename: string;
+  mimeType: "application/pdf" | "application/zip";
+  byteLength: number;
+  partNumber?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  status: SplitArtifactStatus;
+};
+
+export type SplitArtifactRecord = SplitArtifactDescriptor & {
+  data: ArrayBuffer;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type SplitResultBundle = {
+  id: string;
+  sourceRecordId: string;
+  sourceFileName: string;
+  outputMode: SplitOutputMode;
+  strategy: SplitStrategy;
+  partsCount: number;
+  originalSize: number;
+  totalArtifactSize: number;
+  warnings: SplitWarning[];
+  artifactIds: string[];
+  compressAfterRequested: boolean;
+  originalSplitPartsSize: number;
+  finalPartsSize: number;
+  compressedPartsCount: number;
+  fallbackPartsCount: number;
+  totalBytesSaved: number;
+  status: SplitArtifactStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type SplitWarning =
   | {
       code: "SINGLE_PAGE_EXCEEDS_LIMIT";
