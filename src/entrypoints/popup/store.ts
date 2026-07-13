@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { CompressionEngineStatus, CompressionStage, CompressionStatus } from "../../lib/messaging";
+import type {
+  CompressionEngineStatus,
+  CompressionStage,
+  CompressionStatus,
+  SplitProgressStage,
+  SplitWarning,
+} from "../../lib/messaging";
+import type { SplitStrategy } from "../../lib/pdf/split-strategies";
 import { SELECTED_PDF_RECORD_ID } from "../../lib/pdf-records";
 
 export { SELECTED_PDF_RECORD_ID };
@@ -48,9 +55,40 @@ export type CompressionSnapshot = {
   resultAvailable: boolean;
 };
 
+export type SplitStatus = "idle" | "loading" | "running" | "cancelling" | "complete" | "cancelled" | "error";
+
+export type SplitSnapshot = {
+  status: SplitStatus;
+  progress: number;
+  stage: SplitProgressStage | "idle";
+  error: string;
+  recordId: string | null;
+  zipBlobId: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  size: number | null;
+  originalSize: number | null;
+  totalPartsSize: number | null;
+  partsCount: number | null;
+  strategy: SplitStrategy["type"];
+  pagesPerPart: string;
+  maxPartSizeMb: string;
+  manualRanges: string;
+  compressAfter: boolean;
+  compressAfterRequested: boolean;
+  originalSplitPartsSize: number | null;
+  finalPartsSize: number | null;
+  compressedPartsCount: number | null;
+  fallbackPartsCount: number | null;
+  totalBytesSaved: number | null;
+  warnings: SplitWarning[];
+  resultAvailable: boolean;
+};
+
 export type PopupStoreState = {
   pdf: SelectedPdfSnapshot;
   compression: CompressionSnapshot;
+  split: SplitSnapshot;
   background: DiagnosticSnapshot;
   offscreen: DiagnosticSnapshot;
   storage: DiagnosticSnapshot & {
@@ -62,6 +100,8 @@ export type PopupStoreState = {
   resetPdf: () => void;
   setCompression: (next: Partial<CompressionSnapshot>) => void;
   resetCompression: () => void;
+  setSplit: (next: Partial<SplitSnapshot>) => void;
+  resetSplit: () => void;
   setBackground: (next: Partial<DiagnosticSnapshot>) => void;
   setOffscreen: (next: Partial<DiagnosticSnapshot>) => void;
   setStorage: (next: Partial<PopupStoreState["storage"]>) => void;
@@ -97,6 +137,34 @@ const initialCompression: CompressionSnapshot = {
   resultAvailable: false,
 };
 
+const initialSplit: SplitSnapshot = {
+  status: "idle",
+  progress: 0,
+  stage: "idle",
+  error: "",
+  recordId: null,
+  zipBlobId: null,
+  fileName: null,
+  mimeType: null,
+  size: null,
+  originalSize: null,
+  totalPartsSize: null,
+  partsCount: null,
+  strategy: "by-pages",
+  pagesPerPart: "20",
+  maxPartSizeMb: "10",
+  manualRanges: "",
+  compressAfter: false,
+  compressAfterRequested: false,
+  originalSplitPartsSize: null,
+  finalPartsSize: null,
+  compressedPartsCount: null,
+  fallbackPartsCount: null,
+  totalBytesSaved: null,
+  warnings: [],
+  resultAvailable: false,
+};
+
 const initialDiagnostic: DiagnosticSnapshot = {
   checked: false,
   durationMs: null,
@@ -106,6 +174,7 @@ const initialDiagnostic: DiagnosticSnapshot = {
 export const usePopupStore = create<PopupStoreState>((set) => ({
   pdf: initialPdf,
   compression: initialCompression,
+  split: initialSplit,
   background: initialDiagnostic,
   offscreen: initialDiagnostic,
   storage: {
@@ -137,6 +206,24 @@ export const usePopupStore = create<PopupStoreState>((set) => ({
       compression: {
         ...initialCompression,
         engineStatus: state.compression.engineStatus,
+      },
+    })),
+  setSplit: (next) =>
+    set((state) => ({
+      split: {
+        ...state.split,
+        ...next,
+      },
+    })),
+  resetSplit: () =>
+    set((state) => ({
+      split: {
+        ...initialSplit,
+        strategy: state.split.strategy,
+        pagesPerPart: state.split.pagesPerPart,
+        maxPartSizeMb: state.split.maxPartSizeMb,
+        manualRanges: state.split.manualRanges,
+        compressAfter: state.split.compressAfter,
       },
     })),
   setBackground: (next) =>

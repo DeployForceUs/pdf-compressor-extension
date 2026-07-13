@@ -23,6 +23,11 @@ import type {
   CompressionResultDeleteResponse,
   CompressionResultReadResponse,
   CompressionStartResponse,
+  SplitCancelResponse,
+  SplitErrorEvent,
+  SplitProgressEvent,
+  SplitResultMetadata,
+  SplitStartResponse,
   PdfDeleteResponse,
   PdfReadResponse,
   PdfStoreResponse,
@@ -33,7 +38,17 @@ import type {
 import { sendMessage } from "../../lib/messaging";
 import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
 import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
-import { SELECTED_PDF_RECORD_ID, usePopupStore } from "./store";
+import { readSplitResult } from "../../lib/storage/pdf-split-results-db";
+import { deleteSplitResult } from "../../lib/storage/pdf-split-results-db";
+import {
+  buildSplitRequestFromForm,
+  splitDownloadFileName,
+  splitProgressLabel,
+  splitProgressSummary,
+  splitWarningLabel,
+  type SplitFormState,
+} from "./split-ui";
+import { SELECTED_PDF_RECORD_ID, usePopupStore, type SplitSnapshot } from "./store";
 import "../../styles/popup.css";
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
@@ -98,6 +113,18 @@ function isCompressionResultEvent(message: unknown): message is { type: "compres
   return typeof message === "object" && message !== null && (message as { type?: string }).type === "compression:result";
 }
 
+function isSplitProgressEvent(message: unknown): message is SplitProgressEvent {
+  return typeof message === "object" && message !== null && (message as SplitProgressEvent).type === "split:progress";
+}
+
+function isSplitResultEvent(message: unknown): message is { type: "split:result"; result: SplitResultMetadata } {
+  return typeof message === "object" && message !== null && (message as { type?: string }).type === "split:result";
+}
+
+function isSplitErrorEvent(message: unknown): message is SplitErrorEvent {
+  return typeof message === "object" && message !== null && (message as SplitErrorEvent).type === "split:error";
+}
+
 function isPdfArrayBuffer(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer;
 }
@@ -120,6 +147,23 @@ function assertDownloadablePdf(record: Awaited<ReturnType<typeof readCompression
   const header = new TextDecoder().decode(new Uint8Array(record.data).slice(0, 5));
   if (header !== "%PDF-") {
     throw new Error("Compressed PDF record does not start with %PDF-");
+  }
+
+  return record.data;
+}
+
+function assertDownloadableZip(record: Awaited<ReturnType<typeof readSplitResult>>): ArrayBuffer {
+  if (!record) {
+    throw new Error("Split ZIP archive was not found in IndexedDB");
+  }
+
+  if (!(record.data instanceof ArrayBuffer)) {
+    throw new Error("Split ZIP archive data is not an ArrayBuffer");
+  }
+
+  const header = new TextDecoder().decode(new Uint8Array(record.data).slice(0, 2));
+  if (header !== "PK") {
+    throw new Error("Split ZIP archive does not start with PK");
   }
 
   return record.data;
@@ -181,6 +225,34 @@ function formatCompressionStatus(
   return t("compression.idle");
 }
 
+function formatSplitStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string, error: string) {
+  if (status === "loading") {
+    return t("split.splitting");
+  }
+
+  if (status === "running") {
+    return t("split.splitting");
+  }
+
+  if (status === "cancelling") {
+    return t("split.cancel");
+  }
+
+  if (status === "cancelled") {
+    return t("split.errors.cancelled");
+  }
+
+  if (status === "complete") {
+    return t("split.complete");
+  }
+
+  if (status === "error") {
+    return error || t("split.errors.splitFailed");
+  }
+
+  return t("split.start");
+}
+
 function translateCompressionError(t: (key: string, options?: Record<string, unknown>) => string, code: string, fallback: string) {
   switch (code) {
     case "WASM_NOT_SUPPORTED":
@@ -198,6 +270,37 @@ function translateCompressionError(t: (key: string, options?: Record<string, unk
   }
 }
 
+function translateSplitError(t: (key: string, options?: Record<string, unknown>) => string, code: string, fallback: string) {
+  switch (code) {
+    case "INVALID_PDF":
+      return t("split.errors.invalidPdf");
+    case "INVALID_PAGE_RANGE":
+      return t("split.errors.invalidPageRange");
+    case "PAGE_RANGE_OUT_OF_BOUNDS":
+      return t("split.errors.pageRangeOutOfBounds");
+    case "OVERLAPPING_PAGE_RANGES":
+      return t("split.errors.overlappingPageRanges");
+    case "INVALID_MAX_PART_SIZE":
+      return t("split.errors.invalidMaxPartSize");
+    case "SINGLE_PAGE_EXCEEDS_LIMIT":
+      return t("split.errors.singlePageExceedsLimit");
+    case "SPLIT_FAILED":
+      return t("split.errors.splitFailed");
+    case "PART_VALIDATION_FAILED":
+      return t("split.errors.partValidationFailed");
+    case "ZIP_CREATION_FAILED":
+      return t("split.errors.zipCreationFailed");
+    case "CANCELLED":
+      return t("split.errors.cancelled");
+    case "TIMEOUT":
+      return t("split.errors.timeout");
+    case "STORAGE_QUOTA_EXCEEDED":
+      return t("split.errors.storageQuotaExceeded");
+    default:
+      return fallback || t("split.errors.splitFailed");
+  }
+}
+
 function Popup() {
   const { i18n, t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +308,7 @@ function Popup() {
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
   const compression = usePopupStore((state) => state.compression);
+  const split = usePopupStore((state) => state.split);
   const background = usePopupStore((state) => state.background);
   const offscreen = usePopupStore((state) => state.offscreen);
   const storage = usePopupStore((state) => state.storage);
@@ -214,6 +318,8 @@ function Popup() {
   const resetPdf = usePopupStore((state) => state.resetPdf);
   const setCompression = usePopupStore((state) => state.setCompression);
   const resetCompression = usePopupStore((state) => state.resetCompression);
+  const setSplit = usePopupStore((state) => state.setSplit);
+  const resetSplit = usePopupStore((state) => state.resetSplit);
   const setBackground = usePopupStore((state) => state.setBackground);
   const setOffscreen = usePopupStore((state) => state.setOffscreen);
   const setStorage = usePopupStore((state) => state.setStorage);
@@ -236,10 +342,26 @@ function Popup() {
   useEffect(() => {
     void restoreCompressionEngine();
     void restoreCompressionResult();
+    void restoreSplitResult();
   }, []);
 
   useEffect(() => {
     const listener = (message: unknown) => {
+      if (isSplitProgressEvent(message)) {
+        applySplitProgress(message);
+        return;
+      }
+
+      if (isSplitResultEvent(message)) {
+        applySplitResult(message.result);
+        return;
+      }
+
+      if (isSplitErrorEvent(message)) {
+        applySplitError(message);
+        return;
+      }
+
       if (isCompressionProgressEvent(message)) {
         applyCompressionProgress(message);
         return;
@@ -277,7 +399,7 @@ function Popup() {
     return () => {
       browser.runtime.onMessage.removeListener(listener);
     };
-  }, [applyCompressionProgress, applyCompressionResult, setCompression, t]);
+  }, [applyCompressionProgress, applyCompressionResult, applySplitError, applySplitProgress, applySplitResult, setCompression, t]);
 
   function resetFileInput() {
     if (fileInputRef.current) {
@@ -335,6 +457,51 @@ function Popup() {
     });
   }
 
+  function applySplitResult(result: SplitResultMetadata, status: "complete" | "cancelled" = "complete") {
+    setSplit({
+      status,
+      progress: 100,
+      stage: "complete",
+      error: "",
+      recordId: result.zipBlobId,
+      zipBlobId: result.zipBlobId,
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+      size: result.size,
+      originalSize: result.originalSize,
+      totalPartsSize: result.totalPartsSize,
+      partsCount: result.partsCount,
+      strategy: result.strategy.type,
+      compressAfterRequested: result.compressAfterRequested,
+      originalSplitPartsSize: result.originalSplitPartsSize,
+      finalPartsSize: result.finalPartsSize,
+      compressedPartsCount: result.compressedPartsCount,
+      fallbackPartsCount: result.fallbackPartsCount,
+      totalBytesSaved: result.totalBytesSaved,
+      warnings: result.warnings ?? [],
+      resultAvailable: true,
+    });
+  }
+
+  function applySplitProgress(event: SplitProgressEvent) {
+    setSplit({
+      status: event.stage === "complete" ? "complete" : "running",
+      progress: event.progress,
+      stage: event.stage,
+      error: "",
+      recordId: event.recordId,
+    });
+  }
+
+  function applySplitError(event: SplitErrorEvent) {
+    setSplit({
+      status: event.code === "CANCELLED" ? "cancelled" : "error",
+      progress: 0,
+      stage: "idle",
+      error: translateSplitError(t, event.code, event.message),
+    });
+  }
+
   async function restoreCompressionResult() {
     try {
       await ensureOffscreenDocument();
@@ -349,6 +516,37 @@ function Popup() {
       setCompression({
         status: "error",
         error: errorMessage(error, t("compression.compressionFailed")),
+      });
+    }
+  }
+
+  async function restoreSplitResult() {
+    try {
+      const result = await readSplitResult();
+      if (result) {
+        applySplitResult({
+          zipBlobId: result.id,
+          fileName: result.fileName,
+          mimeType: result.mimeType,
+          size: result.data.byteLength,
+          compressAfterRequested: result.compressAfterRequested,
+          originalSplitPartsSize: result.originalSplitPartsSize,
+          finalPartsSize: result.finalPartsSize,
+          compressedPartsCount: result.compressedPartsCount,
+          fallbackPartsCount: result.fallbackPartsCount,
+          totalBytesSaved: result.totalBytesSaved,
+          originalSize: result.originalSize,
+          totalPartsSize: result.totalPartsSize,
+          partsCount: result.partsCount,
+          strategy: result.strategy,
+          warnings: result.warnings ?? [],
+          status: "complete",
+        });
+      }
+    } catch (error) {
+      setSplit({
+        status: "error",
+        error: errorMessage(error, t("split.errors.splitFailed")),
       });
     }
   }
@@ -488,6 +686,125 @@ function Popup() {
     }
   }
 
+  async function startSplit() {
+    if (!pdf.selected || pdf.status !== "ready") {
+      return;
+    }
+
+    const request = buildSplitRequestFromForm({
+      strategy: split.strategy,
+      pagesPerPart: split.pagesPerPart,
+      maxPartSizeMb: split.maxPartSizeMb,
+      manualRanges: split.manualRanges,
+      compressAfter: split.compressAfter,
+    });
+
+    if ("issue" in request) {
+      const errorKey =
+        request.issue === "INVALID_PAGES_PER_PART"
+          ? "split.errors.invalidPagesPerPart"
+          : request.issue === "INVALID_MAX_PART_SIZE"
+            ? "split.errors.invalidMaxSize"
+            : "split.errors.invalidRanges";
+
+      setSplit({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: t(errorKey),
+      });
+      return;
+    }
+
+    setSplit({
+      status: "loading",
+      progress: 0,
+      stage: "idle",
+      error: "",
+      recordId: null,
+      zipBlobId: null,
+      fileName: null,
+      mimeType: null,
+      size: null,
+      originalSize: null,
+      totalPartsSize: null,
+      partsCount: null,
+      warnings: [],
+      resultAvailable: false,
+      compressAfterRequested: split.compressAfter,
+      originalSplitPartsSize: null,
+      finalPartsSize: null,
+      compressedPartsCount: null,
+      fallbackPartsCount: null,
+      totalBytesSaved: null,
+    });
+
+    try {
+      const response = await sendMessage<SplitStartResponse | { ok: false; error: string }>(
+        {
+          type: "split:local",
+          strategy: request.strategy,
+          compressAfter: request.compressAfter,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
+
+      applySplitResult(response.result);
+    } catch (error) {
+      setSplit({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: errorMessage(error, t("split.errors.splitFailed")),
+      });
+    }
+  }
+
+  async function cancelSplit() {
+    setSplit({
+      status: "cancelling",
+      error: "",
+    });
+
+    try {
+      await sendMessage<SplitCancelResponse>({ type: "split:cancel" });
+    } catch (error) {
+      setSplit({
+        status: "error",
+        error: errorMessage(error, t("split.errors.cancelled")),
+      });
+    }
+  }
+
+  async function downloadSplitZip() {
+    try {
+      const record = await readSplitResult(split.zipBlobId ?? undefined);
+
+      if (!record) {
+        throw new Error("No split ZIP is available for download");
+      }
+
+      const bytes = assertDownloadableZip(record);
+      const blob = new Blob([bytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = splitDownloadFileName(split.fileName);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      setSplit({
+        status: "error",
+        error: errorMessage(error, t("split.errors.splitFailed")),
+      });
+    }
+  }
+
   async function persistPdfFile(file: File) {
     setPdf({
       status: "validating",
@@ -565,6 +882,8 @@ function Popup() {
         error: "",
       });
       await deleteCompressionResult();
+      await deleteSplitResult();
+      resetSplit();
       console.info("[pdf-compressor] Selected PDF stored and verified locally", {
         recordId: storeResponse.recordId,
         storedByteLength: storeResponse.byteLength,
@@ -669,6 +988,8 @@ function Popup() {
 
     resetPdf();
     await deleteCompressionResult();
+    await deleteSplitResult();
+    resetSplit();
     resetFileInput();
     console.info("[pdf-compressor] Selected PDF cleared locally", { recordId, status: "idle" });
   }
@@ -857,10 +1178,40 @@ function Popup() {
     compression.savedPercent !== null ? formatPercent(compression.savedPercent, locale) : "—";
   const compressionBusy = compression.status === "loading-engine" || compression.status === "compressing" || compression.status === "cancelling";
   const compressionHasResult = compression.status === "complete" && compression.resultAvailable;
-  const compressionCanStart = pdf.selected && pdf.status === "ready" && !compressionBusy && compression.engineStatus === "ready";
+  const splitBusy = split.status === "loading" || split.status === "running" || split.status === "cancelling";
+  const sharedBusy = compressionBusy || splitBusy;
+  const compressionCanStart = pdf.selected && pdf.status === "ready" && !sharedBusy && compression.engineStatus === "ready";
   const compressionDownloadName = compression.fileName
     ? compression.fileName.replace(/\.pdf$/i, "-compressed.pdf")
     : "compressed.pdf";
+  const splitStatusLabel = formatSplitStatus(t, split.status, split.error);
+  const splitHasResult = split.status === "complete" && split.resultAvailable;
+  const splitControlsDisabled = sharedBusy || pdf.status !== "ready" || !pdf.selected;
+  const splitCanStart =
+    pdf.selected &&
+    pdf.status === "ready" &&
+    !sharedBusy &&
+    (!split.compressAfter || compression.engineStatus === "ready");
+  const splitProgressSummaryValue = split.recordId
+    ? splitProgressSummary({
+        type: "split:progress",
+        recordId: split.recordId,
+        stage: split.stage === "idle" ? "validating" : split.stage,
+        progress: split.progress,
+        partsCount: split.partsCount ?? 0,
+        currentPart: split.partsCount ?? 0,
+        message: splitStatusLabel,
+      })
+    : null;
+  const splitOriginalValue = split.originalSize !== null ? formatBytes(split.originalSize, locale) : "—";
+  const splitZipValue = split.size !== null ? formatBytes(split.size, locale) : "—";
+  const splitSavedValue =
+    split.totalBytesSaved !== null
+      ? split.totalBytesSaved > 0
+        ? formatBytes(split.totalBytesSaved, locale)
+        : t("compression.noSizeReduction")
+      : "—";
+  const splitWarningsCount = split.warnings.length;
 
   return (
     <main className="app">
@@ -1003,6 +1354,188 @@ function Popup() {
                 </div>
               ) : null}
             </div>
+
+            <article className="split-card">
+              <div className="split-card__header">
+                <div className="split-card__title">
+                  <span className="status-dot" />
+                  <span>{t("split.title")}</span>
+                </div>
+                <span className="status-badge">
+                  {split.status === "complete"
+                    ? t("split.complete")
+                    : split.status === "error"
+                      ? t("split.errors.splitFailed")
+                      : splitBusy
+                        ? t("split.splitting")
+                        : t("split.start")}
+                </span>
+              </div>
+
+              <div className="split-card__status">{splitStatusLabel}</div>
+
+              <div className="split-card__strategies" role="tablist" aria-label={t("split.strategy")}>
+                {[
+                  ["by-pages", t("split.byPages")],
+                  ["by-max-size", t("split.bySize")],
+                  ["manual-ranges", t("split.manual")],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={split.strategy === value ? "split-card__strategy split-card__strategy--active" : "split-card__strategy"}
+                    aria-pressed={split.strategy === value}
+                    onClick={() =>
+                      setSplit({
+                        strategy: value as SplitSnapshot["strategy"],
+                        error: "",
+                      })
+                    }
+                    disabled={splitControlsDisabled}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {split.strategy === "by-pages" ? (
+                <label className="split-field">
+                  <span>{t("split.pagesPerPart")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={split.pagesPerPart}
+                    onChange={(event) => setSplit({ pagesPerPart: event.currentTarget.value, error: "" })}
+                    disabled={splitControlsDisabled}
+                  />
+                </label>
+              ) : null}
+
+              {split.strategy === "by-max-size" ? (
+                <label className="split-field">
+                  <span>{t("split.maxSize")}</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    value={split.maxPartSizeMb}
+                    onChange={(event) => setSplit({ maxPartSizeMb: event.currentTarget.value, error: "" })}
+                    disabled={splitControlsDisabled}
+                  />
+                </label>
+              ) : null}
+
+              {split.strategy === "manual-ranges" ? (
+                <label className="split-field">
+                  <span>{t("split.manualRanges")}</span>
+                  <textarea
+                    rows={4}
+                    value={split.manualRanges}
+                    placeholder={t("split.manualRangesPlaceholder")}
+                    onChange={(event) => setSplit({ manualRanges: event.currentTarget.value, error: "" })}
+                    disabled={splitControlsDisabled}
+                  />
+                </label>
+              ) : null}
+
+              <label className="split-checkbox">
+                <input
+                  type="checkbox"
+                  checked={split.compressAfter}
+                  onChange={(event) => setSplit({ compressAfter: event.currentTarget.checked, error: "" })}
+                  disabled={splitControlsDisabled}
+                />
+                <span>{t("split.compressAfter")}</span>
+              </label>
+
+              <div className="split-progress" role="progressbar" aria-valuenow={split.progress} aria-valuemin={0} aria-valuemax={100}>
+                <div className="split-progress__track">
+                  <div className="split-progress__fill" style={{ width: `${split.progress}%` }} />
+                </div>
+                <div className="split-progress__meta">
+                  <span>{`${Math.round(split.progress)}%`}</span>
+                  <span>{splitProgressSummaryValue ? splitProgressSummaryValue.parts : t("split.progress")}</span>
+                </div>
+              </div>
+
+              <div className="split-progress__detail">
+                {splitProgressLabel({
+                  type: "split:progress",
+                  recordId: split.recordId ?? "",
+                  stage: split.stage === "idle" ? "validating" : split.stage,
+                  progress: split.progress,
+                  partsCount: split.partsCount ?? 0,
+                  currentPart: split.partsCount ?? 0,
+                  message: splitStatusLabel,
+                })}
+                {splitProgressSummaryValue?.detail ? <span>{splitProgressSummaryValue.detail}</span> : null}
+              </div>
+
+              <div className="split-grid">
+                <div className="metadata-row">
+                  <span className="metadata-row__label">{t("split.originalSize")}</span>
+                  <span className="metadata-row__value">{splitOriginalValue}</span>
+                </div>
+                <div className="metadata-row">
+                  <span className="metadata-row__label">{t("split.zipSize")}</span>
+                  <span className="metadata-row__value">{splitZipValue}</span>
+                </div>
+                <div className="metadata-row">
+                  <span className="metadata-row__label">{t("split.saved")}</span>
+                  <span className="metadata-row__value">{splitSavedValue}</span>
+                </div>
+                <div className="metadata-row">
+                  <span className="metadata-row__label">{t("split.result")}</span>
+                  <span className="metadata-row__value">{split.partsCount !== null ? t("split.partsCreated", { count: split.partsCount }) : "—"}</span>
+                </div>
+              </div>
+
+              <div className="split-actions">
+                <button type="button" className="primary" onClick={() => void startSplit()} disabled={!splitCanStart}>
+                  {splitBusy ? t("split.splitting") : t("split.start")}
+                </button>
+                {splitBusy ? (
+                  <button type="button" className="secondary" onClick={() => void cancelSplit()}>
+                    {t("split.cancel")}
+                  </button>
+                ) : null}
+                {splitHasResult ? (
+                  <button type="button" className="secondary" onClick={() => void downloadSplitZip()}>
+                    {t("split.downloadZip")}
+                  </button>
+                ) : null}
+              </div>
+
+              {splitHasResult && splitWarningsCount > 0 ? (
+                <div className="split-warnings" aria-live="polite">
+                  <div className="split-warnings__header">
+                    <span>{t("split.warnings")}</span>
+                    <span>{t("split.warningCount", { count: splitWarningsCount })}</span>
+                  </div>
+                  <div className="split-warnings__list">
+                    {split.warnings.map((warning) => (
+                      <div key={`${warning.code}-${warning.fileName}-${warning.partNumber}`} className="split-warning">
+                        <div className="split-warning__title">{splitWarningLabel(warning)}</div>
+                        <div className="split-warning__detail">
+                          {"pageNumber" in warning
+                            ? `Page ${warning.pageNumber} · ${formatBytes(warning.actualGeneratedByteSize, locale)} / ${formatBytes(
+                                warning.requestedMaximumByteSize,
+                                locale,
+                              )} · ${warning.fileName}`
+                            : `${warning.fileName} · source ${formatBytes(warning.sourceByteSize, locale)} · selected ${formatBytes(
+                                warning.selectedByteSize,
+                                locale,
+                              )}${typeof warning.compressedCandidateByteSize === "number" ? ` · candidate ${formatBytes(warning.compressedCandidateByteSize, locale)}` : ""}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {splitHasResult && splitWarningsCount === 0 ? <div className="split-card__footnote">{t("split.noWarnings")}</div> : null}
+            </article>
 
             <article className="compression-card">
               <div className="compression-card__header">
