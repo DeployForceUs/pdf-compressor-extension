@@ -1,6 +1,6 @@
 # Summary
 
-Implemented the first Phase 5 stabilization slice: compression-result storage now normalizes browser quota failures to the same machine-readable `STORAGE_QUOTA_EXCEEDED` contract already used by split storage.
+Implemented the first Phase 5 stabilization slice: compression-result storage now normalizes browser quota failures to the same machine-readable `STORAGE_QUOTA_EXCEEDED` contract already used by split storage, and the orchestration boundary now has focused regression coverage for a failed persistence write.
 
 # Root Cause
 
@@ -28,6 +28,7 @@ That asymmetry meant large compression-result writes could surface a generic sto
   - maps it to `STORAGE_QUOTA_EXCEEDED`
   - preserves the original browser error as the cause only through the thrown error chain
   - leaves existing split results untouched unless a write actually succeeds
+- This slice does not directly exercise `writeSplitResult(...)`; it only references the existing split quota mapping behavior as a comparison point.
 
 # Implementation
 
@@ -62,18 +63,26 @@ That asymmetry meant large compression-result writes could surface a generic sto
 
 Added focused regression coverage in [`tests/phase5_stabilization_quota.test.ts`](/Users/dmitriikarpov/pdf-compressor-extension/tests/phase5_stabilization_quota.test.ts):
 
-- successful compression-result write still works
-- stored result can be read back unchanged
-- result can be deleted
-- simulated `QuotaExceededError` maps to `STORAGE_QUOTA_EXCEEDED`
-- generic errors are not misclassified as quota failures
-- split quota normalization remains unchanged
+- helper-level compression-result storage checks:
+  - successful compression-result write still works
+  - stored result can be read back unchanged
+  - result can be deleted
+  - simulated `QuotaExceededError` maps to `STORAGE_QUOTA_EXCEEDED`
+  - generic errors are not misclassified as quota failures
+- orchestration-level compression completion checks:
+  - a valid compression outcome is passed into the completion boundary
+  - a simulated quota failure during compression-result persistence maps to `STORAGE_QUOTA_EXCEEDED`
+  - no success completion response is returned
+  - no `compression:result` event is emitted
+  - no `compression:progress` complete event is emitted on failure
+  - the existing compression-result record remains unchanged after the failed write
+- split quota normalization remains unchanged in production code, but `writeSplitResult(...)` is not directly exercised by this slice
 
 Also re-ran the relevant Phase 5 regression tests and the repo validation suite after the change.
 
 # Manual Chrome Validation Required
 
-Headless tests prove the storage helper and error mapping, but they do not fully simulate a browser storage-pressure condition in real Chrome.
+Headless tests prove the storage helper, the compression completion orchestration seam, and the error mapping, but they do not fully simulate a browser storage-pressure condition in real Chrome.
 
 Still required in Chrome:
 
@@ -86,6 +95,7 @@ Still required in Chrome:
 # Files Changed
 
 - `src/lib/storage/pdf-compression-db.ts`
+- `src/lib/offscreen/compression-runtime.ts`
 - `src/lib/messaging.ts`
 - `tests/phase5_stabilization_quota.test.ts`
 - `reports/PHASE_5_STABILIZATION_QUOTA_REPORT.md`
@@ -103,8 +113,9 @@ Still required in Chrome:
 - [x] result can be deleted
 - [x] simulated `QuotaExceededError` maps to `STORAGE_QUOTA_EXCEEDED`
 - [x] generic IndexedDB failure is not falsely classified as quota exhaustion
-- [x] quota normalization throws instead of resolving as success
-- [x] split storage behavior remains unchanged
+- [x] orchestration-level quota failure returns a non-success result
+- [x] orchestration-level quota failure does not emit success events
+- [x] split storage behavior remains unchanged in production code
 - [x] `npm run check` passes
 - [x] `npm run build` passes
 

@@ -2,6 +2,7 @@ import { proxy, transfer, wrap } from "comlink";
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../bootstrap";
 import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID, SPLIT_PDF_RECORD_ID } from "../pdf-records";
+import { completeCompressionOutcome, compressionMetadata } from "./compression-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../storage/pdf-compression-db";
 import { deleteSplitResult, readSplitResult, writeSplitResult } from "../storage/pdf-split-results-db";
 import type {
@@ -9,7 +10,6 @@ import type {
   CompressionErrorEvent,
   CompressionHealthResponse,
   CompressionProgressEvent,
-  CompressionResultMetadata,
   CompressionResultDeleteResponse,
   CompressionResultReadResponse,
   CompressionStartResponse,
@@ -255,43 +255,6 @@ function resetCompressionState() {
   activeCompression = null;
 }
 
-function compressionErrorPayload(
-  code: string,
-  message: string,
-  recordId: string | null = COMPRESSED_PDF_RECORD_ID,
-): CompressionErrorEvent {
-  return {
-    type: "compression:error",
-    recordId,
-    code: code as CompressionErrorEvent["code"],
-    message,
-  };
-}
-
-function compressionResultEvent(result: Awaited<ReturnType<typeof writeCompressionResult>>) {
-  return {
-    type: "compression:result" as const,
-    result: toCompressionMetadata(result),
-  };
-}
-
-function toCompressionMetadata(result: Awaited<ReturnType<typeof writeCompressionResult>>): CompressionResultMetadata {
-  return {
-    id: result.id,
-    sourceRecordId: result.sourceRecordId,
-    fileName: result.fileName,
-    mimeType: result.mimeType,
-    originalSize: result.originalSize,
-    compressedSize: result.compressedSize,
-    savedBytes: result.savedBytes,
-    savedPercent: result.savedPercent,
-    pageCount: result.pageCount,
-    createdAt: result.createdAt,
-    updatedAt: result.updatedAt,
-    status: "complete",
-  };
-}
-
 function compressionProgressFromMessage(
   event: CompressionProgressEvent,
 ): CompressionProgressEvent {
@@ -357,7 +320,7 @@ async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
 
 async function readCompressionState(recordId?: string) {
   const result = await readCompressionResult(recordId);
-  return { ok: true as const, result: result ? toCompressionMetadata(result) : null };
+  return { ok: true as const, result: result ? compressionMetadata(result) : null };
 }
 
 async function deleteCompressionState() {
@@ -587,32 +550,38 @@ async function startCompression(
       proxy(onProgress),
     );
 
-    await writeCompressionResult(outcome.result);
-    broadcast({
-      type: "compression:progress",
-      recordId: outcome.result.id,
-      stage: "complete",
-      progress: 100,
-      pageCount: outcome.pageCount,
-      currentPage: outcome.pageCount,
-      message: "Compression complete",
-    });
-    broadcast(compressionResultEvent(outcome.result));
-    logger.info("Compression completed", {
-      recordId: outcome.result.id,
-      pageCount: outcome.pageCount,
-      originalSize: outcome.result.originalSize,
-      compressedSize: outcome.result.compressedSize,
-      savedBytes: outcome.result.savedBytes,
-      elapsedMs: performance.now() - started,
-    });
+    const completion = await completeCompressionOutcome(
+      outcome,
+      {
+        persistResult: writeCompressionResult,
+        broadcast,
+      },
+      {
+        recordId: COMPRESSED_PDF_RECORD_ID,
+        timedOut: activeCompression?.reason === "timeout",
+        cancelled: activeCompression?.reason === "cancelled" || abortController.signal.aborted,
+      },
+    );
 
-    return {
-      ok: true,
-      recordId: outcome.result.id,
-      result: toCompressionMetadata(outcome.result),
-      details: outcome.result.savedBytes > 0 ? "Compression complete" : "Compression complete with no size reduction",
-    };
+    if (completion.ok) {
+      logger.info("Compression completed", {
+        recordId: outcome.result.id,
+        pageCount: outcome.pageCount,
+        originalSize: outcome.result.originalSize,
+        compressedSize: outcome.result.compressedSize,
+        savedBytes: outcome.result.savedBytes,
+        elapsedMs: performance.now() - started,
+      });
+    } else {
+      logger.error("Compression failed", {
+        recordId: COMPRESSED_PDF_RECORD_ID,
+        code: completion.code,
+        message: completion.error,
+        elapsedMs: performance.now() - started,
+      });
+    }
+
+    return completion;
   } catch (error) {
     const timedOut = activeCompression?.reason === "timeout";
     const cancelled = activeCompression?.reason === "cancelled" || abortController.signal.aborted;
@@ -633,7 +602,12 @@ async function startCompression(
       code = "WASM_LOAD_FAILED";
     }
 
-    const payload = compressionErrorPayload(code, message, COMPRESSED_PDF_RECORD_ID);
+    const payload = {
+      type: "compression:error" as const,
+      recordId: COMPRESSED_PDF_RECORD_ID,
+      code: code as CompressionErrorEvent["code"],
+      message,
+    };
     broadcast(payload);
     logger.error("Compression failed", {
       recordId: COMPRESSED_PDF_RECORD_ID,
