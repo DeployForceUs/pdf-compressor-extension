@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { unzipSync } from "fflate";
+import mupdf from "mupdf";
 import { SPLIT_PDF_RECORD_ID } from "../src/lib/pdf-records";
 import { createSplitZipArchive, type SplitArchiveDependencies } from "../src/lib/pdf/split-archive";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
@@ -85,7 +86,11 @@ function createWorkerGateway(compressPart?: CompressionRunner) {
       request: Parameters<typeof createSplitZipArchive>[0],
       isCancelled: Parameters<typeof createSplitZipArchive>[1],
       onProgress: Parameters<typeof createSplitZipArchive>[2],
-    ) => createSplitZipArchive(request, isCancelled, onProgress, compressPart ? { compressPart } : undefined),
+    ) =>
+      createSplitZipArchive(request, isCancelled, onProgress, {
+        ...(compressPart ? { compressPart } : {}),
+        loadMuPdf: async () => mupdf,
+      }),
   };
 }
 

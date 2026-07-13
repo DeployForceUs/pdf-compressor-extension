@@ -139,6 +139,7 @@
       "cancelled": "Split cancelled",
       "timeout": "Split timed out",
       "invalidPdf": "Invalid PDF",
+      "encryptedPdf": "Encrypted PDF requires a password",
       "invalidPageRange": "Invalid page range",
       "pageRangeOutOfBounds": "Page range out of bounds",
       "overlappingPageRanges": "Overlapping page ranges",

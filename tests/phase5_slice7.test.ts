@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { unzipSync } from "fflate";
+import mupdf from "mupdf";
 import { SPLIT_PDF_RECORD_ID } from "../src/lib/pdf-records";
 import { createSplitZipArchive } from "../src/lib/pdf/split-archive";
 import { runSplitJob } from "../src/lib/offscreen/split-runtime";
@@ -56,7 +57,11 @@ async function createSelectedPdfRecord(pageComplexities: number[], name: string)
 
 function createWorkerGateway() {
   return {
-    split: createSplitZipArchive,
+    split: (
+      request: Parameters<typeof createSplitZipArchive>[0],
+      isCancelled: Parameters<typeof createSplitZipArchive>[1],
+      onProgress: Parameters<typeof createSplitZipArchive>[2],
+    ) => createSplitZipArchive(request, isCancelled, onProgress, { loadMuPdf: async () => mupdf }),
   };
 }
 
@@ -290,7 +295,7 @@ await assert.rejects(
         type: "by-max-size",
         maxPartSizeBytes: 0,
       },
-    }),
+    }, undefined, undefined, { loadMuPdf: async () => mupdf }),
   (error: unknown) => {
     assert.equal((error as SplitRuntimeError).code, "INVALID_MAX_PART_SIZE");
     return true;
@@ -305,7 +310,7 @@ await assert.rejects(
         type: "by-max-size",
         maxPartSizeBytes: Number.NaN,
       },
-    } as Parameters<typeof createSplitZipArchive>[0]),
+    } as Parameters<typeof createSplitZipArchive>[0], undefined, undefined, { loadMuPdf: async () => mupdf }),
   (error: unknown) => {
     assert.equal((error as SplitRuntimeError).code, "INVALID_MAX_PART_SIZE");
     return true;
@@ -319,7 +324,7 @@ await assert.rejects(
       strategy: {
         type: "by-max-size",
       } as never,
-    } as Parameters<typeof createSplitZipArchive>[0]),
+    } as Parameters<typeof createSplitZipArchive>[0], undefined, undefined, { loadMuPdf: async () => mupdf }),
   (error: unknown) => {
     assert.equal((error as SplitRuntimeError).code, "INVALID_MAX_PART_SIZE");
     return true;
@@ -344,6 +349,8 @@ await assert.rejects(
           checkCount += 1;
           return checkCount >= cancelAfterChecks;
         },
+        undefined,
+        { loadMuPdf: async () => mupdf },
       ),
     (error: unknown) => {
       assert.equal((error as SplitRuntimeError).code, "CANCELLED");

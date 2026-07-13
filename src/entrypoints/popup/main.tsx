@@ -273,6 +273,8 @@ function translateSplitError(t: (key: string, options?: Record<string, unknown>)
   switch (code) {
     case "INVALID_PDF":
       return t("split.errors.invalidPdf");
+    case "ENCRYPTED_PDF":
+      return t("split.errors.encryptedPdf");
     case "INVALID_PAGE_RANGE":
       return t("split.errors.invalidPageRange");
     case "PAGE_RANGE_OUT_OF_BOUNDS":

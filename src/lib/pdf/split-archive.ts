@@ -8,6 +8,7 @@ import { parsePageRangeExpression, validatePageRangesInInputOrder } from "./page
 import { buildSplitPart, type SplitByPagesOutputPart } from "./splitter";
 import type { SplitPageRange, SplitStrategy } from "./split-strategies";
 import { SplitRuntimeError, toSplitRuntimeError } from "./split-errors";
+import { loadMuPdfModule, loadSplitSourceDocument, validateGeneratedSplitPartBytes } from "./split-source-loader";
 
 type AbortChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: SplitProgressEvent) => void | Promise<void>;
@@ -38,6 +39,7 @@ export type SplitArchiveOutcome = {
 
 export type SplitArchiveDependencies = {
   compressPart?: CompressionPartRunner;
+  loadMuPdf?: () => Promise<Awaited<ReturnType<typeof loadMuPdfModule>>>;
 };
 
 type SplitArchiveSelection = {
@@ -109,13 +111,6 @@ async function defaultCompressionRunner(
   onProgress: CompressionProgressReporter,
 ) {
   return compressBalancedPdf(request, isCancelled, onProgress);
-}
-
-async function validatePdfBytes(bytes: Uint8Array, expectedPageCount: number) {
-  const reopened = await PDFDocument.load(bytes);
-  if (reopened.getPageCount() !== expectedPageCount) {
-    throw new Error(`Expected ${expectedPageCount} pages but reopened PDF had ${reopened.getPageCount()} pages`);
-  }
 }
 
 async function resolveRangesForResolvedStrategies(
@@ -351,6 +346,7 @@ async function finalizeParts(
   isCancelled: AbortChecker | undefined,
   onProgress: ProgressReporter | undefined,
   compressionRunner: CompressionPartRunner,
+  mupdf: Awaited<ReturnType<typeof loadMuPdfModule>>,
 ): Promise<FinalizedParts> {
   const finalized: SplitByPagesOutputPart[] = [];
   const warnings: SplitWarning[] = [];
@@ -394,6 +390,8 @@ async function finalizeParts(
         },
       ),
     );
+
+    await validateGeneratedSplitPartBytes(part.bytes, part.pageCount, mupdf, part.filename);
 
     let selectedBytes = part.bytes;
     let compressedCandidateByteSize: number | undefined;
@@ -441,7 +439,7 @@ async function finalizeParts(
         await checkCancelled(isCancelled);
 
         try {
-          await validatePdfBytes(candidateBytes, part.pageCount);
+          await validateGeneratedSplitPartBytes(candidateBytes, part.pageCount, mupdf, part.filename);
         } catch {
           fallbackWarning = compressionFallbackWarning(
             "COMPRESSED_PART_INVALID_FALLBACK",
@@ -520,14 +518,13 @@ export async function createSplitZipArchive(
 
   await checkCancelled(isCancelled);
 
-  let sourceDocument!: PDFDocument;
-  try {
-    sourceDocument = await PDFDocument.load(new Uint8Array(request.inputBytes));
-  } catch (error) {
-    throw new SplitRuntimeError("INVALID_PDF", "Input file is not a valid PDF", {
-      cause: error instanceof Error ? error.message : String(error),
-    });
-  }
+  const loadMuPdf = deps.loadMuPdf ?? (() => loadMuPdfModule(request.mupdfRuntimeUrl));
+
+  const sourceLoad = await loadSplitSourceDocument(request.inputBytes, {
+    loadMuPdf,
+  });
+  const sourceDocument = sourceLoad.pdfDocument;
+  const mupdf = await loadMuPdf();
 
   const sourcePageCount = sourceDocument.getPageCount();
   await checkCancelled(isCancelled);
@@ -539,6 +536,7 @@ export async function createSplitZipArchive(
     isCancelled,
     onProgress,
     deps.compressPart ?? defaultCompressionRunner,
+    mupdf,
   );
 
   const partsCount = finalized.parts.length;

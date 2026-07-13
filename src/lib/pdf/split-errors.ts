@@ -1,8 +1,13 @@
+import { EncryptedPDFError } from "pdf-lib";
 import { SplitPlannerError } from "./split-strategies";
 import { ZipPdfArchiveError } from "../archive/zip-parts";
 
+const ENCRYPTED_LOAD_ERROR_MESSAGE =
+  "Input document to `PDFDocument.load` is encrypted. You can use `PDFDocument.load(..., { ignoreEncryption: true })` if you wish to load the document anyways.";
+
 export type SplitErrorCode =
   | "INVALID_PDF"
+  | "ENCRYPTED_PDF"
   | "INVALID_PAGE_RANGE"
   | "PAGE_RANGE_OUT_OF_BOUNDS"
   | "OVERLAPPING_PAGE_RANGES"
@@ -45,6 +50,10 @@ export function toSplitRuntimeError(error: unknown, fallbackCode: SplitErrorCode
     return error;
   }
 
+  if (error instanceof EncryptedPDFError || (error instanceof Error && error.message === ENCRYPTED_LOAD_ERROR_MESSAGE)) {
+    return new SplitRuntimeError("ENCRYPTED_PDF", error.message);
+  }
+
   if (isQuotaExceededError(error)) {
     return new SplitRuntimeError("STORAGE_QUOTA_EXCEEDED", "Split result could not be persisted because storage quota was exceeded");
   }
@@ -84,6 +93,7 @@ export function toSplitRuntimeError(error: unknown, fallbackCode: SplitErrorCode
     const code = error.code as SplitErrorCode;
     if (
       code === "INVALID_PDF" ||
+      code === "ENCRYPTED_PDF" ||
       code === "INVALID_PAGE_RANGE" ||
       code === "PAGE_RANGE_OUT_OF_BOUNDS" ||
       code === "OVERLAPPING_PAGE_RANGES" ||
@@ -106,4 +116,3 @@ export function toSplitRuntimeError(error: unknown, fallbackCode: SplitErrorCode
 
   return new SplitRuntimeError(fallbackCode, "Split failed");
 }
-

@@ -139,6 +139,7 @@
       "cancelled": "División cancelada",
       "timeout": "La división tardó demasiado",
       "invalidPdf": "PDF inválido",
+      "encryptedPdf": "El PDF cifrado requiere una contraseña",
       "invalidPageRange": "Rango de páginas inválido",
       "pageRangeOutOfBounds": "Rango de páginas fuera de límites",
       "overlappingPageRanges": "Rangos de páginas superpuestos",
