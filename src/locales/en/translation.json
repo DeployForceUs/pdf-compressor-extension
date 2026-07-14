@@ -5,6 +5,26 @@
     "subtitle": "Local Processing • Private • Offline",
     "documentTitle": "PDF Compressor"
   },
+  "license": {
+    "eyebrow": "Stage 7 · License",
+    "title": "PDF Compressor Pro",
+    "checking": "Checking",
+    "free": "Free",
+    "proActive": "Pro active",
+    "description": "Activate your one-time Pro license by pasting the signed token. Verification happens locally.",
+    "tokenLabel": "License token",
+    "tokenPlaceholder": "Paste your signed license token",
+    "activate": "Activate Pro",
+    "activating": "Activating…",
+    "activeDescription": "Your perpetual Pro license is active on this browser profile.",
+    "licenseId": "License ID",
+    "deactivate": "Deactivate license",
+    "tokenRequired": "Paste a license token first.",
+    "invalidToken": "This license token is invalid.",
+    "activationFailed": "License activation failed.",
+    "checkFailed": "Could not check the license.",
+    "revokeFailed": "Could not deactivate the license."
+  },
   "language": {
     "label": "Language",
     "english": "English",

@@ -25,7 +25,7 @@
 3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Implemented, including activation/check/revoke background messaging.**
 4. Issuance: a local-only CLI signs perpetual customer tokens with the encrypted private key and writes them mode `600`. **Implemented.**
 5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
-6. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
+6. UI: localized activation and Pro state. **Implemented.** Remaining usage and cooldown feedback are pending enforcement.
 7. Quality/device policy: persisted quality selection and device-memory-aware size limits.
 
 ## Foundation Safety Properties
@@ -59,3 +59,10 @@
 - The private-key passphrase is entered through a hidden TTY prompt and is never accepted as a command-line argument.
 - Generated tokens are written under `~/.pdf-compressor-license/tokens` with mode `600` by default.
 - `--passphrase-stdin` exists only for non-interactive automation and tests.
+
+## License Activation UI
+
+- The popup exposes a localized activation form and never persists an unverified token.
+- A successful activation clears the token textarea and displays the verified license ID.
+- Reopening the popup re-checks the stored signature and restores `Pro active` state.
+- Deactivation removes the locally stored token and returns the popup to Free state.

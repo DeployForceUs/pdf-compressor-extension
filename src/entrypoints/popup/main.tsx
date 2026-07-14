@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useRef } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
@@ -37,6 +37,7 @@ import type {
   StorageCompareResponse,
   StorageReadResponse,
   StorageWriteResponse,
+  LicenseStateResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
@@ -298,6 +299,10 @@ function translateSplitError(t: (key: string, options?: Record<string, unknown>)
 function Popup() {
   const { i18n, t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [licenseToken, setLicenseToken] = useState("");
+  const [licenseState, setLicenseState] = useState<LicenseStateResponse | null>(null);
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseError, setLicenseError] = useState("");
 
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
@@ -327,6 +332,7 @@ function Popup() {
 
   useEffect(() => {
     void runBackgroundHealthCheck();
+    void checkLicense();
   }, []);
 
   useEffect(() => {
@@ -405,6 +411,55 @@ function Popup() {
   function resetFileInput() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  }
+
+  async function checkLicense() {
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      setLicenseState(await sendMessage<LicenseStateResponse>({ type: "license:check" }));
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.checkFailed")));
+    } finally {
+      setLicenseBusy(false);
+    }
+  }
+
+  async function activateLicense() {
+    const token = licenseToken.trim();
+    if (!token) {
+      setLicenseError(t("license.tokenRequired"));
+      return;
+    }
+
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      const response = await sendMessage<LicenseStateResponse>({ type: "license:activate", token });
+      setLicenseState(response);
+      if (response.isPro) {
+        setLicenseToken("");
+      } else {
+        setLicenseError(t("license.invalidToken"));
+      }
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.activationFailed")));
+    } finally {
+      setLicenseBusy(false);
+    }
+  }
+
+  async function revokeLicense() {
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      setLicenseState(await sendMessage<LicenseStateResponse>({ type: "license:revoke" }));
+      setLicenseToken("");
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.revokeFailed")));
+    } finally {
+      setLicenseBusy(false);
     }
   }
 
@@ -1305,6 +1360,67 @@ function Popup() {
         </header>
 
         <div className="body">
+          <article className={licenseState?.isPro ? "license-card license-card--pro" : "license-card"}>
+            <div className="license-card__header">
+              <div>
+                <p className="eyebrow">{t("license.eyebrow")}</p>
+                <h2>{t("license.title")}</h2>
+              </div>
+              <span className="status-badge">
+                {licenseBusy && !licenseState
+                  ? t("license.checking")
+                  : licenseState?.isPro
+                    ? t("license.proActive")
+                    : t("license.free")}
+              </span>
+            </div>
+
+            {licenseState?.isPro ? (
+              <div className="license-card__active">
+                <p>{t("license.activeDescription")}</p>
+                {licenseState.licenseId ? (
+                  <div className="license-card__id">
+                    <span>{t("license.licenseId")}</span>
+                    <code>{licenseState.licenseId}</code>
+                  </div>
+                ) : null}
+                <button type="button" className="secondary" onClick={() => void revokeLicense()} disabled={licenseBusy}>
+                  {t("license.deactivate")}
+                </button>
+              </div>
+            ) : (
+              <div className="license-card__form">
+                <p>{t("license.description")}</p>
+                <label className="license-card__field">
+                  <span>{t("license.tokenLabel")}</span>
+                  <textarea
+                    rows={3}
+                    value={licenseToken}
+                    placeholder={t("license.tokenPlaceholder")}
+                    onChange={(event) => {
+                      setLicenseToken(event.currentTarget.value);
+                      setLicenseError("");
+                    }}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    disabled={licenseBusy}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void activateLicense()}
+                  disabled={licenseBusy || !licenseToken.trim()}
+                >
+                  {licenseBusy ? t("license.activating") : t("license.activate")}
+                </button>
+              </div>
+            )}
+
+            {licenseError ? <p className="license-card__error" role="alert">{licenseError}</p> : null}
+          </article>
+
           <article className="input-card">
             <div className="input-card__header">
               <div className="input-card__title">

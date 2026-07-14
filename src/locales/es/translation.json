@@ -5,6 +5,26 @@
     "subtitle": "Procesamiento local • Privado • Sin conexión",
     "documentTitle": "Compresor de PDF"
   },
+  "license": {
+    "eyebrow": "Etapa 7 · Licencia",
+    "title": "PDF Compressor Pro",
+    "checking": "Comprobando",
+    "free": "Gratis",
+    "proActive": "Pro activo",
+    "description": "Activa tu licencia Pro de pago único pegando el token firmado. La verificación se realiza localmente.",
+    "tokenLabel": "Token de licencia",
+    "tokenPlaceholder": "Pega tu token de licencia firmado",
+    "activate": "Activar Pro",
+    "activating": "Activando…",
+    "activeDescription": "Tu licencia Pro perpetua está activa en este perfil del navegador.",
+    "licenseId": "ID de licencia",
+    "deactivate": "Desactivar licencia",
+    "tokenRequired": "Primero pega un token de licencia.",
+    "invalidToken": "Este token de licencia no es válido.",
+    "activationFailed": "No se pudo activar la licencia.",
+    "checkFailed": "No se pudo comprobar la licencia.",
+    "revokeFailed": "No se pudo desactivar la licencia."
+  },
   "language": {
     "label": "Idioma",
     "english": "Inglés",
