@@ -21,6 +21,7 @@ export type SplitRuntimeRequest = {
   strategy: SplitLocalRequest["strategy"];
   outputMode?: SplitLocalRequest["outputMode"];
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type SplitRuntimeDependencies = {
@@ -69,6 +70,7 @@ export async function runSplitJob(
     documentName: inputRecord.name,
     outputMode,
     compressAfter: request.compressAfter,
+    compressionQuality: request.compressionQuality,
   };
 
   await emitProgress(deps.onProgress, {

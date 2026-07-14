@@ -212,7 +212,11 @@ export default defineBackground(() => {
             return deniedOperationResponse(authorization);
           }
           await ensureOffscreenDocument();
-          return forwardToOffscreen({ type: "offscreen:compression-start", mode: message.mode });
+          return forwardToOffscreen({
+            type: "offscreen:compression-start",
+            mode: message.mode,
+            quality: message.quality,
+          });
         }
         case "background:compression-cancel": {
           await ensureOffscreenDocument();
@@ -251,6 +255,7 @@ export default defineBackground(() => {
               strategy: message.strategy,
               outputMode: message.outputMode,
               compressAfter: message.compressAfter,
+              compressionQuality: message.compressionQuality,
             } as OffscreenSplitRequest);
             tracePdfSplit({
               outputMode,

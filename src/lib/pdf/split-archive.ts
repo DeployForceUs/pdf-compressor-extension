@@ -39,6 +39,7 @@ export type SplitArchiveRequest = {
   documentName?: string;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
   mupdfRuntimeUrl?: string;
 };
 
@@ -443,6 +444,7 @@ function buildCompressionRequest(
     fileName: part.filename,
     mimeType: "application/pdf",
     mode: "Balanced",
+    quality: request.compressionQuality,
     timeoutMs: 30_000,
   };
 }

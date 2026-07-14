@@ -6,6 +6,14 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
 import { formatBytes, formatDuration, formatPercent, normalizeLocale } from "../../lib/i18n/helpers";
 import { MAX_PDF_BYTES, validatePdfFile } from "../../lib/pdf-validation";
+import {
+  createCompressionQualityStorage,
+  DEFAULT_COMPRESSION_QUALITY,
+  MAX_COMPRESSION_QUALITY,
+  MIN_COMPRESSION_QUALITY,
+  normalizeCompressionQuality,
+} from "../../lib/compression-quality";
+import { getDeviceMemoryGb, getMaxPdfBytes } from "../../lib/pdf-size-policy";
 import { buildSelectedPdfDisplay, formatSplitWarningsHeader } from "./pdf-display";
 import { readPdfPageCount } from "../../lib/pdf-validation";
 import type {
@@ -66,6 +74,8 @@ import {
 } from "./split-ui";
 import { SELECTED_PDF_RECORD_ID, normalizeSplitSnapshot, usePopupStore, type SplitSnapshot } from "./store";
 import "../../styles/popup.css";
+
+const compressionQualityStorage = createCompressionQualityStorage(browser.storage.local);
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
   if (left.byteLength !== right.byteLength) {
@@ -325,6 +335,7 @@ function Popup() {
   const [monetizationState, setMonetizationState] = useState<MonetizationStateResponse | null>(null);
   const [monetizationCheckedAt, setMonetizationCheckedAt] = useState(0);
   const [cooldownNow, setCooldownNow] = useState(() => Date.now());
+  const [compressionQuality, setCompressionQuality] = useState(DEFAULT_COMPRESSION_QUALITY);
 
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
@@ -356,6 +367,7 @@ function Popup() {
     void runBackgroundHealthCheck();
     void checkLicense();
     void refreshMonetization();
+    void compressionQualityStorage.read().then(setCompressionQuality).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -476,6 +488,18 @@ function Popup() {
     }
   }
 
+  async function resolveCurrentMaxPdfBytes() {
+    let tier = monetizationState?.tier ?? (licenseState?.isPro ? "pro" : "free");
+    try {
+      const current = await sendMessage<MonetizationStateResponse>({ type: "monetization:state" });
+      tier = current.tier;
+      setMonetizationState(current);
+    } catch {
+      // The current popup state is a safe fallback; operation authorization remains authoritative.
+    }
+    return getMaxPdfBytes(tier, getDeviceMemoryGb());
+  }
+
   async function activateLicense() {
     const token = licenseToken.trim();
     if (!token) {
@@ -520,13 +544,16 @@ function Popup() {
     return openResult;
   }
 
-  function translateValidationIssue(issue: "empty" | "tooLarge" | "unsupported" | "invalid") {
+  function translateValidationIssue(
+    issue: "empty" | "tooLarge" | "unsupported" | "invalid",
+    maxBytes = MAX_PDF_BYTES,
+  ) {
     switch (issue) {
       case "empty":
         return t("pdfInput.emptyFile");
       case "tooLarge":
         return t("pdfInput.fileTooLarge", {
-          maxBytes: formatBytes(MAX_PDF_BYTES, locale),
+          maxBytes: formatBytes(maxBytes, locale),
         });
       case "unsupported":
         return t("pdfInput.unsupportedFile");
@@ -715,6 +742,17 @@ function Popup() {
       return;
     }
 
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    if (pdf.fileSize > maxBytes) {
+      setCompression({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: translateValidationIssue("tooLarge", maxBytes),
+      });
+      return;
+    }
+
     setCompression({
       status: "loading-engine",
       progress: 0,
@@ -724,7 +762,11 @@ function Popup() {
 
     try {
       const response = await sendMessage<CompressionStartResponse | BackgroundErrorResponse>(
-        { type: "background:compression-start", mode: "Balanced" } as BackgroundCompressionStartRequest,
+        {
+          type: "background:compression-start",
+          mode: "Balanced",
+          quality: compressionQuality,
+        } as BackgroundCompressionStartRequest,
       );
 
       if (!response.ok) {
@@ -810,6 +852,17 @@ function Popup() {
       return;
     }
 
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    if (pdf.fileSize > maxBytes) {
+      setSplit({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: translateValidationIssue("tooLarge", maxBytes),
+      });
+      return;
+    }
+
     const request = buildSplitRequestFromForm({
       strategy: split.strategy,
       outputMode: split.outputMode,
@@ -880,6 +933,7 @@ function Popup() {
           strategy: request.strategy,
           outputMode: request.outputMode,
           compressAfter: request.compressAfter,
+          compressionQuality,
         },
       );
 
@@ -969,13 +1023,14 @@ function Popup() {
       error: "",
     });
 
-    const validation = await validatePdfFile(file);
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    const validation = await validatePdfFile(file, { maxBytes });
 
     if (!validation.ok) {
       setPdf({
         status: "error",
         selected: false,
-        error: translateValidationIssue(validation.issue),
+        error: translateValidationIssue(validation.issue, validation.maxBytes ?? maxBytes),
       });
       return;
     }
@@ -1137,6 +1192,14 @@ function Popup() {
     }
 
     await persistPdfFile(file);
+  }
+
+  function changeCompressionQuality(value: number) {
+    const quality = normalizeCompressionQuality(value);
+    setCompressionQuality(quality);
+    void compressionQualityStorage.write(quality).catch(() => {
+      setCompression({ status: "error", error: t("errors.storage") });
+    });
   }
 
   async function clearSelectedPdf() {
@@ -1888,7 +1951,26 @@ function Popup() {
               </div>
 
               <div className="compression-card__status">{compressionStatusLabel}</div>
-              <div className="compression-card__mode">{t("compression.balanced")}</div>
+              <label className="compression-quality">
+                <span className="compression-quality__header">
+                  <span>{t("compression.quality")}</span>
+                  <strong>{`${compressionQuality}%`}</strong>
+                </span>
+                <input
+                  type="range"
+                  min={MIN_COMPRESSION_QUALITY}
+                  max={MAX_COMPRESSION_QUALITY}
+                  step={5}
+                  value={compressionQuality}
+                  disabled={sharedBusy}
+                  onChange={(event) => changeCompressionQuality(Number(event.currentTarget.value))}
+                />
+                <span className="compression-quality__labels" aria-hidden="true">
+                  <span>{t("compression.qualityLow")}</span>
+                  <span>{t("compression.qualityMedium")}</span>
+                  <span>{t("compression.qualityHigh")}</span>
+                </span>
+              </label>
 
               <div className="compression-progress" role="progressbar" aria-valuenow={compression.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="compression-progress__track">

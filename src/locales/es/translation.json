@@ -88,6 +88,10 @@
   "compression": {
     "title": "Compresión de PDF",
     "balanced": "Equilibrado",
+    "quality": "Calidad de imagen",
+    "qualityLow": "Baja",
+    "qualityMedium": "Media",
+    "qualityHigh": "Alta",
     "compressPdf": "Comprimir PDF",
     "compressAgain": "Comprimir de nuevo",
     "loadingEngine": "Cargando motor",

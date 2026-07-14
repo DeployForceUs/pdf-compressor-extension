@@ -295,6 +295,7 @@ export type SplitLocalRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type SplitCancelRequest = {
@@ -316,6 +317,7 @@ export type BackgroundSplitStartRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type BackgroundSplitCancelRequest = {
@@ -337,6 +339,7 @@ export type OffscreenSplitRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type OffscreenSplitCancelRequest = {
@@ -419,6 +422,7 @@ export type CompressionHealthRequest = {
 export type CompressionStartRequest = {
   type: "compression:start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type CompressionCancelRequest = {
@@ -440,6 +444,7 @@ export type BackgroundCompressionHealthRequest = {
 export type BackgroundCompressionStartRequest = {
   type: "background:compression-start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type BackgroundCompressionCancelRequest = {
@@ -462,6 +467,7 @@ export type OffscreenCompressionHealthRequest = {
 export type OffscreenCompressionStartRequest = {
   type: "offscreen:compression-start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type OffscreenCompressionCancelRequest = {

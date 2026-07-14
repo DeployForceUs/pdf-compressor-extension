@@ -26,7 +26,7 @@
 4. Issuance: a local-only CLI signs perpetual customer tokens with the encrypted private key and writes them mode `600`. **Implemented.**
 5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`. **Implemented.**
 6. UI: localized activation, Pro state, remaining usage, and live cooldown feedback. **Implemented.**
-7. Quality/device policy: persisted quality selection and device-memory-aware size limits.
+7. Quality/device policy: persisted quality selection and device-memory-aware size limits. **Implemented.**
 
 ## Foundation Safety Properties
 
@@ -76,3 +76,29 @@
 - Cooldown, daily-limit, and Pro-required denials use structured codes rendered as localized popup errors.
 - Free users see a persistent inline Pro-required notice beside `compressAfter`; runtime denials are repeated beside the Split action.
 - The license card shows current Free compression/Split allowances and a live shared-cooldown countdown; Pro displays unlimited operations.
+
+## Browser Acceptance
+
+- Production ES256 token activation and persistence after popup reload passed.
+- Pro-only `compressAfter` completed on the Canon fixture with 11 parts and expected not-smaller fallbacks.
+- Free Pro gating prevented work from starting and rendered the localized inline warning.
+- The shared Free cooldown rejected an immediate operation and allowed it after the countdown.
+- Free compression usage reached 0 of 3 remaining; the next attempt was rejected with `Free daily limit reached: 3 compressions per day.`
+- Free usage counters remained visible and persisted across popup reloads.
+
+## Quality and Device Policy
+
+- Image quality is selectable from 10% through 100%, defaults to 60%, and is stored in `chrome.storage.local`.
+- The selected quality is forwarded through background, offscreen, and Worker boundaries for normal compression.
+- The same quality is applied when Pro `compressAfter` recompresses Split parts.
+- Free PDF input is limited to 100 MiB.
+- Pro PDF input is limited to 250 MiB on devices reporting at least 4 GB of memory.
+- Devices reporting less than 4 GB are capped at 100 MiB for both tiers.
+- Browsers without `navigator.deviceMemory` use the conservative 4 GB fallback.
+- The active size policy is rechecked both when a PDF is selected and immediately before Compression or Split starts.
+
+## Validation
+
+- `npm run check`: passed.
+- Stage 7 foundation, license-token, issuer, enforcement, and quality/device policy tests: passed.
+- `npm run build`: passed.
