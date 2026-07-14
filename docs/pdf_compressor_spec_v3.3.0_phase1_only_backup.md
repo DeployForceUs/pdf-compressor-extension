@@ -1,5 +1,7 @@
 # PDF Compressor Browser Extension — Specification v3.3.0-MVP
 
+> **Archive notice:** This is the frozen historical scope used to execute Phase 1. It is not the current product specification or status roadmap. Use [`pdf_compressor_spec_v3.3.0.md`](./pdf_compressor_spec_v3.3.0.md) for requirements and [`PHASE_ROADMAP.md`](./PHASE_ROADMAP.md) for canonical numbering and current status.
+
 **Date:** 2026-07-11  
 **Target:** Chromium-based browsers  
 **Manifest:** V3

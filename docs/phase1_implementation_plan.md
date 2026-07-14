@@ -1,5 +1,7 @@
 # PDF Compressor Browser Extension — Phase 1 Implementation Plan
 
+> **Historical plan:** This document records the completed Phase 1 execution plan. It must not be used to infer the repository's current phase. See [`PHASE_ROADMAP.md`](./PHASE_ROADMAP.md).
+
 **Specification:** v3.3.0  
 **Phase:** 1 — Basic Infrastructure  
 **Target:** Chromium-based browsers  

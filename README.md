@@ -1,6 +1,16 @@
 # PDF Compressor Extension
 
-Phase 1 infrastructure based on specification v3.3.0.
+Local-first Chrome extension for PDF compression and splitting, based on specification v3.3.0.
+
+## Project Status
+
+- Stages 1-3 are merged into `main`.
+- Stage 4 client-side compression is implemented on feature branches but is not yet merged into `main`.
+- Canonical Stage 5 JPEG2000 support is deferred and not implemented.
+- Canonical Stage 6 PDF Split is implemented and manually accepted in Chrome under the historical branch/report label "Phase 5"; it is not yet merged into `main`.
+- Canonical Stage 7 Freemium and licensing has not started.
+
+See [`docs/PHASE_ROADMAP.md`](docs/PHASE_ROADMAP.md) before creating a phase branch or interpreting historical `PHASE_5_*` reports.
 
 ## Setup
 
@@ -24,25 +34,28 @@ npm run build
 
 Production output is written to `.output/chrome-mv3/`.
 
-## Phase 1 Scope
+## Current Capabilities
 
-Implemented in this phase:
+Implemented on the current cumulative feature branch:
 
 - WXT + React + TypeScript scaffold
 - Manifest V3 configuration
 - background service worker
 - popup UI with Zustand
-- typed popup/background messaging
+- localized English and Spanish UI
+- local PDF selection and validation
+- typed popup/background/offscreen/worker messaging
 - offscreen document
-- IndexedDB smoke storage through `idb`
-- privacy-safe logging
-- optional Sentry bootstrap
+- client-side MuPDF compression with conservative image recompression
+- PDF splitting by pages, maximum size, and manual ranges
+- single ZIP, individual PDF, and separate ZIP output modes
+- IndexedDB persistence and restored downloads
 
-Not implemented in Phase 1:
+Not yet implemented:
 
-- PDF compression
-- PDF splitting
-- MuPDF integration
-- `pdf-lib` processing
-- licensing, limits, paywall, payments
+- JPEG2000 / OpenJPEG
+- Free daily limits and rate limiting
+- production Pro-license verification and activation
+- quality slider persistence
+- URL/viewer/context-menu PDF acquisition required by the full specification
 - On-Premise / Enterprise features

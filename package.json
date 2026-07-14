@@ -7,15 +7,18 @@
     "prebuild": "node scripts/vendor-mupdf.mjs",
     "build": "wxt build",
     "check": "tsc --noEmit",
+    "check:worker-boundary": "node scripts/assert-worker-runtime-boundary.mjs",
     "dev": "wxt",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "comlink": "^4.4.2",
+    "fflate": "^0.8.2",
     "i18next": "^25.3.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "idb": "^8.0.3",
     "mupdf": "^1.28.0",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-i18next": "^15.4.1",
@@ -27,6 +30,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@wxt-dev/module-react": "1.2.2",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "5.9.3",
     "wxt": "0.20.27"
   }

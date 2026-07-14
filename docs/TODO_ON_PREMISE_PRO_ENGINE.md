@@ -1,5 +1,7 @@
 # TODO — On-Premise Pro Compression Engine
 
+> **Roadmap note:** This is post-release canonical Stage 11 exploration. Its Phase A-D labels are internal On-Premise subphases and are unrelated to the product's canonical numbered stages. See [`PHASE_ROADMAP.md`](./PHASE_ROADMAP.md).
+
 ## Цель
 
 Добавить к браузерному расширению второй, более мощный режим сжатия PDF, работающий внутри инфраструктуры клиента.

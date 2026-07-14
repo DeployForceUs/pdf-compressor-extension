@@ -266,6 +266,7 @@ export async function compressBalancedPdf(
       pdfDocument,
       imageClassification,
       75,
+      isCancelled,
     );
     if (import.meta.env.DEV) {
       logger.info(

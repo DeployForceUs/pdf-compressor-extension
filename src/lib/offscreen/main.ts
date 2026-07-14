@@ -1,17 +1,31 @@
 import { proxy, transfer, wrap } from "comlink";
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../bootstrap";
-import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID } from "../pdf-records";
+import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID, SPLIT_PDF_RECORD_ID } from "../pdf-records";
+import { completeCompressionOutcome, compressionMetadata } from "./compression-runtime";
 import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../storage/pdf-compression-db";
+import { deletePdfRecord, readPdfRecord, writePdfRecord } from "../storage/pdf-records-db";
+import {
+  buildSplitResultMetadataFromBundle,
+  buildSplitResultMetadataFromLegacyRecord,
+  deleteSplitResult,
+  readSplitArtifactsForBundle,
+  readSplitResult,
+  readSplitResultBundle,
+  writeSplitResultBundle,
+} from "../storage/pdf-split-results-db";
 import type {
   CompressionCancelResponse,
   CompressionErrorEvent,
   CompressionHealthResponse,
   CompressionProgressEvent,
-  CompressionResultMetadata,
   CompressionResultDeleteResponse,
   CompressionResultReadResponse,
   CompressionStartResponse,
+  OffscreenSplitCancelRequest,
+  OffscreenSplitRequest,
+  OffscreenSplitResultDeleteRequest,
+  OffscreenSplitResultReadRequest,
   OffscreenCompressionCancelRequest,
   OffscreenCompressionHealthRequest,
   OffscreenCompressionResultDeleteRequest,
@@ -20,23 +34,39 @@ import type {
   OffscreenRequest,
   OffscreenResponse,
   PdfRecord,
+  SplitCancelResponse,
+  SplitErrorEvent,
+  SplitProgressEvent,
+  SplitResultDeleteResponse,
+  SplitResultMetadata,
+  SplitResultReadResponse,
+  SplitResultBundle,
+  SplitStartResponse,
 } from "../messaging";
+import { toSplitRuntimeError } from "../pdf/split-errors";
+import { runSplitJob } from "./split-runtime";
 import type { CompressionWorkerApi } from "./worker";
+import { normalizeSplitOutputMode } from "../messaging";
+import { tracePdfSplit } from "../pdf-split-trace";
 
+const COMPRESSION_TIMEOUT_MS = 30_000;
+const SPLIT_TIMEOUT_MS = 30_000;
+const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
 const DB_VERSION = 2;
-const COMPRESSION_TIMEOUT_MS = 30_000;
-const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
 
-type DatabaseHandle = {
-  db: IDBDatabase;
+type CompressionRunState = {
+  abortController: AbortController;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  reason: "cancelled" | "timeout" | null;
+  recordId: string;
 };
 
-type CompressionRunState = {
+type SplitRunState = {
   abortController: AbortController;
   timeoutId: ReturnType<typeof setTimeout> | null;
   reason: "cancelled" | "timeout" | null;
@@ -46,6 +76,11 @@ type CompressionRunState = {
 let workerInstance: Worker | null = null;
 let workerApi: CompressionWorkerApi | null = null;
 let activeCompression: CompressionRunState | null = null;
+let activeSplit: SplitRunState | null = null;
+
+type DatabaseHandle = {
+  db: IDBDatabase;
+};
 
 function openDatabase(): Promise<DatabaseHandle> {
   return new Promise((resolve, reject) => {
@@ -53,10 +88,9 @@ function openDatabase(): Promise<DatabaseHandle> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (db.objectStoreNames.contains(RECORD_STORE)) {
-        db.deleteObjectStore(RECORD_STORE);
+      if (!db.objectStoreNames.contains(RECORD_STORE)) {
+        db.createObjectStore(RECORD_STORE, { keyPath: "id" });
       }
-      db.createObjectStore(RECORD_STORE, { keyPath: "id" });
     };
 
     request.onsuccess = () => {
@@ -130,15 +164,6 @@ async function putBytes(key: string, bytes: number[]) {
   return { ok: true as const, byteLength: record.byteLength };
 }
 
-async function putPdf(record: PdfRecord) {
-  const stored: PdfRecord = {
-    ...record,
-    data: [...record.data],
-  };
-  await withStore("readwrite", (store) => requestToPromise(store.put(stored)));
-  return { ok: true as const, recordId: record.id, byteLength: record.data.length };
-}
-
 async function readBytes(key: string) {
   const value = await withStore("readonly", (store) => requestToPromise(store.get(key)));
   if (value === undefined) {
@@ -150,7 +175,7 @@ async function readBytes(key: string) {
 }
 
 async function readPdf(recordId: string) {
-  const value = (await withStore("readonly", (store) => requestToPromise(store.get(recordId)))) as PdfRecord | undefined;
+  const value = await readPdfRecord(recordId);
   return { ok: true as const, recordId, record: value ?? null, byteLength: value?.data.length ?? 0 };
 }
 
@@ -160,9 +185,8 @@ async function deleteBytes(key: string) {
 }
 
 async function deletePdf(recordId: string) {
-  const existing = await withStore("readonly", (store) => requestToPromise(store.get(recordId)));
-  await withStore("readwrite", (store) => requestToPromise(store.delete(recordId)));
-  return { ok: true as const, recordId, deleted: existing !== undefined };
+  const deleted = await deletePdfRecord(recordId);
+  return { ok: true as const, recordId, deleted };
 }
 
 async function compareBytes(key: string, bytes: number[]) {
@@ -183,10 +207,45 @@ function broadcast<T extends { type: string }>(message: T) {
 
 function getCompressionWorker() {
   if (!workerInstance) {
+    tracePdfSplit({
+      stage: "worker-create-start",
+      workerLifecycle: "creating",
+      messageDirection: "offscreen->worker",
+      success: true,
+    });
     workerInstance = new Worker(new URL("./worker.ts", import.meta.url), {
       type: "module",
     });
+    workerInstance.addEventListener("error", (event) => {
+      tracePdfSplit({
+        stage: "worker-error",
+        workerLifecycle: "error",
+        messageDirection: "worker->offscreen",
+        success: false,
+        error: new Error(event.message),
+        details: {
+          filename: event.filename,
+          lineNumber: event.lineno,
+          columnNumber: event.colno,
+        },
+      });
+    });
+    workerInstance.addEventListener("messageerror", () => {
+      tracePdfSplit({
+        stage: "worker-message-error",
+        workerLifecycle: "messageerror",
+        messageDirection: "worker->offscreen",
+        success: false,
+        error: new DOMException("Worker message could not be deserialized", "DataCloneError"),
+      });
+    });
     workerApi = wrap<CompressionWorkerApi>(workerInstance);
+    tracePdfSplit({
+      stage: "worker-proxy-created",
+      workerLifecycle: "proxy-ready",
+      messageDirection: "offscreen->worker",
+      success: true,
+    });
   }
 
   if (!workerApi) {
@@ -194,6 +253,30 @@ function getCompressionWorker() {
   }
 
   return workerApi;
+}
+
+function getSplitWorkerGateway() {
+  const worker = getCompressionWorker();
+
+  return {
+    split(
+      request: Parameters<CompressionWorkerApi["split"]>[0],
+      isCancelled: Parameters<CompressionWorkerApi["split"]>[1],
+      onProgress: Parameters<CompressionWorkerApi["split"]>[2],
+    ) {
+      return worker.split(
+        transfer(
+          {
+            ...request,
+            mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
+          },
+          [request.inputBytes],
+        ),
+        proxy(isCancelled),
+        proxy(onProgress),
+      );
+    },
+  };
 }
 
 function getMuPdfRuntimeUrl() {
@@ -208,47 +291,34 @@ function resetCompressionState() {
   activeCompression = null;
 }
 
-function compressionErrorPayload(
-  code: string,
-  message: string,
-  recordId: string | null = COMPRESSED_PDF_RECORD_ID,
-): CompressionErrorEvent {
-  return {
-    type: "compression:error",
-    recordId,
-    code: code as CompressionErrorEvent["code"],
-    message,
-  };
-}
-
-function compressionResultEvent(result: Awaited<ReturnType<typeof writeCompressionResult>>) {
-  return {
-    type: "compression:result" as const,
-    result: toCompressionMetadata(result),
-  };
-}
-
-function toCompressionMetadata(result: Awaited<ReturnType<typeof writeCompressionResult>>): CompressionResultMetadata {
-  return {
-    id: result.id,
-    sourceRecordId: result.sourceRecordId,
-    fileName: result.fileName,
-    mimeType: result.mimeType,
-    originalSize: result.originalSize,
-    compressedSize: result.compressedSize,
-    savedBytes: result.savedBytes,
-    savedPercent: result.savedPercent,
-    pageCount: result.pageCount,
-    createdAt: result.createdAt,
-    updatedAt: result.updatedAt,
-    status: "complete",
-  };
-}
-
 function compressionProgressFromMessage(
   event: CompressionProgressEvent,
 ): CompressionProgressEvent {
   return event;
+}
+
+function splitProgressFromMessage(event: SplitProgressEvent): SplitProgressEvent {
+  return event;
+}
+
+function splitResultEventFromMetadata(result: SplitResultMetadata) {
+  return {
+    type: "split:result" as const,
+    result,
+  };
+}
+
+function splitErrorPayload(
+  code: SplitErrorEvent["code"],
+  message: string,
+  recordId: string | null = SPLIT_PDF_RECORD_ID,
+): SplitErrorEvent {
+  return {
+    type: "split:error",
+    recordId,
+    code,
+    message,
+  };
 }
 
 async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
@@ -258,12 +328,192 @@ async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
 
 async function readCompressionState(recordId?: string) {
   const result = await readCompressionResult(recordId);
-  return { ok: true as const, result: result ? toCompressionMetadata(result) : null };
+  return { ok: true as const, result: result ? compressionMetadata(result) : null };
 }
 
 async function deleteCompressionState() {
   const deleted = await deleteCompressionResult();
   return { ok: true as const, deleted };
+}
+
+function resetSplitState() {
+  if (activeSplit?.timeoutId) {
+    clearTimeout(activeSplit.timeoutId);
+  }
+
+  activeSplit = null;
+}
+
+async function cancelSplit() {
+  if (!activeSplit) {
+    return { ok: true as const, cancelled: false, details: "No split job is active" };
+  }
+
+  activeSplit.reason = "cancelled";
+  activeSplit.abortController.abort();
+  return { ok: true as const, cancelled: true, details: "Cancellation requested" };
+}
+
+async function readSplitState(recordId?: string) {
+  const bundle = await readSplitResultBundle(recordId);
+  if (bundle) {
+    const artifacts = await readSplitArtifactsForBundle(bundle.id);
+    return {
+      ok: true as const,
+      result: artifacts ? buildSplitResultMetadataFromBundle(bundle, artifacts) : null,
+    };
+  }
+
+  const legacy = await readSplitResult(recordId);
+  return { ok: true as const, result: legacy ? buildSplitResultMetadataFromLegacyRecord(legacy) : null };
+}
+
+async function deleteSplitState(recordId?: string) {
+  const deleted = await deleteSplitResult(recordId);
+  return { ok: true as const, deleted };
+}
+
+async function startSplit(
+  message: OffscreenSplitRequest,
+): Promise<SplitStartResponse | { ok: false; error: string }> {
+  const outputMode = normalizeSplitOutputMode(message.outputMode);
+  tracePdfSplit({
+    outputMode,
+    stage: "offscreen-received-request",
+    messageDirection: "background->offscreen",
+    success: true,
+  });
+  if (activeSplit) {
+    return {
+      ok: false,
+      error: "Split is already in progress",
+    };
+  }
+
+  const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
+  if (!selected) {
+    return {
+      ok: false,
+      error: "No selected PDF record is available",
+    };
+  }
+
+  const abortController = new AbortController();
+  const started = performance.now();
+
+  activeSplit = {
+    abortController,
+    timeoutId: null,
+    reason: null,
+    recordId: SPLIT_PDF_RECORD_ID,
+  };
+
+  activeSplit.timeoutId = setTimeout(() => {
+    if (activeSplit) {
+      activeSplit.reason = "timeout";
+      activeSplit.abortController.abort();
+    }
+  }, SPLIT_TIMEOUT_MS);
+
+  try {
+    const response = await runSplitJob(
+      selected,
+      {
+        strategy: message.strategy,
+        outputMode: message.outputMode,
+        compressAfter: message.compressAfter,
+      },
+      {
+        workerApi: getSplitWorkerGateway(),
+        persistResult: writeSplitResultBundle,
+        isCancelled: () => abortController.signal.aborted,
+        onProgress: (event) => {
+          const progressEvent = splitProgressFromMessage(event);
+          tracePdfSplit({
+            outputMode,
+            stage: `progress:${progressEvent.stage}`,
+            messageDirection: "worker->offscreen->popup",
+            success: true,
+            details: {
+              progress: progressEvent.progress,
+              partsCount: progressEvent.partsCount,
+              currentPart: progressEvent.currentPart,
+            },
+          });
+          logger.info("Split progress", {
+            recordId: progressEvent.recordId,
+            stage: progressEvent.stage,
+            progress: progressEvent.progress,
+            partsCount: progressEvent.partsCount,
+            currentPart: progressEvent.currentPart,
+          });
+          broadcast(progressEvent);
+        },
+      },
+    );
+
+    tracePdfSplit({
+      outputMode,
+      stage: "result-broadcast-start",
+      messageDirection: "offscreen->popup",
+      success: true,
+    });
+    broadcast(splitResultEventFromMetadata(response.result));
+    tracePdfSplit({
+      outputMode,
+      stage: "result-broadcast-dispatched",
+      messageDirection: "offscreen->popup",
+      success: true,
+    });
+    logger.info("Split completed", {
+      recordId: response.zipBlobId,
+      partsCount: response.result.partsCount,
+      originalSize: response.result.originalSize,
+      totalPartsSize: response.result.totalPartsSize,
+      elapsedMs: performance.now() - started,
+    });
+
+    return response;
+  } catch (error) {
+    const runtimeError = toSplitRuntimeError(error);
+    const timedOut = activeSplit?.reason === "timeout";
+    const cancelled = activeSplit?.reason === "cancelled" || abortController.signal.aborted;
+
+    let code: SplitErrorEvent["code"] = runtimeError.code;
+    let message = runtimeError.message;
+
+    if (timedOut) {
+      code = "TIMEOUT";
+      message = "Split timed out";
+    } else if (cancelled) {
+      code = "CANCELLED";
+      message = "Split was cancelled";
+    }
+
+    const payload = splitErrorPayload(code, message, SPLIT_PDF_RECORD_ID);
+    tracePdfSplit({
+      outputMode,
+      stage: "offscreen-split-failed",
+      messageDirection: "offscreen->popup",
+      success: false,
+      error,
+      details: { code },
+    });
+    broadcast(payload);
+    logger.error("Split failed", {
+      recordId: SPLIT_PDF_RECORD_ID,
+      code,
+      message,
+      elapsedMs: performance.now() - started,
+    });
+
+    return {
+      ok: false,
+      error: message,
+    };
+  } finally {
+    resetSplitState();
+  }
 }
 
 async function cancelCompression() {
@@ -356,32 +606,38 @@ async function startCompression(
       proxy(onProgress),
     );
 
-    await writeCompressionResult(outcome.result);
-    broadcast({
-      type: "compression:progress",
-      recordId: outcome.result.id,
-      stage: "complete",
-      progress: 100,
-      pageCount: outcome.pageCount,
-      currentPage: outcome.pageCount,
-      message: "Compression complete",
-    });
-    broadcast(compressionResultEvent(outcome.result));
-    logger.info("Compression completed", {
-      recordId: outcome.result.id,
-      pageCount: outcome.pageCount,
-      originalSize: outcome.result.originalSize,
-      compressedSize: outcome.result.compressedSize,
-      savedBytes: outcome.result.savedBytes,
-      elapsedMs: performance.now() - started,
-    });
+    const completion = await completeCompressionOutcome(
+      outcome,
+      {
+        persistResult: writeCompressionResult,
+        broadcast,
+      },
+      {
+        recordId: COMPRESSED_PDF_RECORD_ID,
+        timedOut: activeCompression?.reason === "timeout",
+        cancelled: activeCompression?.reason === "cancelled" || abortController.signal.aborted,
+      },
+    );
 
-    return {
-      ok: true,
-      recordId: outcome.result.id,
-      result: toCompressionMetadata(outcome.result),
-      details: outcome.result.savedBytes > 0 ? "Compression complete" : "Compression complete with no size reduction",
-    };
+    if (completion.ok) {
+      logger.info("Compression completed", {
+        recordId: outcome.result.id,
+        pageCount: outcome.pageCount,
+        originalSize: outcome.result.originalSize,
+        compressedSize: outcome.result.compressedSize,
+        savedBytes: outcome.result.savedBytes,
+        elapsedMs: performance.now() - started,
+      });
+    } else {
+      logger.error("Compression failed", {
+        recordId: COMPRESSED_PDF_RECORD_ID,
+        code: completion.code,
+        message: completion.error,
+        elapsedMs: performance.now() - started,
+      });
+    }
+
+    return completion;
   } catch (error) {
     const timedOut = activeCompression?.reason === "timeout";
     const cancelled = activeCompression?.reason === "cancelled" || abortController.signal.aborted;
@@ -402,7 +658,12 @@ async function startCompression(
       code = "WASM_LOAD_FAILED";
     }
 
-    const payload = compressionErrorPayload(code, message, COMPRESSED_PDF_RECORD_ID);
+    const payload = {
+      type: "compression:error" as const,
+      recordId: COMPRESSED_PDF_RECORD_ID,
+      code: code as CompressionErrorEvent["code"],
+      message,
+    };
     broadcast(payload);
     logger.error("Compression failed", {
       recordId: COMPRESSED_PDF_RECORD_ID,
@@ -443,7 +704,11 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
         type: message.record.type,
         found: true,
       });
-      return putPdf(message.record);
+      return writePdfRecord(message.record).then((record) => ({
+        ok: true as const,
+        recordId: record.id,
+        byteLength: record.data.length,
+      }));
     case "pdf:read":
       logger.info("Reading PDF record", {
         recordId: message.recordId,
@@ -469,6 +734,14 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
       return readCompressionState(message.recordId);
     case "offscreen:compression-result-delete":
       return deleteCompressionState();
+    case "offscreen:split":
+      return startSplit(message);
+    case "offscreen:split-cancel":
+      return cancelSplit();
+    case "offscreen:split-result-read":
+      return readSplitState(message.recordId);
+    case "offscreen:split-result-delete":
+      return deleteSplitState(message.recordId);
     default:
       return null;
   }

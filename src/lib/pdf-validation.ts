@@ -1,3 +1,5 @@
+import { EncryptedPDFError, PDFDocument } from "pdf-lib";
+
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const PDF_SIGNATURE_BYTES = new TextEncoder().encode("%PDF-");
 
@@ -67,4 +69,29 @@ export async function validatePdfFile(file: File): Promise<PdfValidationResult> 
       mimeType: file.type,
     },
   };
+}
+
+const ENCRYPTED_LOAD_ERROR_MESSAGE =
+  "Input document to `PDFDocument.load` is encrypted. You can use `PDFDocument.load(..., { ignoreEncryption: true })` if you wish to load the document anyways.";
+
+function isEncryptedPdfLoadError(error: unknown) {
+  return error instanceof EncryptedPDFError || (error instanceof Error && error.message === ENCRYPTED_LOAD_ERROR_MESSAGE);
+}
+
+export async function readPdfPageCount(bytes: ArrayBuffer | Uint8Array): Promise<number | null> {
+  const sourceBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+  try {
+    return (await PDFDocument.load(sourceBytes)).getPageCount();
+  } catch (error) {
+    if (!isEncryptedPdfLoadError(error)) {
+      return null;
+    }
+  }
+
+  try {
+    return (await PDFDocument.load(sourceBytes, { ignoreEncryption: true })).getPageCount();
+  } catch {
+    return null;
+  }
 }
