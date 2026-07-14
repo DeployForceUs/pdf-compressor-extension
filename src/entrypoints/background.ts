@@ -18,6 +18,8 @@ import type {
   SplitResultDeleteRequest,
   SplitResultReadRequest,
 } from "../lib/messaging";
+import { normalizeSplitOutputMode } from "../lib/messaging";
+import { tracePdfSplit } from "../lib/pdf-split-trace";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -150,13 +152,44 @@ export default defineBackground(() => {
           return forwardToOffscreen({ type: "offscreen:compression-result-delete" });
         }
         case "split:local": {
+          const outputMode = normalizeSplitOutputMode(message.outputMode);
+          tracePdfSplit({
+            outputMode,
+            stage: "background-received-request",
+            messageDirection: "popup->background",
+            success: true,
+          });
           await ensureOffscreenDocument();
-          return forwardToOffscreen<BackgroundResponse>({
-            type: "offscreen:split",
-            strategy: message.strategy,
-            outputMode: message.outputMode,
-            compressAfter: message.compressAfter,
-          } as OffscreenSplitRequest);
+          tracePdfSplit({
+            outputMode,
+            stage: "background-forwarding-request",
+            messageDirection: "background->offscreen",
+            success: true,
+          });
+          try {
+            const response = await forwardToOffscreen<BackgroundResponse>({
+              type: "offscreen:split",
+              strategy: message.strategy,
+              outputMode: message.outputMode,
+              compressAfter: message.compressAfter,
+            } as OffscreenSplitRequest);
+            tracePdfSplit({
+              outputMode,
+              stage: "background-received-response",
+              messageDirection: "offscreen->background",
+              success: true,
+            });
+            return response;
+          } catch (error) {
+            tracePdfSplit({
+              outputMode,
+              stage: "background-received-response",
+              messageDirection: "offscreen->background",
+              success: false,
+              error,
+            });
+            throw error;
+          }
         }
         case "split:cancel": {
           await ensureOffscreenDocument();

@@ -39,6 +39,7 @@ import type {
   StorageWriteResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
+import { tracePdfSplit } from "../../lib/pdf-split-trace";
 import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
 import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
 import {
@@ -346,6 +347,13 @@ function Popup() {
       }
 
       if (isSplitResultEvent(message)) {
+        tracePdfSplit({
+          outputMode: message.result.outputMode,
+          stage: "popup-received-completion",
+          messageDirection: "offscreen->popup",
+          success: true,
+          details: { artifactCount: message.result.artifactCount },
+        });
         applySplitResult(message.result);
         return;
       }
@@ -751,6 +759,12 @@ function Popup() {
     });
 
     try {
+      tracePdfSplit({
+        outputMode: request.outputMode,
+        stage: "popup-send-request",
+        messageDirection: "popup->background",
+        success: true,
+      });
       const response = await sendMessage<SplitStartResponse | { ok: false; error: string }>(
         {
           type: "split:local",
@@ -764,8 +778,22 @@ function Popup() {
         throw new Error(response.error);
       }
 
+      tracePdfSplit({
+        outputMode: response.result.outputMode,
+        stage: "popup-received-request-response",
+        messageDirection: "background->popup",
+        success: true,
+        details: { artifactCount: response.result.artifactCount },
+      });
       applySplitResult(response.result);
     } catch (error) {
+      tracePdfSplit({
+        outputMode: request.outputMode,
+        stage: "popup-request-failed",
+        messageDirection: "background->popup",
+        success: false,
+        error,
+      });
       setSplit({
         status: "error",
         progress: 0,

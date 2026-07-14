@@ -18,6 +18,7 @@ import { buildSplitPart, type SplitByPagesOutputPart } from "./splitter";
 import type { SplitPageRange, SplitStrategy } from "./split-strategies";
 import { SplitRuntimeError, toSplitRuntimeError } from "./split-errors";
 import { loadMuPdfModule, loadSplitSourceDocument, validateGeneratedSplitPartBytes } from "./split-source-loader";
+import { tracePdfSplit } from "../pdf-split-trace";
 
 type AbortChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: SplitProgressEvent) => void | Promise<void>;
@@ -155,7 +156,48 @@ async function emitProgress(onProgress: ProgressReporter | undefined, event: Spl
     return;
   }
 
-  await onProgress(event);
+  tracePdfSplit({
+    outputMode: null,
+    stage: `progress-callback-start:${event.stage}`,
+    workerLifecycle: "running",
+    messageDirection: "split-engine->offscreen",
+    success: true,
+    details: {
+      progress: event.progress,
+      partsCount: event.partsCount,
+      currentPart: event.currentPart,
+    },
+  });
+  try {
+    await onProgress(event);
+    tracePdfSplit({
+      outputMode: null,
+      stage: `progress-callback-end:${event.stage}`,
+      workerLifecycle: "running",
+      messageDirection: "split-engine->offscreen",
+      success: true,
+      details: {
+        progress: event.progress,
+        partsCount: event.partsCount,
+        currentPart: event.currentPart,
+      },
+    });
+  } catch (error) {
+    tracePdfSplit({
+      outputMode: null,
+      stage: `progress-callback-end:${event.stage}`,
+      workerLifecycle: "running",
+      messageDirection: "split-engine->offscreen",
+      success: false,
+      error,
+      details: {
+        progress: event.progress,
+        partsCount: event.partsCount,
+        currentPart: event.currentPart,
+      },
+    });
+    throw error;
+  }
 }
 
 async function checkCancelled(isCancelled: AbortChecker | undefined) {
@@ -750,6 +792,14 @@ export async function createSplitZipArchive(
   onProgress?: ProgressReporter,
   deps: SplitArchiveDependencies = {},
 ): Promise<SplitArchiveOutcome> {
+  const outputMode = normalizeSplitOutputMode(request.outputMode);
+  tracePdfSplit({
+    outputMode,
+    stage: "create-split-zip-archive-entry",
+    workerLifecycle: "running",
+    messageDirection: "worker->split-engine",
+    success: true,
+  });
   if (request.compressAfter && !request.mupdfRuntimeUrl && !deps.compressPart) {
     throw new SplitRuntimeError("SPLIT_FAILED", "compressAfter requires mupdfRuntimeUrl");
   }
@@ -782,7 +832,6 @@ export async function createSplitZipArchive(
   const partsCount = finalized.parts.length;
 
   await checkCancelled(isCancelled);
-  const outputMode = normalizeSplitOutputMode(request.outputMode);
   await emitProgress(
     onProgress,
     buildProgress(

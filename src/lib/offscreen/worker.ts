@@ -8,6 +8,8 @@ import {
 } from "../pdf/compressor";
 import { createSplitZipArchive, type SplitArchiveRequest, type SplitArchiveOutcome } from "../pdf/split-archive";
 import { transferSplitWorkerReturn } from "./split-worker-transfer";
+import { normalizeSplitOutputMode } from "../messaging";
+import { tracePdfSplit } from "../pdf-split-trace";
 
 type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: CompressionProgressEvent) => void | Promise<void>;
@@ -39,7 +41,38 @@ const api: CompressionWorkerApi = {
   },
 
   async split(request: SplitArchiveRequest, isCancelled: CancellationChecker, onProgress: SplitProgressReporter) {
+    const outputMode = normalizeSplitOutputMode(request.outputMode);
+    tracePdfSplit({
+      outputMode,
+      stage: "worker-entry",
+      workerLifecycle: "rpc-entered",
+      messageDirection: "offscreen->worker",
+      success: true,
+    });
+    tracePdfSplit({
+      outputMode,
+      stage: "before-create-split-zip-archive",
+      workerLifecycle: "running",
+      messageDirection: "worker->split-engine",
+      success: true,
+    });
     const outcome = await createSplitZipArchive(request, isCancelled, onProgress);
+    tracePdfSplit({
+      outputMode,
+      stage: "after-create-split-zip-archive",
+      workerLifecycle: "running",
+      messageDirection: "split-engine->worker",
+      success: true,
+      details: { artifactCount: outcome.artifacts.length },
+    });
+    tracePdfSplit({
+      outputMode,
+      stage: "before-worker-return",
+      workerLifecycle: "rpc-returning",
+      messageDirection: "worker->offscreen",
+      success: true,
+      details: { artifactCount: outcome.artifacts.length },
+    });
     return transferSplitWorkerReturn(outcome);
   },
 };

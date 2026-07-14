@@ -46,6 +46,8 @@ import type {
 import { toSplitRuntimeError } from "../pdf/split-errors";
 import { runSplitJob } from "./split-runtime";
 import type { CompressionWorkerApi } from "./worker";
+import { normalizeSplitOutputMode } from "../messaging";
+import { tracePdfSplit } from "../pdf-split-trace";
 
 const COMPRESSION_TIMEOUT_MS = 30_000;
 const SPLIT_TIMEOUT_MS = 30_000;
@@ -205,10 +207,45 @@ function broadcast<T extends { type: string }>(message: T) {
 
 function getCompressionWorker() {
   if (!workerInstance) {
+    tracePdfSplit({
+      stage: "worker-create-start",
+      workerLifecycle: "creating",
+      messageDirection: "offscreen->worker",
+      success: true,
+    });
     workerInstance = new Worker(new URL("./worker.ts", import.meta.url), {
       type: "module",
     });
+    workerInstance.addEventListener("error", (event) => {
+      tracePdfSplit({
+        stage: "worker-error",
+        workerLifecycle: "error",
+        messageDirection: "worker->offscreen",
+        success: false,
+        error: new Error(event.message),
+        details: {
+          filename: event.filename,
+          lineNumber: event.lineno,
+          columnNumber: event.colno,
+        },
+      });
+    });
+    workerInstance.addEventListener("messageerror", () => {
+      tracePdfSplit({
+        stage: "worker-message-error",
+        workerLifecycle: "messageerror",
+        messageDirection: "worker->offscreen",
+        success: false,
+        error: new DOMException("Worker message could not be deserialized", "DataCloneError"),
+      });
+    });
     workerApi = wrap<CompressionWorkerApi>(workerInstance);
+    tracePdfSplit({
+      stage: "worker-proxy-created",
+      workerLifecycle: "proxy-ready",
+      messageDirection: "offscreen->worker",
+      success: true,
+    });
   }
 
   if (!workerApi) {
@@ -339,6 +376,13 @@ async function deleteSplitState(recordId?: string) {
 async function startSplit(
   message: OffscreenSplitRequest,
 ): Promise<SplitStartResponse | { ok: false; error: string }> {
+  const outputMode = normalizeSplitOutputMode(message.outputMode);
+  tracePdfSplit({
+    outputMode,
+    stage: "offscreen-received-request",
+    messageDirection: "background->offscreen",
+    success: true,
+  });
   if (activeSplit) {
     return {
       ok: false,
@@ -385,6 +429,17 @@ async function startSplit(
         isCancelled: () => abortController.signal.aborted,
         onProgress: (event) => {
           const progressEvent = splitProgressFromMessage(event);
+          tracePdfSplit({
+            outputMode,
+            stage: `progress:${progressEvent.stage}`,
+            messageDirection: "worker->offscreen->popup",
+            success: true,
+            details: {
+              progress: progressEvent.progress,
+              partsCount: progressEvent.partsCount,
+              currentPart: progressEvent.currentPart,
+            },
+          });
           logger.info("Split progress", {
             recordId: progressEvent.recordId,
             stage: progressEvent.stage,
@@ -397,7 +452,19 @@ async function startSplit(
       },
     );
 
+    tracePdfSplit({
+      outputMode,
+      stage: "result-broadcast-start",
+      messageDirection: "offscreen->popup",
+      success: true,
+    });
     broadcast(splitResultEventFromMetadata(response.result));
+    tracePdfSplit({
+      outputMode,
+      stage: "result-broadcast-dispatched",
+      messageDirection: "offscreen->popup",
+      success: true,
+    });
     logger.info("Split completed", {
       recordId: response.zipBlobId,
       partsCount: response.result.partsCount,
@@ -424,6 +491,14 @@ async function startSplit(
     }
 
     const payload = splitErrorPayload(code, message, SPLIT_PDF_RECORD_ID);
+    tracePdfSplit({
+      outputMode,
+      stage: "offscreen-split-failed",
+      messageDirection: "offscreen->popup",
+      success: false,
+      error,
+      details: { code },
+    });
     broadcast(payload);
     logger.error("Split failed", {
       recordId: SPLIT_PDF_RECORD_ID,

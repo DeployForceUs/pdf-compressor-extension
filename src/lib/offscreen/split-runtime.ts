@@ -12,6 +12,7 @@ import { SplitRuntimeError, toSplitRuntimeError } from "../pdf/split-errors";
 import type { SplitArchiveRequest } from "../pdf/split-archive";
 import type { SplitLocalRequest, SplitResultMetadata } from "../messaging";
 import { buildSplitResultMetadataFromBundle } from "../storage/pdf-split-bundles-db";
+import { tracePdfSplit } from "../pdf-split-trace";
 
 type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: SplitProgressEvent) => void | Promise<void>;
@@ -81,9 +82,32 @@ export async function runSplitJob(
   });
 
   let outcome;
+  tracePdfSplit({
+    outputMode,
+    stage: "before-worker-api-split",
+    workerLifecycle: "rpc-call",
+    messageDirection: "offscreen->worker",
+    success: true,
+  });
   try {
     outcome = await deps.workerApi.split(splitRequest, deps.isCancelled, deps.onProgress);
+    tracePdfSplit({
+      outputMode,
+      stage: "after-worker-api-split-resolved",
+      workerLifecycle: "rpc-resolved",
+      messageDirection: "worker->offscreen",
+      success: true,
+      details: { artifactCount: outcome.artifacts.length },
+    });
   } catch (error) {
+    tracePdfSplit({
+      outputMode,
+      stage: "worker-api-split-rejected",
+      workerLifecycle: "rpc-rejected",
+      messageDirection: "worker->offscreen",
+      success: false,
+      error,
+    });
     throw toSplitRuntimeError(error);
   }
 
@@ -133,9 +157,31 @@ export async function runSplitJob(
   };
 
   let persisted: SplitResultBundle;
+  tracePdfSplit({
+    outputMode,
+    stage: "persistence-start",
+    messageDirection: "offscreen->indexeddb",
+    success: true,
+    details: { artifactCount: artifacts.length },
+  });
   try {
     persisted = await deps.persistResult(bundle, artifacts);
+    tracePdfSplit({
+      outputMode,
+      stage: "persistence-end",
+      messageDirection: "indexeddb->offscreen",
+      success: true,
+      details: { artifactCount: artifacts.length },
+    });
   } catch (error) {
+    tracePdfSplit({
+      outputMode,
+      stage: "persistence-end",
+      messageDirection: "indexeddb->offscreen",
+      success: false,
+      error,
+      details: { artifactCount: artifacts.length },
+    });
     throw toSplitRuntimeError(error, "STORAGE_QUOTA_EXCEEDED");
   }
 
