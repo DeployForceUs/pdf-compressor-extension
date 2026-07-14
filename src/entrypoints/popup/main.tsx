@@ -1664,6 +1664,12 @@ function Popup() {
                 />
                 <span>{t("split.compressAfter")}</span>
               </label>
+              {split.compressAfter && !licenseState?.isPro ? (
+                <div className="split-pro-notice" role="alert">
+                  <strong>{t("monetization.proRequiredTitle")}</strong>
+                  <span>{t("monetization.proRequired")}</span>
+                </div>
+              ) : null}
 
               <div className="split-progress" role="progressbar" aria-valuenow={split.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="split-progress__track">
@@ -1707,6 +1713,9 @@ function Popup() {
               </div>
 
               <div className="split-actions">
+                {split.status === "error" && split.error ? (
+                  <p className="split-actions__error" role="alert">{split.error}</p>
+                ) : null}
                 <button type="button" className="primary" onClick={() => void startSplit()} disabled={!splitCanStart}>
                   {splitBusy ? t("split.splitting") : t("split.start")}
                 </button>

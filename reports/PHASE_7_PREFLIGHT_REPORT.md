@@ -74,3 +74,4 @@
 - Free compression and Split requests reserve their daily usage atomically before execution.
 - Free `compressAfter` requests are rejected as Pro-only without consuming a Split allowance.
 - Cooldown, daily-limit, and Pro-required denials use structured codes rendered as localized popup errors.
+- Free users see a persistent inline Pro-required notice beside `compressAfter`; runtime denials are repeated beside the Split action.
