@@ -1,6 +1,15 @@
 import browser from "webextension-polyfill";
 import type { SplitStrategy } from "./pdf/split-strategies";
 import type { SplitErrorCode } from "./pdf/split-errors";
+import type { SplitOutputMode } from "./split-output-mode";
+
+export {
+  SPLIT_OUTPUT_MODES,
+  SPLIT_OUTPUT_MODE_DEFAULT,
+  isSplitOutputMode,
+  normalizeSplitOutputMode,
+} from "./split-output-mode";
+export type { SplitOutputMode } from "./split-output-mode";
 
 export type OffscreenHealthRequest = {
   type: "offscreen:health";
@@ -166,19 +175,6 @@ export type SplitProgressStage =
   | "creating-artifacts"
   | "persisting"
   | "complete";
-
-export const SPLIT_OUTPUT_MODES = ["single-zip", "individual-pdfs", "separate-zips"] as const;
-export type SplitOutputMode = (typeof SPLIT_OUTPUT_MODES)[number];
-
-export const SPLIT_OUTPUT_MODE_DEFAULT: SplitOutputMode = "single-zip";
-
-export function isSplitOutputMode(value: unknown): value is SplitOutputMode {
-  return typeof value === "string" && (SPLIT_OUTPUT_MODES as readonly string[]).includes(value);
-}
-
-export function normalizeSplitOutputMode(value: unknown): SplitOutputMode {
-  return isSplitOutputMode(value) ? value : SPLIT_OUTPUT_MODE_DEFAULT;
-}
 
 export const SPLIT_ARTIFACT_KINDS = ["pdf", "zip"] as const;
 export type SplitArtifactKind = (typeof SPLIT_ARTIFACT_KINDS)[number];

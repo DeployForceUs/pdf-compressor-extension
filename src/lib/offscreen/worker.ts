@@ -8,7 +8,7 @@ import {
 } from "../pdf/compressor";
 import { createSplitZipArchive, type SplitArchiveRequest, type SplitArchiveOutcome } from "../pdf/split-archive";
 import { transferSplitWorkerReturn } from "./split-worker-transfer";
-import { normalizeSplitOutputMode } from "../messaging";
+import { normalizeSplitOutputMode } from "../split-output-mode";
 import { tracePdfSplit } from "../pdf-split-trace";
 
 type CancellationChecker = () => boolean | Promise<boolean>;

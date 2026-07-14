@@ -7,6 +7,7 @@
     "prebuild": "node scripts/vendor-mupdf.mjs",
     "build": "wxt build",
     "check": "tsc --noEmit",
+    "check:worker-boundary": "node scripts/assert-worker-runtime-boundary.mjs",
     "dev": "wxt",
     "typecheck": "tsc --noEmit"
   },

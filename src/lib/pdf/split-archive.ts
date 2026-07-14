@@ -2,11 +2,10 @@ import { PDFDocument } from "pdf-lib";
 import { unzipSync, zipSync } from "fflate";
 import { zipPdfParts } from "../archive/zip-parts";
 import { SPLIT_PDF_RECORD_ID } from "../pdf-records";
+import { normalizeSplitOutputMode, type SplitOutputMode } from "../split-output-mode";
 import {
-  normalizeSplitOutputMode,
   type CompressionProgressEvent,
   type SplitArtifactDescriptor,
-  type SplitOutputMode,
   type SplitProgressEvent,
   type SplitResultMetadata,
   type SplitWarning,

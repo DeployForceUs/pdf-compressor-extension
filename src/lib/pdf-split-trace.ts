@@ -1,4 +1,4 @@
-import type { SplitOutputMode } from "./messaging";
+import type { SplitOutputMode } from "./split-output-mode";
 
 export const PDF_SPLIT_TRACE_PREFIX = "[PDF_SPLIT_TRACE]";
 export const PDF_SPLIT_TRACE_JOB_ID = "split-pdf";
