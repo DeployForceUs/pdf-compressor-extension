@@ -4,6 +4,7 @@ import type { SplitErrorCode } from "./pdf/split-errors";
 import type { SplitOutputMode } from "./split-output-mode";
 import type { UsageSnapshot } from "./monetization/limits";
 import type { STAGE_7_MVP_POLICY } from "./monetization/policy";
+import type { LicenseCheckErrorCode } from "./monetization/license";
 
 export {
   SPLIT_OUTPUT_MODES,
@@ -567,9 +568,30 @@ export type MonetizationStateRequest = {
 
 export type MonetizationStateResponse = {
   ok: true;
-  tier: "free";
+  tier: "free" | "pro";
   policy: typeof STAGE_7_MVP_POLICY;
   usage: UsageSnapshot;
+};
+
+export type LicenseActivateRequest = {
+  type: "license:activate";
+  token: string;
+};
+
+export type LicenseCheckRequest = {
+  type: "license:check";
+};
+
+export type LicenseRevokeRequest = {
+  type: "license:revoke";
+};
+
+export type LicenseStateResponse = {
+  ok: true;
+  isPro: boolean;
+  status: "active" | "inactive" | "invalid";
+  licenseId?: string;
+  code?: LicenseCheckErrorCode;
 };
 
 export type BackgroundRequest =
@@ -582,6 +604,9 @@ export type BackgroundRequest =
   | BackgroundCompressionResultReadRequest
   | BackgroundCompressionResultDeleteRequest
   | MonetizationStateRequest
+  | LicenseActivateRequest
+  | LicenseCheckRequest
+  | LicenseRevokeRequest
   | SplitLocalRequest
   | SplitCancelRequest
   | SplitResultReadRequest
@@ -618,6 +643,7 @@ export type BackgroundResponse =
   | SplitResultReadResponse
   | SplitResultDeleteResponse
   | MonetizationStateResponse
+  | LicenseStateResponse
   | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {

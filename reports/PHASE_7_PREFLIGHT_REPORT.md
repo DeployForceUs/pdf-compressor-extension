@@ -22,7 +22,7 @@
 
 1. Foundation: approved policy constants, privacy-scoped fingerprint hashing, and atomic local usage reservation.
 2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state. **Implemented.**
-3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Core verifier and verified-only storage implemented; production key wiring pending.**
+3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Implemented, including activation/check/revoke background messaging.**
 4. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
 5. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
 6. Quality/device policy: persisted quality selection and device-memory-aware size limits.
@@ -40,7 +40,14 @@
 
 ## Deferred Inputs
 
-- The production public key and issuer tooling are not invented in the repository.
+- The production ES256 public key is embedded with SHA-256 fingerprint `58c1a0d63b5f0ff8dcc0d14977d699446a45974f278492a4f3469f163fca9a42`; the encrypted private key remains outside the repository with the product owner.
 - The token profile is ES256 with `iss=pdf-compressor`, `aud=pdf-compressor-extension`, `plan=pro`, `purchase=one-time`, `version=1`, a non-empty license ID in `sub`, and `iat`.
 - Perpetual tokens must not contain `exp`; fingerprint/device-binding claims are rejected.
 - Local-only counters cannot prevent a user from clearing extension storage; the MVP accepts this limitation because no server is used.
+
+## License Messaging
+
+- `license:activate` verifies a token before persistence and returns active/invalid state.
+- `license:check` re-verifies the stored token on every call.
+- `license:revoke` removes the stored token and returns inactive state.
+- `monetization:state` reports `tier=pro` only after successful signature and claim verification.

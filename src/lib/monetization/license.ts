@@ -1,5 +1,6 @@
 import {
   verifyProLicenseToken,
+  type LicenseTokenErrorCode,
   type LicenseTokenVerification,
   type ProLicenseClaims,
   type VerifyLicenseTokenDependencies,
@@ -24,6 +25,8 @@ export type LicenseServiceDependencies = VerifyLicenseTokenDependencies & {
   storage: LicenseStorage;
   publicKeyPem: string;
 };
+
+export type LicenseCheckErrorCode = LicenseTokenErrorCode | "NO_LICENSE";
 
 export type LicenseCheckResult = LicenseTokenVerification | {
   valid: false;

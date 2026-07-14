@@ -8,6 +8,10 @@ import {
   createLicenseService,
   type StoredProLicense,
 } from "../src/lib/monetization/license";
+import {
+  PRO_LICENSE_PUBLIC_KEY_PEM,
+  PRO_LICENSE_PUBLIC_KEY_SHA256,
+} from "../src/lib/monetization/license-public-key";
 
 function encodeBase64Url(bytes: Uint8Array) {
   let binary = "";
@@ -61,6 +65,19 @@ async function createFixture() {
 const fixture = await createFixture();
 
 {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(PRO_LICENSE_PUBLIC_KEY_PEM),
+  );
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  assert.equal(hex, PRO_LICENSE_PUBLIC_KEY_SHA256);
+
+  const fixtureToken = await fixture.sign();
+  const wrongKey = await verifyProLicenseToken(fixtureToken, PRO_LICENSE_PUBLIC_KEY_PEM, { now: () => fixture.now });
+  assert.deepEqual(wrongKey, { valid: false, code: "INVALID_SIGNATURE" });
+}
+
+{
   const token = await fixture.sign();
   const verification = await verifyProLicenseToken(token, fixture.publicKeyPem, { now: () => fixture.now });
   assert.equal(verification.valid, true);
@@ -70,7 +87,9 @@ const fixture = await createFixture();
     assert.equal("fingerprint" in verification.claims, false);
   }
 
-  const tampered = `${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`;
+  const [header, payload, signature] = token.split(".");
+  const tamperedSignature = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
+  const tampered = `${header}.${payload}.${tamperedSignature}`;
   assert.deepEqual(
     await verifyProLicenseToken(tampered, fixture.publicKeyPem, { now: () => fixture.now }),
     { valid: false, code: "INVALID_SIGNATURE" },

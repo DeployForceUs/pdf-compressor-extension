@@ -23,6 +23,9 @@ import { tracePdfSplit } from "../lib/pdf-split-trace";
 import { createUsageLimitService } from "../lib/monetization/limits";
 import { STAGE_7_MVP_POLICY } from "../lib/monetization/policy";
 import { createExtensionUsageStorage } from "../lib/monetization/storage";
+import { createExtensionLicenseStorage } from "../lib/monetization/storage";
+import { createLicenseService, type LicenseCheckResult } from "../lib/monetization/license";
+import { PRO_LICENSE_PUBLIC_KEY_PEM } from "../lib/monetization/license-public-key";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -108,7 +111,29 @@ export default defineBackground(() => {
   const usageLimits = createUsageLimitService({
     storage: createExtensionUsageStorage(browser.storage.local),
   });
+  const licenseService = createLicenseService({
+    storage: createExtensionLicenseStorage(browser.storage.local),
+    publicKeyPem: PRO_LICENSE_PUBLIC_KEY_PEM,
+  });
   void initTelemetry("background");
+
+  function licenseResponse(result: LicenseCheckResult) {
+    if (result.valid) {
+      return {
+        ok: true as const,
+        isPro: true,
+        status: "active" as const,
+        licenseId: result.claims.sub,
+      };
+    }
+
+    return {
+      ok: true as const,
+      isPro: false,
+      status: result.code === "NO_LICENSE" ? "inactive" as const : "invalid" as const,
+      code: result.code,
+    };
+  }
 
   async function handle(message: BackgroundRequest): Promise<BackgroundResponse | null> {
     try {
@@ -138,12 +163,23 @@ export default defineBackground(() => {
           };
         }
         case "monetization:state": {
+          const license = await licenseService.check();
           return {
             ok: true,
-            tier: "free",
+            tier: license.valid ? "pro" : "free",
             policy: STAGE_7_MVP_POLICY,
             usage: await usageLimits.snapshot(),
           };
+        }
+        case "license:activate": {
+          return licenseResponse(await licenseService.activate(message.token));
+        }
+        case "license:check": {
+          return licenseResponse(await licenseService.check());
+        }
+        case "license:revoke": {
+          await licenseService.revoke();
+          return licenseResponse({ valid: false, code: "NO_LICENSE" });
         }
         case "background:compression-health": {
           await ensureOffscreenDocument();
