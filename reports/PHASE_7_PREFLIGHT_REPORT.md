@@ -23,9 +23,10 @@
 1. Foundation: approved policy constants, privacy-scoped fingerprint hashing, and atomic local usage reservation.
 2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state. **Implemented.**
 3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Implemented, including activation/check/revoke background messaging.**
-4. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
-5. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
-6. Quality/device policy: persisted quality selection and device-memory-aware size limits.
+4. Issuance: a local-only CLI signs perpetual customer tokens with the encrypted private key and writes them mode `600`. **Implemented.**
+5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
+6. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
+7. Quality/device policy: persisted quality selection and device-memory-aware size limits.
 
 ## Foundation Safety Properties
 
@@ -51,3 +52,10 @@
 - `license:check` re-verifies the stored token on every call.
 - `license:revoke` removes the stored token and returns inactive state.
 - `monetization:state` reports `tier=pro` only after successful signature and claim verification.
+
+## License Issuance
+
+- `npm run license:issue -- --license-id <id>` runs locally and defaults to the encrypted private key under `~/.pdf-compressor-license`.
+- The private-key passphrase is entered through a hidden TTY prompt and is never accepted as a command-line argument.
+- Generated tokens are written under `~/.pdf-compressor-license/tokens` with mode `600` by default.
+- `--passphrase-stdin` exists only for non-interactive automation and tests.
