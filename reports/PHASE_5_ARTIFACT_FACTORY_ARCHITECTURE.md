@@ -1,4 +1,6 @@
 # Executive Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 The current Split implementation is a single-result pipeline: it plans, builds, optionally compresses, validates, and then persists one ZIP archive. That contract is stable, but it is too narrow for the requested output redesign.
 
 The right extension is a dedicated `ArtifactFactory` stage that runs only after the final PDF parts have already been produced and validated exactly once. The factory should never re-split, re-compress, or re-validate parts. It should only convert finalized parts into downloadable artifacts for the selected output mode.

@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 - Objective: implement Phase 5 Slice 6A, headless split runtime plumbing and automated validation.
 - Implementation status: completed.
 - Completion status: done.

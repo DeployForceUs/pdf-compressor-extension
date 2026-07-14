@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 The selected PDF persistence failure is caused by an incorrect IndexedDB write in `src/lib/storage/pdf-records-db.ts`.
 
 `writePdfRecord()` writes to an inline-key object store (`keyPath: "id"`) but still passes an explicit key argument:

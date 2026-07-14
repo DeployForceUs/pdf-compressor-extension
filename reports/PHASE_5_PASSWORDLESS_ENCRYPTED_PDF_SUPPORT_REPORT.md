@@ -1,5 +1,7 @@
 # Summary
 
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
+
 This slice adds controlled Split support for passwordless encrypted PDFs only. The exact Canon benchmark file `Easy-PhotoPrintEditor_V1.10.0_Win_Mac_EN_V01-compressed (1).pdf` is accepted when `pdf-lib` rejects the default load because the document is encrypted, MuPDF opens the same bytes without requiring a password, and `PDFDocument.load(bytes, { ignoreEncryption: true })` succeeds. Password-required PDFs still fail with a dedicated `ENCRYPTED_PDF` error. Malformed PDFs still fail as `INVALID_PDF`.
 
 # Root Cause Reference

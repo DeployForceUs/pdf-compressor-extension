@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 - Objective: implement a read-only Split Planner for Phase 5 Slice 2.
 - Implementation status: completed.
 - Completion status: done and previously committed in `2d9df4c`.

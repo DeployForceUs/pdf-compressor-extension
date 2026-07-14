@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. The "Slice 8A" label is an internal slice number, not canonical Stage 8. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 - Objective: implement Phase 5 Slice 8A, headless compress-after-splitting.
 - Implementation status: completed.
 - Completion status: done.

@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 Implemented the Phase 5 Artifact Factory output-mode slice end to end. The Split pipeline now accepts `single-zip`, `individual-pdfs`, and `separate-zips`, generates the corresponding artifacts from one validated split run, persists them through the existing bundle/artifact model, restores them in the Popup, and exposes per-artifact downloads for the multi-artifact modes.
 
 The current user-visible default remains `single-zip`.

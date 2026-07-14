@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 - Objective: implement Phase 5 Slice 5, ZIP Packaging.
 - Implementation status: completed.
 - Completion status: done.

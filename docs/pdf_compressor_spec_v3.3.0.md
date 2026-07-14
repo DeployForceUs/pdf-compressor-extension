@@ -1745,6 +1745,8 @@ volumes:
 
 ## 6. Поэтапный план реализации
 
+> **Repository execution note:** Stage numbers in this specification are canonical. The repository historically implemented Stage 6 Split under the label `feature/phase5-pdf-split` and `PHASE_5_*`. Stage 5 JPEG2000 was deferred, not renumbered away. Use [`PHASE_ROADMAP.md`](./PHASE_ROADMAP.md) for the authoritative mapping between specification stages, historical aliases, branches, reports, and current integration status.
+
 ### Этап 1: Базовая инфраструктура (неделя 1)
 - Инициализация проекта через `wxt init`.
 - Настройка `wxt.config.ts` с манифестом MV3 (исправленные `host_permissions`, без `unlimitedStorage`).

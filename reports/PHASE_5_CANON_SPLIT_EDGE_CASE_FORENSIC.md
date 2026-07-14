@@ -1,5 +1,7 @@
 # Executive Summary
 
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
+
 The exact failing Split sample is `Easy-PhotoPrintEditor_V1.10.0_Win_Mac_EN_V01-compressed (1).pdf`, not the earlier scan PDF. The file is byte-stable through selection storage and worker transfer, but `pdf-lib` rejects it before Split planning because the PDF is encrypted. MuPDF opens it successfully and reports 220 pages. The current Split runtime maps that parser failure to `INVALID_PDF`, which is technically too generic for this file.
 
 Root cause classification: `MULTIPLE_CAUSES`.

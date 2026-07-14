@@ -1,5 +1,7 @@
 # Summary
 
+> **Canonical numbering:** This stabilization report was delivered on the historical Phase 5 Split branch, which maps to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
+
 Implemented the first Phase 5 stabilization slice: compression-result storage now normalizes browser quota failures to the same machine-readable `STORAGE_QUOTA_EXCEEDED` contract already used by split storage, and the orchestration boundary now has focused regression coverage for a failed persistence write.
 
 # Root Cause

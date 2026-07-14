@@ -1,5 +1,7 @@
 # Executive Summary
 
+> **Status notice (2026-07-14):** This audit is a historical snapshot at commit `47c021d`. Its manual-browser statements and phase ownership labels are superseded by [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md), `PHASE_5_BROWSER_RUNTIME_TRACE.md`, and `PHASE_5_BROWSER_RUNTIME_FIX.md`. In canonical specification numbering, the repository's historical Phase 5 Split work is Stage 6.
+
 The repository is safe to proceed to Phase 5 manual Chrome acceptance before any additional code correction.
 
 The core extension infrastructure is in place, the popup/background/offscreen/worker topology is stable, split runtime and storage paths exist, and the current compression pipeline, binary persistence boundaries, and split persistence tests are present in code. The remaining gaps are mostly either:

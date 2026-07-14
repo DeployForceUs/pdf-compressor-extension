@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 The browser regression is not inside the core split algorithm. The narrow failing boundary is the first awaited browser worker call in `src/lib/offscreen/split-runtime.ts`:
 
 `await deps.workerApi.split(...)`

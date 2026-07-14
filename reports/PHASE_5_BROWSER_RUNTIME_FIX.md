@@ -1,5 +1,7 @@
 # Phase 5 Browser Runtime Boundary Fix
 
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
+
 ## Status
 
 `FIX_IMPLEMENTED_BROWSER_VALIDATION_PENDING`

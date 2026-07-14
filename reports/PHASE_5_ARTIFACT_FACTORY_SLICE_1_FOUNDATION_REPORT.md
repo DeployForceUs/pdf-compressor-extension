@@ -1,4 +1,6 @@
 # Summary
+
+> **Canonical numbering:** This historical Phase 5 Split report belongs to specification Stage 6. See [`../docs/PHASE_ROADMAP.md`](../docs/PHASE_ROADMAP.md).
 Slice 1 migrates Phase 5 Split persistence from a single blob record to a parent/child artifact model while keeping the current user-visible behavior unchanged.
 
 The split engine still executes once. `compressAfter` still runs once per eligible part. Validation still runs once per final part. The only change is the storage contract behind the existing single-ZIP result.
