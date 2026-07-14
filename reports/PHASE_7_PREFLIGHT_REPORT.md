@@ -85,6 +85,11 @@
 - The shared Free cooldown rejected an immediate operation and allowed it after the countdown.
 - Free compression usage reached 0 of 3 remaining; the next attempt was rejected with `Free daily limit reached: 3 compressions per day.`
 - Free usage counters remained visible and persisted across popup reloads.
+- Compression quality set to 35% remained selected after the extension and popup were reloaded.
+- With the existing Pro token reactivated, a real compression using the restored 35% quality completed successfully and produced a downloadable result despite the exhausted Free daily allowance.
+- Pro operations bypassed Free limits without requiring a counter reset.
+
+Stage 7 browser acceptance is complete.
 
 ## Quality and Device Policy
 
