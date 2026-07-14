@@ -26,7 +26,7 @@ Use the stage numbers from specification v3.3.0 without collapsing or renumberin
 | 5 | JPEG2000 / OpenJPEG | Deferred and not implemented | No active implementation branch | Must remain Stage 5; it is not replaced by Split |
 | 6 | Client-side PDF splitting | Implemented and manually accepted in Chrome across all three output modes | Historical alias: `feature/phase5-pdf-split`, `PHASE_5_*`, `phase5_*` tests, `pdf-compressor-phase5` storage name | Merged into `main` via PR #5; merge commit `0d5a91a32ac4d1cf2499d9015db8a1a5fc6d0610` |
 | 7 | Freemium logic and licensing | Complete and browser-accepted | `feature/phase7-freemium-licensing` | Merged into `main` via PR #7; merge commit `c2aaf5589e22af50acf711b401d0bb175e65b217` |
-| 8 | UX and accessibility | Preflight complete; runtime implementation pending approved UX/retention decisions | `feature/phase8-ux-accessibility` | Keyboard, semantics, themes, and 24-hour cleanup scope documented in [`STAGE_8_UX_ACCESSIBILITY_PREFLIGHT.md`](../reports/STAGE_8_UX_ACCESSIBILITY_PREFLIGHT.md) |
+| 8 | UX and accessibility | Runtime implementation complete; manual Chrome acceptance pending | `feature/phase8-ux-accessibility` | Keyboard, semantics, automatic themes, and 24-hour cleanup implemented and documented in [`STAGE_8_UX_ACCESSIBILITY_PREFLIGHT.md`](../reports/STAGE_8_UX_ACCESSIBILITY_PREFLIGHT.md) |
 | 9 | Testing and debugging | Not started as a dedicated stage; earlier stages contain their own tests | None | Future work |
 | 10 | Publication | Not started | None | Future work |
 | 11 | Post-release and On-Premise preparation | On-Premise ideas documented only | `docs/TODO_ON_PREMISE_PRO_ENGINE.md` uses its own A-D subphases | Future work |

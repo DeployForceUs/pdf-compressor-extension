@@ -12,7 +12,7 @@ interface PdfRecordsDbSchema extends DBSchema {
   };
 }
 
-type PdfRecordsDb = Pick<IDBPDatabase<PdfRecordsDbSchema>, "get" | "put" | "delete">;
+type PdfRecordsDb = Pick<IDBPDatabase<PdfRecordsDbSchema>, "get" | "getAll" | "put" | "delete">;
 
 const memoryStores = new Map<string, Map<string, PdfRecord>>();
 
@@ -20,6 +20,9 @@ function createMemoryDb(): PdfRecordsDb {
   return {
     async get(storeName, key) {
       return memoryStores.get(storeName)?.get(String(key)) ?? undefined;
+    },
+    async getAll(storeName) {
+      return [...(memoryStores.get(storeName)?.values() ?? [])];
     },
     async put(storeName, value, key) {
       const store = memoryStores.get(storeName) ?? new Map<string, PdfRecord>();
@@ -53,12 +56,33 @@ function getDb() {
 
 export async function writePdfRecord(record: PdfRecord): Promise<PdfRecord> {
   const db = await getDb();
+  const existing = await db.get(STORE_NAME, record.id);
+  const now = Date.now();
   const stored: PdfRecord = {
     ...record,
     data: [...record.data],
+    createdAt: record.createdAt ?? existing?.createdAt ?? now,
+    updatedAt: now,
   };
   await db.put(STORE_NAME, stored);
   return stored;
+}
+
+export async function cleanupExpiredPdfRecords(cutoff: number, now = Date.now()) {
+  const db = await getDb();
+  const records = await db.getAll(STORE_NAME);
+  let deleted = 0;
+
+  for (const record of records) {
+    if (record.updatedAt === undefined) {
+      await db.put(STORE_NAME, { ...record, createdAt: record.createdAt ?? now, updatedAt: now });
+    } else if (record.updatedAt <= cutoff) {
+      await db.delete(STORE_NAME, record.id);
+      deleted += 1;
+    }
+  }
+
+  return deleted;
 }
 
 export async function readPdfRecord(recordId: string): Promise<PdfRecord | null> {

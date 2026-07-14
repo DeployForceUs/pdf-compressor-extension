@@ -63,6 +63,8 @@ export type PdfRecord = {
   lastModified: number;
   pageCount?: number | null;
   data: number[];
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 export type OffscreenRequest =

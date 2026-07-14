@@ -2,7 +2,7 @@
 
 ## Status
 
-Preflight is complete. Runtime implementation has not started.
+Preflight and runtime implementation are complete. Automated validation passed. Manual Chrome accessibility and theme acceptance remains pending.
 
 Canonical Stage 8 is independent of the paused Stage 5 JPEG2000 decision and may proceed without changing Compression, Split, licensing, or artifact-generation business rules.
 
@@ -149,7 +149,7 @@ Stage 8 must not:
 - add Playwright or the full cross-browser matrix assigned to Stage 9;
 - redesign the popup information architecture beyond changes required for accessibility and theming.
 
-## Decisions Required Before Runtime Changes
+## Decision Record
 
 ### Decision A — Theme interpretation
 
@@ -181,17 +181,83 @@ Alternative:
 
 > Reading or downloading refreshes retention. This adds write activity and makes the privacy lifetime less predictable.
 
-## Recommended Decisions
+## Original Recommendation
 
 Approve A, B, and C as recommended. Together they produce predictable privacy behavior, minimal permissions, and automatic accessibility without introducing new user settings.
 
+## Approved Decisions
+
+Approved on 2026-07-14:
+
+- follow `prefers-color-scheme` automatically, with the existing dark palette and a new light palette;
+- delete every PDF binary stored in IndexedDB after 24 hours, including source, Compression, Split bundle, and Split artifacts;
+- calculate expiry from the last successful persistence/update, without extending retention on read or download;
+- exclude license state, Free usage counters, quality, language, and other user settings from PDF-binary cleanup.
+
+## Runtime Implementation
+
+### Keyboard and semantics
+
+- Added a shared high-contrast `:focus-visible` ring for interactive controls.
+- Removed button semantics and keyboard activation from the dropzone container; the native file button remains the keyboard entry point and drag-and-drop remains available.
+- Reclassified Split strategies from an invalid tablist to a labelled pressed-button group.
+- Added document-level Escape cancellation for the active Compression or Split operation while preserving normal Escape behavior when idle.
+- Added focus recovery to the initiating action after cancellation reaches a non-busy state.
+- Added localized accessible names and value text to both progressbars.
+- Added polite status announcements for operation state and Free cooldown, and assertive semantics for general PDF/Compression errors.
+
+### Automatic theme
+
+- Changed the document to support light and dark color schemes.
+- Retained the current dark palette as the default/dark presentation.
+- Added a light palette under `prefers-color-scheme: light` without adding a new preference or selector.
+- Added `prefers-reduced-motion` rules for nonessential animation and transitions.
+
+### PDF retention
+
+- Added the minimal `alarms` manifest permission.
+- Added an idempotent background cleanup run at service-worker startup and a recurring hourly alarm.
+- Enforced an exact 24-hour cutoff from the last successful persistence/update.
+- Added `createdAt` and `updatedAt` storage metadata to source `PdfRecord` writes.
+- Migrated legacy source records without timestamps by stamping them at first cleanup instead of deleting them immediately.
+- Deleted every expired source and Compression record found in their IndexedDB stores.
+- Deleted expired Split bundles and their referenced artifacts in one transaction, plus expired legacy and orphan artifact records.
+- Did not modify timestamps when reading or downloading.
+- Did not touch license state, Free counters, quality, language, or other `chrome.storage.local` settings.
+- Treated cleanup failures as nonfatal background warnings.
+
+## Automated Validation
+
+Passed on 2026-07-14:
+
+- `npm run check`;
+- `npm run build`;
+- `npm run check:worker-boundary`;
+- `node --import tsx tests/phase8_retention_accessibility.test.ts`;
+- Stage 7 foundation, ES256 license, enforcement, and quality/device-policy regression tests;
+- selected-PDF persistence, Split Worker transfer-boundary, and storage-quota regression tests;
+- production manifest assertion for the `alarms` permission;
+- `git diff --check`.
+
+The Stage 8 test proves expiration of source, Compression, Split bundle, and Split artifact data; atomic artifact removal; idempotent repeated cleanup; and safe legacy source timestamp migration. It also asserts the corrected semantics, Escape boundary, accessible progress names, focus CSS, automatic light theme, and reduced-motion rule.
+
+## Manual Chrome Acceptance Required
+
+Before merging, validate in the unpacked production build:
+
+1. Complete file selection, Compression, Split, cancellation, result download, and result deletion using only Tab, Shift+Tab, Enter/Space, and Escape.
+2. Confirm visible focus on every actionable control and focus recovery after Escape cancellation.
+3. Confirm screen-reader announcements for operation status, errors, completion, and cooldown in English and Spanish.
+4. Toggle the operating-system/browser light and dark preference and confirm readable contrast at normal size and increased text zoom.
+5. Confirm existing Compression, Split, Free-limit, and Pro-license behavior remains unchanged.
+
 ## SPECIFICATION COMPLIANCE
 
-- Native keyboard navigation and visible focus: **Fully matches specification**.
-- Escape cancellation of the active operation: **Fully matches specification**.
-- Corrected ARIA semantics and live announcements: **Extends specification** to meet the stated accessibility goal.
-- Automatic light/dark adaptation through `prefers-color-scheme`: **Fully matches specification** under the recommended interpretation.
+- Native keyboard navigation, visible focus, and Escape cancellation: **Fully matches specification**.
+- Corrected ARIA semantics, accessible progress names, live announcements, and focus recovery: **Extends specification** to meet the stated accessibility goal.
+- Automatic light/dark adaptation through `prefers-color-scheme`: **Fully matches specification** under the approved interpretation.
 - `prefers-reduced-motion` support: **Extends specification**.
 - 24-hour cleanup through `chrome.alarms`: **Fully matches specification**.
-- Adding a source-record persistence timestamp: **Extends specification** as the data-model requirement needed to enforce the stated retention rule safely.
+- Source-record persistence timestamps and safe legacy migration: **Extends specification** as the data-model requirement needed to enforce the stated retention rule safely.
 - Excluding license, counters, and preferences from binary cleanup: **Requires future specification update** for an explicit retention boundary.
+- Manual screen-reader, theme, text-zoom, and keyboard acceptance: **Partially matches specification** until the listed Chrome checks are completed.

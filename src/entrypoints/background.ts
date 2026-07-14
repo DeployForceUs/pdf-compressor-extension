@@ -27,6 +27,11 @@ import { createExtensionLicenseStorage } from "../lib/monetization/storage";
 import { createLicenseService, type LicenseCheckResult } from "../lib/monetization/license";
 import { PRO_LICENSE_PUBLIC_KEY_PEM } from "../lib/monetization/license-public-key";
 import { createOperationAuthorizer, type OperationAuthorization } from "../lib/monetization/enforcement";
+import {
+  cleanupExpiredPdfData,
+  PDF_RETENTION_ALARM_NAME,
+  PDF_RETENTION_ALARM_PERIOD_MINUTES,
+} from "../lib/storage/pdf-retention";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -121,6 +126,27 @@ export default defineBackground(() => {
     reserveUsage: (operation) => usageLimits.reserve(operation),
   });
   void initTelemetry("background");
+
+  async function runRetentionCleanup() {
+    try {
+      const result = await cleanupExpiredPdfData();
+      logger.info("Completed PDF retention cleanup", result);
+    } catch (error) {
+      logger.warn("PDF retention cleanup failed", error);
+    }
+  }
+
+  void browser.alarms.create(PDF_RETENTION_ALARM_NAME, {
+    delayInMinutes: 1,
+    periodInMinutes: PDF_RETENTION_ALARM_PERIOD_MINUTES,
+  });
+  void runRetentionCleanup();
+
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === PDF_RETENTION_ALARM_NAME) {
+      void runRetentionCleanup();
+    }
+  });
 
   function licenseResponse(result: LicenseCheckResult) {
     if (result.valid) {

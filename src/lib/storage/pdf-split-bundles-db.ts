@@ -67,6 +67,7 @@ type SplitResultsStoreBackend = {
   writeBundleAndArtifacts: (bundle: SplitResultBundle, artifacts: SplitArtifactRecord[]) => Promise<SplitResultBundle>;
   deleteBundle: (bundleId: string) => Promise<boolean>;
   deleteArtifact: (artifactId: string) => Promise<boolean>;
+  cleanupExpired: (cutoff: number) => Promise<number>;
 };
 
 function isQuotaExceededError(error: unknown) {
@@ -231,6 +232,30 @@ function createMemoryBackend(state: SplitResultsMemoryState, hooks: SplitResults
     async deleteArtifact(artifactId: string) {
       const deleted = state.artifacts.delete(artifactId);
       state.legacy.delete(artifactId);
+      return deleted;
+    },
+    async cleanupExpired(cutoff: number) {
+      let deleted = 0;
+      for (const [bundleId, bundle] of [...state.bundles]) {
+        if (bundle.updatedAt <= cutoff) {
+          for (const artifactId of bundle.artifactIds) {
+            state.artifacts.delete(artifactId);
+          }
+          state.bundles.delete(bundleId);
+          deleted += 1;
+        }
+      }
+      for (const [recordId, record] of [...state.legacy]) {
+        if (record.updatedAt <= cutoff) {
+          state.legacy.delete(recordId);
+          deleted += 1;
+        }
+      }
+      for (const [artifactId, artifact] of [...state.artifacts]) {
+        if (artifact.updatedAt <= cutoff) {
+          state.artifacts.delete(artifactId);
+        }
+      }
       return deleted;
     },
   };
@@ -433,6 +458,48 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
     }
   }
 
+  async function cleanupExpired(cutoff: number) {
+    const transaction = db.transaction([LEGACY_STORE, BUNDLE_STORE, ARTIFACT_STORE], "readwrite");
+    const legacyStore = transaction.objectStore(LEGACY_STORE);
+    const bundleStore = transaction.objectStore(BUNDLE_STORE);
+    const artifactStore = transaction.objectStore(ARTIFACT_STORE);
+
+    try {
+      const [legacyRecords, bundles, artifacts] = await Promise.all([
+        legacyStore.getAll(),
+        bundleStore.getAll(),
+        artifactStore.getAll(),
+      ]);
+      let deleted = 0;
+      const artifactIds = new Set<string>();
+
+      for (const bundle of bundles) {
+        if (bundle.updatedAt <= cutoff) {
+          await bundleStore.delete(bundle.id);
+          bundle.artifactIds.forEach((artifactId) => artifactIds.add(artifactId));
+          deleted += 1;
+        }
+      }
+      for (const record of legacyRecords) {
+        if (record.updatedAt <= cutoff) {
+          await legacyStore.delete(record.id);
+          deleted += 1;
+        }
+      }
+      for (const artifact of artifacts) {
+        if (artifact.updatedAt <= cutoff || artifactIds.has(artifact.id)) {
+          await artifactStore.delete(artifact.id);
+        }
+      }
+
+      await transaction.done;
+      return deleted;
+    } catch (error) {
+      safeAbortTransaction(transaction);
+      normalizePersistenceError(error);
+    }
+  }
+
   return {
     readLegacy,
     writeLegacy,
@@ -443,6 +510,7 @@ async function createIndexedDbBackend(hooks: SplitResultsStoreTestHooks = {}): P
     writeBundleAndArtifacts,
     deleteBundle,
     deleteArtifact,
+    cleanupExpired,
   };
 }
 
@@ -694,6 +762,9 @@ export function createSplitResultsStore(hooks: SplitResultsStoreTestHooks = {}) 
       const deletedLegacy = await backend.deleteLegacy(recordId);
       return deletedBundle || deletedLegacy;
     },
+    async cleanupExpiredSplitResults(cutoff: number) {
+      return (await backendPromise).cleanupExpired(cutoff);
+    },
   };
 }
 
@@ -745,4 +816,8 @@ export async function writeSplitResult(record: SplitResultRecord) {
 
 export async function deleteSplitResult(recordId = SPLIT_PDF_RECORD_ID) {
   return defaultSplitResultsStore.deleteSplitResult(recordId);
+}
+
+export async function cleanupExpiredSplitResults(cutoff: number) {
+  return defaultSplitResultsStore.cleanupExpiredSplitResults(cutoff);
 }
