@@ -22,7 +22,7 @@
 
 1. Foundation: approved policy constants, privacy-scoped fingerprint hashing, and atomic local usage reservation.
 2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state. **Implemented.**
-3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key.
+3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Core verifier and verified-only storage implemented; production key wiring pending.**
 4. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
 5. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
 6. Quality/device policy: persisted quality selection and device-memory-aware size limits.
@@ -41,5 +41,6 @@
 ## Deferred Inputs
 
 - The production public key and issuer tooling are not invented in the repository.
-- The token claim schema will be fixed before the licensing slice and must support perpetual licenses without device binding.
+- The token profile is ES256 with `iss=pdf-compressor`, `aud=pdf-compressor-extension`, `plan=pro`, `purchase=one-time`, `version=1`, a non-empty license ID in `sub`, and `iat`.
+- Perpetual tokens must not contain `exp`; fingerprint/device-binding claims are rejected.
 - Local-only counters cannot prevent a user from clearing extension storage; the MVP accepts this limitation because no server is used.
