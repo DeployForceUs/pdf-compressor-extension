@@ -21,7 +21,7 @@
 ## Implementation Slices
 
 1. Foundation: approved policy constants, privacy-scoped fingerprint hashing, and atomic local usage reservation.
-2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state.
+2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state. **Implemented.**
 3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key.
 4. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
 5. UI: localized activation, remaining usage, cooldown feedback, and Pro state.
@@ -35,6 +35,8 @@
 - Daily counters reset on the next UTC date.
 - Fingerprints never participate in Pro license validation.
 - The foundation does not modify compression, Split, persistence, worker, or popup behavior.
+- `monetization:state` exposes Free policy and remaining usage without exposing the stored fingerprint.
+- Invalid or outdated stored counter shapes are discarded and recreated through the versioned foundation contract.
 
 ## Deferred Inputs
 

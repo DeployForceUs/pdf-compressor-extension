@@ -20,6 +20,9 @@ import type {
 } from "../lib/messaging";
 import { normalizeSplitOutputMode } from "../lib/messaging";
 import { tracePdfSplit } from "../lib/pdf-split-trace";
+import { createUsageLimitService } from "../lib/monetization/limits";
+import { STAGE_7_MVP_POLICY } from "../lib/monetization/policy";
+import { createExtensionUsageStorage } from "../lib/monetization/storage";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -102,6 +105,9 @@ async function forwardToOffscreen<TResponse>(message: object): Promise<TResponse
 
 export default defineBackground(() => {
   const logger = createLogger("background");
+  const usageLimits = createUsageLimitService({
+    storage: createExtensionUsageStorage(browser.storage.local),
+  });
   void initTelemetry("background");
 
   async function handle(message: BackgroundRequest): Promise<BackgroundResponse | null> {
@@ -129,6 +135,14 @@ export default defineBackground(() => {
           return {
             ok: true,
             details: result.closed ? "Offscreen closed" : "Offscreen already closed",
+          };
+        }
+        case "monetization:state": {
+          return {
+            ok: true,
+            tier: "free",
+            policy: STAGE_7_MVP_POLICY,
+            usage: await usageLimits.snapshot(),
           };
         }
         case "background:compression-health": {

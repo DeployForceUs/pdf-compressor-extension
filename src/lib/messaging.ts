@@ -2,6 +2,8 @@ import browser from "webextension-polyfill";
 import type { SplitStrategy } from "./pdf/split-strategies";
 import type { SplitErrorCode } from "./pdf/split-errors";
 import type { SplitOutputMode } from "./split-output-mode";
+import type { UsageSnapshot } from "./monetization/limits";
+import type { STAGE_7_MVP_POLICY } from "./monetization/policy";
 
 export {
   SPLIT_OUTPUT_MODES,
@@ -559,6 +561,17 @@ export type OffscreenCloseRequest = {
   type: "offscreen:close";
 };
 
+export type MonetizationStateRequest = {
+  type: "monetization:state";
+};
+
+export type MonetizationStateResponse = {
+  ok: true;
+  tier: "free";
+  policy: typeof STAGE_7_MVP_POLICY;
+  usage: UsageSnapshot;
+};
+
 export type BackgroundRequest =
   | BackgroundHealthRequest
   | OffscreenOpenRequest
@@ -568,6 +581,7 @@ export type BackgroundRequest =
   | BackgroundCompressionCancelRequest
   | BackgroundCompressionResultReadRequest
   | BackgroundCompressionResultDeleteRequest
+  | MonetizationStateRequest
   | SplitLocalRequest
   | SplitCancelRequest
   | SplitResultReadRequest
@@ -603,6 +617,7 @@ export type BackgroundResponse =
   | SplitCancelResponse
   | SplitResultReadResponse
   | SplitResultDeleteResponse
+  | MonetizationStateResponse
   | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {

@@ -6,6 +6,7 @@ import {
   type UsageStorage,
 } from "../src/lib/monetization/limits";
 import { STAGE_7_MVP_POLICY } from "../src/lib/monetization/policy";
+import { createExtensionUsageStorage } from "../src/lib/monetization/storage";
 
 function createMemoryStorage(): UsageStorage & { read: () => DailyUsageState | null } {
   let state: DailyUsageState | null = null;
@@ -103,6 +104,51 @@ function createMemoryStorage(): UsageStorage & { read: () => DailyUsageState | n
   ]);
   assert.equal(decisions.filter((decision) => decision.allowed).length, 1);
   assert.equal(decisions.filter((decision) => !decision.allowed).length, 1);
+}
+
+{
+  const values: Record<string, unknown> = {};
+  const storage = createExtensionUsageStorage({
+    get: async (key) => ({ [key]: values[key] }),
+    set: async (items) => {
+      Object.assign(values, items);
+    },
+  });
+  assert.equal(await storage.get("usage"), null);
+
+  const state: DailyUsageState = {
+    version: 1,
+    date: "2026-07-14",
+    compressionCount: 1,
+    splitCount: 2,
+    fingerprint: "fingerprint",
+    lastOperationAt: 100,
+  };
+  await storage.set("usage", state);
+  assert.deepEqual(await storage.get("usage"), state);
+
+  values.usage = { ...state, version: 2 };
+  assert.equal(await storage.get("usage"), null);
+}
+
+{
+  const storage = createMemoryStorage();
+  let timestamp = Date.UTC(2026, 6, 14, 12);
+  const service = createUsageLimitService({
+    storage,
+    getFingerprint: async () => "private-fingerprint",
+    now: () => timestamp,
+  });
+  await service.reserve("split");
+  timestamp += 2_500;
+  const snapshot = await service.snapshot();
+  assert.deepEqual(snapshot, {
+    date: "2026-07-14",
+    compression: { used: 0, limit: 3, remaining: 3 },
+    split: { used: 1, limit: 10, remaining: 9 },
+    cooldown: { active: true, retryAfterMs: 7_500 },
+  });
+  assert.equal("fingerprint" in snapshot, false);
 }
 
 console.log("phase7 monetization foundation assertions passed");

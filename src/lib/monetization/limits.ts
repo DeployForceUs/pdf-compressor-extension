@@ -38,6 +38,24 @@ export type UsageDecision =
       state: DailyUsageState;
     };
 
+export type UsageSnapshot = {
+  date: string;
+  compression: {
+    used: number;
+    limit: number;
+    remaining: number;
+  };
+  split: {
+    used: number;
+    limit: number;
+    remaining: number;
+  };
+  cooldown: {
+    active: boolean;
+    retryAfterMs: number;
+  };
+};
+
 export type UsageLimitServiceDependencies = {
   storage: UsageStorage;
   getFingerprint?: () => Promise<string>;
@@ -132,6 +150,32 @@ export function createUsageLimitService({
   }
 
   return {
+    snapshot: () => exclusive(async (): Promise<UsageSnapshot> => {
+      const timestamp = now();
+      const state = await loadState(timestamp);
+      const elapsed = state.lastOperationAt === null
+        ? STAGE_7_MVP_POLICY.operationCooldownMs
+        : timestamp - state.lastOperationAt;
+      const retryAfterMs = Math.max(0, STAGE_7_MVP_POLICY.operationCooldownMs - elapsed);
+
+      return {
+        date: state.date,
+        compression: {
+          used: state.compressionCount,
+          limit: STAGE_7_MVP_POLICY.dailyCompressionLimit,
+          remaining: Math.max(0, STAGE_7_MVP_POLICY.dailyCompressionLimit - state.compressionCount),
+        },
+        split: {
+          used: state.splitCount,
+          limit: STAGE_7_MVP_POLICY.dailySplitLimit,
+          remaining: Math.max(0, STAGE_7_MVP_POLICY.dailySplitLimit - state.splitCount),
+        },
+        cooldown: {
+          active: retryAfterMs > 0,
+          retryAfterMs,
+        },
+      };
+    }),
     inspect: (operation: MeteredOperation) => exclusive(() => inspect(operation)),
     reserve: (operation: MeteredOperation) => exclusive(async (): Promise<UsageDecision> => {
       const decision = await inspect(operation);
