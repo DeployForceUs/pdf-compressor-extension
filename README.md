@@ -4,10 +4,9 @@ Local-first Chrome extension for PDF compression and splitting, based on specifi
 
 ## Project Status
 
-- Stages 1-3 are merged into `main`.
-- Stage 4 client-side compression is implemented on feature branches but is not yet merged into `main`.
+- Stages 1-4 are merged into `main`.
 - Canonical Stage 5 JPEG2000 support is deferred and not implemented.
-- Canonical Stage 6 PDF Split is implemented and manually accepted in Chrome under the historical branch/report label "Phase 5"; it is not yet merged into `main`.
+- Canonical Stage 6 PDF Split is implemented, manually accepted in Chrome, and merged into `main` under the historical branch/report label "Phase 5".
 - Canonical Stage 7 Freemium and licensing has not started.
 
 See [`docs/PHASE_ROADMAP.md`](docs/PHASE_ROADMAP.md) before creating a phase branch or interpreting historical `PHASE_5_*` reports.

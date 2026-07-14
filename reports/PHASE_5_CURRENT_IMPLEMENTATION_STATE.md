@@ -8,7 +8,9 @@
 - Validated commit: `3310e72980abe7085c2ab7d9f897804c88ddca27`
 - Remote branch: pushed
 - Working tree after browser acceptance: clean
-- `origin/main`: ends at the Phase 3 merge and does not yet contain Stage 4 or Stage 6
+- Integration: merged into `main` through PR #5
+- Stage 6 merge commit: `0d5a91a32ac4d1cf2499d9015db8a1a5fc6d0610`
+- Stage 4 prerequisite merge: PR #4 at `109d5b48e7ab2c7d61d88903c2e763167bf7fdad`
 
 ## Implementation Status
 
@@ -86,7 +88,7 @@ Passed:
 - `Compress PDF` may remain disabled after a valid PDF is selected; this requires a separate Stage 4 browser investigation.
 - Pro gating for `compressAfter`, daily limits, rate limiting, licensing, quality settings, and device-memory policy belong to canonical Stage 7.
 - JPEG2000 / OpenJPEG belongs to canonical Stage 5 and remains deferred.
-- Stage 4 and Stage 6 branch histories must be integrated into `main` before Stage 7 begins.
+- Stage 4 and Stage 6 branch histories are integrated into `main`; Stage 7 may proceed after the documented licensing decisions are resolved.
 
 ## Specification Compliance
 

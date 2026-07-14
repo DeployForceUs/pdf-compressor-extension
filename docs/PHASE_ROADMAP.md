@@ -22,10 +22,10 @@ Use the stage numbers from specification v3.3.0 without collapsing or renumberin
 | 1 | Base infrastructure | Complete | `feature/phase1-infrastructure` | Merged into `main` via PR #1 |
 | 2 | Localization | Complete | `feature/phase2-localization` | Merged into `main` via PR #2 |
 | 3 | PDF acquisition | Accepted delivery slice; URL/viewer/context-menu acquisition remains a documented spec gap | `feature/phase3-pdf-input` | Merged into `main` via PR #3 |
-| 4 | Client-side compression | Implemented, including conservative image recompression; separate browser investigation remains for the reported disabled Compress button | `feature/phase4-pdf-compression`, `feature/phase4-image-recompression` | Not merged into `main`; both tips are ancestors of the current Split branch |
+| 4 | Client-side compression | Implemented, including conservative image recompression; separate browser investigation remains for the reported disabled Compress button | `feature/phase4-pdf-compression`, `feature/phase4-image-recompression` | Merged into `main` via PR #4; merge commit `109d5b48e7ab2c7d61d88903c2e763167bf7fdad` |
 | 5 | JPEG2000 / OpenJPEG | Deferred and not implemented | No active implementation branch | Must remain Stage 5; it is not replaced by Split |
-| 6 | Client-side PDF splitting | Implemented and manually accepted in Chrome across all three output modes | Historical alias: `feature/phase5-pdf-split`, `PHASE_5_*`, `phase5_*` tests, `pdf-compressor-phase5` storage name | Not merged into `main`; runtime-validated code commit `3310e72980abe7085c2ab7d9f897804c88ddca27` |
-| 7 | Freemium logic and licensing | Not started | Future canonical branch: `feature/phase7-freemium-licensing` | Blocked until Stages 4 and 6 are integrated into `main` |
+| 6 | Client-side PDF splitting | Implemented and manually accepted in Chrome across all three output modes | Historical alias: `feature/phase5-pdf-split`, `PHASE_5_*`, `phase5_*` tests, `pdf-compressor-phase5` storage name | Merged into `main` via PR #5; merge commit `0d5a91a32ac4d1cf2499d9015db8a1a5fc6d0610` |
+| 7 | Freemium logic and licensing | Not started | Future canonical branch: `feature/phase7-freemium-licensing` | Ready for preflight after syncing from `main` and resolving the documented licensing decisions |
 | 8 | UX and accessibility | Not started | None | Future work |
 | 9 | Testing and debugging | Not started as a dedicated stage; earlier stages contain their own tests | None | Future work |
 | 10 | Publication | Not started | None | Future work |
@@ -66,17 +66,16 @@ Evidence:
 - [`../reports/PHASE_5_BROWSER_RUNTIME_TRACE.md`](../reports/PHASE_5_BROWSER_RUNTIME_TRACE.md)
 - [`../reports/PHASE_5_BROWSER_RUNTIME_FIX.md`](../reports/PHASE_5_BROWSER_RUNTIME_FIX.md)
 
-## Integration Order Before Stage 7
+## Integration Status Before Stage 7
 
-`origin/main` currently ends at the Phase 3 merge (`5b429f2`). The current Split branch contains the Stage 4 and Stage 6 histories, but neither has been merged into `main`.
+The required integration completed on 2026-07-14:
 
-Required order:
+1. Stage 4 merged through PR #4 at `109d5b48e7ab2c7d61d88903c2e763167bf7fdad`.
+2. Canonical Stage 6 Split merged through PR #5 at `0d5a91a32ac4d1cf2499d9015db8a1a5fc6d0610`.
+3. An ancestry check confirmed the complete historical Phase 5 / canonical Stage 6 tip is contained in `origin/main`.
+4. Isolated merge checks, TypeScript validation, production build, and the Worker runtime boundary guard passed before PR #5 was merged.
 
-1. Integrate and verify Stage 4 compression history.
-2. Integrate and verify canonical Stage 6 Split history (historical Phase 5 alias).
-3. Confirm `main` contains commit `3310e72980abe7085c2ab7d9f897804c88ddca27` or its reviewed merge equivalent.
-4. Create `feature/phase7-freemium-licensing` from updated `main`.
-5. Begin Stage 7 only after the preceding integration is complete.
+The next implementation branch must be created from updated `main` as `feature/phase7-freemium-licensing`.
 
 ## Stage 7 Scope and Open Product Decisions
 
