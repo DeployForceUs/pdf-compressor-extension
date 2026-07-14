@@ -102,3 +102,65 @@ First fix the worker RPC / transfer boundary for `split`. The compression enable
 
 # Decision
 ROOT_CAUSE_FOUND
+
+# Fix Implemented
+The worker return boundary was narrowed in `src/lib/offscreen/worker.ts`.
+
+The previous split return path always wrapped the `SplitArchiveOutcome` in a Comlink transfer call and built a transfer list from every ArrayBuffer in the result, including multi-artifact payloads. That browser-side transfer boundary is where the popup hang occurred for `individual-pdfs` and `separate-zips`.
+
+The fix now:
+- deduplicates split transferables in `src/lib/offscreen/split-worker-transfer.ts`;
+- keeps Comlink transfer for the single-artifact `single-zip` path;
+- returns the multi-artifact `SplitArchiveOutcome` by structured clone instead of forcing a multi-buffer transfer;
+- leaves compression behavior and popup state untouched.
+
+# Exact Faulty Payload
+The failing payload was the split worker return value for multi-artifact modes:
+- `SplitArchiveOutcome.artifacts[]`
+- each artifact `data: ArrayBuffer`
+- plus `result`
+
+The problematic boundary was `transfer(outcome, [...transferables])` when the payload contained more than one artifact buffer. The browser worker RPC never resolved cleanly from that return path.
+
+# Fix Details
+- Added `src/lib/offscreen/split-worker-transfer.ts`.
+- Added `transferSplitWorkerReturn(outcome)` to choose the safe return strategy.
+- Updated `src/lib/offscreen/worker.ts` to call the helper for `split`.
+- Added `tests/phase5_split_worker_transfer_boundary.test.ts` to cover the worker return boundary directly.
+
+# Validation
+Executed successfully:
+- `npm run check`
+- `npm run build`
+- `tests/phase5_split_worker_transfer_boundary.test.ts`
+- `tests/phase5_slice12_artifact_factory_foundation.test.ts`
+- `tests/phase5_slice13_artifact_factory_output_modes.test.ts`
+- `tests/phase5_slice6a.test.ts`
+- `tests/phase5_slice6b_a.test.ts`
+- `tests/phase5_slice7.test.ts`
+- `tests/phase5_slice8a.test.ts`
+- `tests/phase5_slice9_passwordless_encrypted_split.test.ts`
+- `tests/phase5_selected_pdf_persistence.test.ts`
+
+The focused suites now pass for:
+- `single-zip`
+- `individual-pdfs`
+- `separate-zips`
+
+# Manual Chrome Evidence
+Not executed in this environment.
+
+# Mode-by-mode Result
+- `single-zip`: worker return boundary remains transferable and passes the focused regression.
+- `individual-pdfs`: worker return boundary now resolves with structured-clone payload and passes the focused regression.
+- `separate-zips`: worker return boundary now resolves with structured-clone payload and passes the focused regression.
+
+# Cancellation Result
+Cancellation behavior was not altered by this fix and remains governed by the existing split runtime cancellation checks.
+
+# Remaining Risks
+- Browser-only manual validation is still required to confirm the unpacked extension no longer stalls at 10%.
+- The separate Compress PDF enablement issue remains out of scope for this fix.
+
+# Decision
+IMPLEMENTED_MANUAL_VALIDATION_PENDING

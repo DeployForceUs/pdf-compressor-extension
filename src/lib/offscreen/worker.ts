@@ -7,6 +7,7 @@ import {
   type CompressionOutcome,
 } from "../pdf/compressor";
 import { createSplitZipArchive, type SplitArchiveRequest, type SplitArchiveOutcome } from "../pdf/split-archive";
+import { transferSplitWorkerReturn } from "./split-worker-transfer";
 
 type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: CompressionProgressEvent) => void | Promise<void>;
@@ -39,17 +40,7 @@ const api: CompressionWorkerApi = {
 
   async split(request: SplitArchiveRequest, isCancelled: CancellationChecker, onProgress: SplitProgressReporter) {
     const outcome = await createSplitZipArchive(request, isCancelled, onProgress);
-    const transferables = new Set<ArrayBuffer>();
-
-    if (outcome.zipBytes) {
-      transferables.add(outcome.zipBytes);
-    }
-
-    for (const artifact of outcome.artifacts) {
-      transferables.add(artifact.data);
-    }
-
-    return transfer(outcome, [...transferables]);
+    return transferSplitWorkerReturn(outcome);
   },
 };
 
