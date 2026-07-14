@@ -20,6 +20,13 @@ import type {
 } from "../lib/messaging";
 import { normalizeSplitOutputMode } from "../lib/messaging";
 import { tracePdfSplit } from "../lib/pdf-split-trace";
+import { createUsageLimitService } from "../lib/monetization/limits";
+import { STAGE_7_MVP_POLICY } from "../lib/monetization/policy";
+import { createExtensionUsageStorage } from "../lib/monetization/storage";
+import { createExtensionLicenseStorage } from "../lib/monetization/storage";
+import { createLicenseService, type LicenseCheckResult } from "../lib/monetization/license";
+import { PRO_LICENSE_PUBLIC_KEY_PEM } from "../lib/monetization/license-public-key";
+import { createOperationAuthorizer, type OperationAuthorization } from "../lib/monetization/enforcement";
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
@@ -102,7 +109,52 @@ async function forwardToOffscreen<TResponse>(message: object): Promise<TResponse
 
 export default defineBackground(() => {
   const logger = createLogger("background");
+  const usageLimits = createUsageLimitService({
+    storage: createExtensionUsageStorage(browser.storage.local),
+  });
+  const licenseService = createLicenseService({
+    storage: createExtensionLicenseStorage(browser.storage.local),
+    publicKeyPem: PRO_LICENSE_PUBLIC_KEY_PEM,
+  });
+  const authorizeOperation = createOperationAuthorizer({
+    checkLicense: () => licenseService.check(),
+    reserveUsage: (operation) => usageLimits.reserve(operation),
+  });
   void initTelemetry("background");
+
+  function licenseResponse(result: LicenseCheckResult) {
+    if (result.valid) {
+      return {
+        ok: true as const,
+        isPro: true,
+        status: "active" as const,
+        licenseId: result.claims.sub,
+      };
+    }
+
+    return {
+      ok: true as const,
+      isPro: false,
+      status: result.code === "NO_LICENSE" ? "inactive" as const : "invalid" as const,
+      code: result.code,
+    };
+  }
+
+  function deniedOperationResponse(result: Extract<OperationAuthorization, { allowed: false }>) {
+    const error = result.code === "PRO_REQUIRED"
+      ? "A Pro license is required for this operation"
+      : result.code === "FREE_COOLDOWN_ACTIVE"
+        ? "The Free operation cooldown is active"
+        : "The Free daily operation limit has been reached";
+    return {
+      ok: false as const,
+      error,
+      code: result.code,
+      operation: result.operation,
+      remaining: result.remaining,
+      retryAfterMs: result.retryAfterMs,
+    };
+  }
 
   async function handle(message: BackgroundRequest): Promise<BackgroundResponse | null> {
     try {
@@ -131,13 +183,40 @@ export default defineBackground(() => {
             details: result.closed ? "Offscreen closed" : "Offscreen already closed",
           };
         }
+        case "monetization:state": {
+          const license = await licenseService.check();
+          return {
+            ok: true,
+            tier: license.valid ? "pro" : "free",
+            policy: STAGE_7_MVP_POLICY,
+            usage: await usageLimits.snapshot(),
+          };
+        }
+        case "license:activate": {
+          return licenseResponse(await licenseService.activate(message.token));
+        }
+        case "license:check": {
+          return licenseResponse(await licenseService.check());
+        }
+        case "license:revoke": {
+          await licenseService.revoke();
+          return licenseResponse({ valid: false, code: "NO_LICENSE" });
+        }
         case "background:compression-health": {
           await ensureOffscreenDocument();
           return forwardToOffscreen({ type: "offscreen:compression-health" });
         }
         case "background:compression-start": {
+          const authorization = await authorizeOperation("compression");
+          if (!authorization.allowed) {
+            return deniedOperationResponse(authorization);
+          }
           await ensureOffscreenDocument();
-          return forwardToOffscreen({ type: "offscreen:compression-start", mode: message.mode });
+          return forwardToOffscreen({
+            type: "offscreen:compression-start",
+            mode: message.mode,
+            quality: message.quality,
+          });
         }
         case "background:compression-cancel": {
           await ensureOffscreenDocument();
@@ -152,6 +231,10 @@ export default defineBackground(() => {
           return forwardToOffscreen({ type: "offscreen:compression-result-delete" });
         }
         case "split:local": {
+          const authorization = await authorizeOperation("split", { proRequired: message.compressAfter === true });
+          if (!authorization.allowed) {
+            return deniedOperationResponse(authorization);
+          }
           const outputMode = normalizeSplitOutputMode(message.outputMode);
           tracePdfSplit({
             outputMode,
@@ -172,6 +255,7 @@ export default defineBackground(() => {
               strategy: message.strategy,
               outputMode: message.outputMode,
               compressAfter: message.compressAfter,
+              compressionQuality: message.compressionQuality,
             } as OffscreenSplitRequest);
             tracePdfSplit({
               outputMode,

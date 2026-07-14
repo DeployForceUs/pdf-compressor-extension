@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useRef } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
@@ -6,6 +6,14 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
 import { formatBytes, formatDuration, formatPercent, normalizeLocale } from "../../lib/i18n/helpers";
 import { MAX_PDF_BYTES, validatePdfFile } from "../../lib/pdf-validation";
+import {
+  createCompressionQualityStorage,
+  DEFAULT_COMPRESSION_QUALITY,
+  MAX_COMPRESSION_QUALITY,
+  MIN_COMPRESSION_QUALITY,
+  normalizeCompressionQuality,
+} from "../../lib/compression-quality";
+import { getDeviceMemoryGb, getMaxPdfBytes } from "../../lib/pdf-size-policy";
 import { buildSelectedPdfDisplay, formatSplitWarningsHeader } from "./pdf-display";
 import { readPdfPageCount } from "../../lib/pdf-validation";
 import type {
@@ -37,6 +45,9 @@ import type {
   StorageCompareResponse,
   StorageReadResponse,
   StorageWriteResponse,
+  LicenseStateResponse,
+  BackgroundErrorResponse,
+  MonetizationStateResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
@@ -63,6 +74,8 @@ import {
 } from "./split-ui";
 import { SELECTED_PDF_RECORD_ID, normalizeSplitSnapshot, usePopupStore, type SplitSnapshot } from "./store";
 import "../../styles/popup.css";
+
+const compressionQualityStorage = createCompressionQualityStorage(browser.storage.local);
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
   if (left.byteLength !== right.byteLength) {
@@ -112,6 +125,23 @@ function errorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function monetizationErrorMessage(t: ReturnType<typeof useTranslation>["t"], response: BackgroundErrorResponse) {
+  switch (response.code) {
+    case "PRO_REQUIRED":
+      return t("monetization.proRequired");
+    case "FREE_DAILY_LIMIT_REACHED":
+      return t(response.operation === "compression"
+        ? "monetization.compressionLimitReached"
+        : "monetization.splitLimitReached");
+    case "FREE_COOLDOWN_ACTIVE":
+      return t("monetization.cooldownActive", {
+        seconds: Math.max(1, Math.ceil((response.retryAfterMs ?? 0) / 1000)),
+      });
+    default:
+      return response.error;
+  }
 }
 
 function isCompressionProgressEvent(message: unknown): message is CompressionProgressEvent {
@@ -298,6 +328,14 @@ function translateSplitError(t: (key: string, options?: Record<string, unknown>)
 function Popup() {
   const { i18n, t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [licenseToken, setLicenseToken] = useState("");
+  const [licenseState, setLicenseState] = useState<LicenseStateResponse | null>(null);
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseError, setLicenseError] = useState("");
+  const [monetizationState, setMonetizationState] = useState<MonetizationStateResponse | null>(null);
+  const [monetizationCheckedAt, setMonetizationCheckedAt] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(() => Date.now());
+  const [compressionQuality, setCompressionQuality] = useState(DEFAULT_COMPRESSION_QUALITY);
 
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
@@ -327,7 +365,25 @@ function Popup() {
 
   useEffect(() => {
     void runBackgroundHealthCheck();
+    void checkLicense();
+    void refreshMonetization();
+    void compressionQualityStorage.read().then(setCompressionQuality).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!monetizationState || monetizationState.tier === "pro" || !monetizationState.usage.cooldown.active) {
+      return;
+    }
+    const timer = window.setInterval(() => setCooldownNow(Date.now()), 500);
+    const refreshTimer = window.setTimeout(
+      () => void refreshMonetization(),
+      monetizationState.usage.cooldown.retryAfterMs + 50,
+    );
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(refreshTimer);
+    };
+  }, [monetizationState]);
 
   useEffect(() => {
     void restoreSelectedPdf();
@@ -408,18 +464,96 @@ function Popup() {
     }
   }
 
+  async function checkLicense() {
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      setLicenseState(await sendMessage<LicenseStateResponse>({ type: "license:check" }));
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.checkFailed")));
+    } finally {
+      setLicenseBusy(false);
+    }
+  }
+
+  async function refreshMonetization() {
+    try {
+      const response = await sendMessage<MonetizationStateResponse>({ type: "monetization:state" });
+      const timestamp = Date.now();
+      setMonetizationState(response);
+      setMonetizationCheckedAt(timestamp);
+      setCooldownNow(timestamp);
+    } catch {
+      // Usage display is best-effort; operation responses remain authoritative.
+    }
+  }
+
+  async function resolveCurrentMaxPdfBytes() {
+    let tier = monetizationState?.tier ?? (licenseState?.isPro ? "pro" : "free");
+    try {
+      const current = await sendMessage<MonetizationStateResponse>({ type: "monetization:state" });
+      tier = current.tier;
+      setMonetizationState(current);
+    } catch {
+      // The current popup state is a safe fallback; operation authorization remains authoritative.
+    }
+    return getMaxPdfBytes(tier, getDeviceMemoryGb());
+  }
+
+  async function activateLicense() {
+    const token = licenseToken.trim();
+    if (!token) {
+      setLicenseError(t("license.tokenRequired"));
+      return;
+    }
+
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      const response = await sendMessage<LicenseStateResponse>({ type: "license:activate", token });
+      setLicenseState(response);
+      if (response.isPro) {
+        setLicenseToken("");
+      } else {
+        setLicenseError(t("license.invalidToken"));
+      }
+      await refreshMonetization();
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.activationFailed")));
+    } finally {
+      setLicenseBusy(false);
+    }
+  }
+
+  async function revokeLicense() {
+    setLicenseBusy(true);
+    setLicenseError("");
+    try {
+      setLicenseState(await sendMessage<LicenseStateResponse>({ type: "license:revoke" }));
+      setLicenseToken("");
+      await refreshMonetization();
+    } catch (error) {
+      setLicenseError(errorMessage(error, t("license.revokeFailed")));
+    } finally {
+      setLicenseBusy(false);
+    }
+  }
+
   async function ensureOffscreenDocument() {
     const openResult = await sendMessage<OffscreenControlResponse>({ type: "offscreen:open" });
     return openResult;
   }
 
-  function translateValidationIssue(issue: "empty" | "tooLarge" | "unsupported" | "invalid") {
+  function translateValidationIssue(
+    issue: "empty" | "tooLarge" | "unsupported" | "invalid",
+    maxBytes = MAX_PDF_BYTES,
+  ) {
     switch (issue) {
       case "empty":
         return t("pdfInput.emptyFile");
       case "tooLarge":
         return t("pdfInput.fileTooLarge", {
-          maxBytes: formatBytes(MAX_PDF_BYTES, locale),
+          maxBytes: formatBytes(maxBytes, locale),
         });
       case "unsupported":
         return t("pdfInput.unsupportedFile");
@@ -608,6 +742,17 @@ function Popup() {
       return;
     }
 
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    if (pdf.fileSize > maxBytes) {
+      setCompression({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: translateValidationIssue("tooLarge", maxBytes),
+      });
+      return;
+    }
+
     setCompression({
       status: "loading-engine",
       progress: 0,
@@ -616,12 +761,16 @@ function Popup() {
     });
 
     try {
-      const response = await sendMessage<CompressionStartResponse | { ok: false; error: string }>(
-        { type: "background:compression-start", mode: "Balanced" } as BackgroundCompressionStartRequest,
+      const response = await sendMessage<CompressionStartResponse | BackgroundErrorResponse>(
+        {
+          type: "background:compression-start",
+          mode: "Balanced",
+          quality: compressionQuality,
+        } as BackgroundCompressionStartRequest,
       );
 
       if (!response.ok) {
-        throw new Error(response.error);
+        throw new Error(monetizationErrorMessage(t, response));
       }
 
       applyCompressionResult(response.result);
@@ -632,6 +781,8 @@ function Popup() {
         stage: "idle",
         error: errorMessage(error, t("compression.compressionFailed")),
       });
+    } finally {
+      await refreshMonetization();
     }
   }
 
@@ -701,6 +852,17 @@ function Popup() {
       return;
     }
 
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    if (pdf.fileSize > maxBytes) {
+      setSplit({
+        status: "error",
+        progress: 0,
+        stage: "idle",
+        error: translateValidationIssue("tooLarge", maxBytes),
+      });
+      return;
+    }
+
     const request = buildSplitRequestFromForm({
       strategy: split.strategy,
       outputMode: split.outputMode,
@@ -765,17 +927,18 @@ function Popup() {
         messageDirection: "popup->background",
         success: true,
       });
-      const response = await sendMessage<SplitStartResponse | { ok: false; error: string }>(
+      const response = await sendMessage<SplitStartResponse | BackgroundErrorResponse>(
         {
           type: "split:local",
           strategy: request.strategy,
           outputMode: request.outputMode,
           compressAfter: request.compressAfter,
+          compressionQuality,
         },
       );
 
       if (!response.ok) {
-        throw new Error(response.error);
+        throw new Error(monetizationErrorMessage(t, response));
       }
 
       tracePdfSplit({
@@ -800,6 +963,8 @@ function Popup() {
         stage: "idle",
         error: errorMessage(error, t("split.errors.splitFailed")),
       });
+    } finally {
+      await refreshMonetization();
     }
   }
 
@@ -858,13 +1023,14 @@ function Popup() {
       error: "",
     });
 
-    const validation = await validatePdfFile(file);
+    const maxBytes = await resolveCurrentMaxPdfBytes();
+    const validation = await validatePdfFile(file, { maxBytes });
 
     if (!validation.ok) {
       setPdf({
         status: "error",
         selected: false,
-        error: translateValidationIssue(validation.issue),
+        error: translateValidationIssue(validation.issue, validation.maxBytes ?? maxBytes),
       });
       return;
     }
@@ -1026,6 +1192,14 @@ function Popup() {
     }
 
     await persistPdfFile(file);
+  }
+
+  function changeCompressionQuality(value: number) {
+    const quality = normalizeCompressionQuality(value);
+    setCompressionQuality(quality);
+    void compressionQualityStorage.write(quality).catch(() => {
+      setCompression({ status: "error", error: t("errors.storage") });
+    });
   }
 
   async function clearSelectedPdf() {
@@ -1277,6 +1451,10 @@ function Popup() {
     t,
     formatBytes: (value) => formatBytes(value, locale),
   });
+  const cooldownRemainingMs = monetizationState?.tier === "free" && monetizationState.usage.cooldown.active
+    ? Math.max(0, monetizationState.usage.cooldown.retryAfterMs - (cooldownNow - monetizationCheckedAt))
+    : 0;
+  const cooldownRemainingSeconds = Math.ceil(cooldownRemainingMs / 1000);
 
   return (
     <main className="app">
@@ -1305,6 +1483,99 @@ function Popup() {
         </header>
 
         <div className="body">
+          <article className={licenseState?.isPro ? "license-card license-card--pro" : "license-card"}>
+            <div className="license-card__header">
+              <div>
+                <p className="eyebrow">{t("license.eyebrow")}</p>
+                <h2>{t("license.title")}</h2>
+              </div>
+              <span className="status-badge">
+                {licenseBusy && !licenseState
+                  ? t("license.checking")
+                  : licenseState?.isPro
+                    ? t("license.proActive")
+                    : t("license.free")}
+              </span>
+            </div>
+
+            {licenseState?.isPro ? (
+              <div className="license-card__active">
+                <p>{t("license.activeDescription")}</p>
+                {licenseState.licenseId ? (
+                  <div className="license-card__id">
+                    <span>{t("license.licenseId")}</span>
+                    <code>{licenseState.licenseId}</code>
+                  </div>
+                ) : null}
+                <button type="button" className="secondary" onClick={() => void revokeLicense()} disabled={licenseBusy}>
+                  {t("license.deactivate")}
+                </button>
+              </div>
+            ) : (
+              <div className="license-card__form">
+                <p>{t("license.description")}</p>
+                <label className="license-card__field">
+                  <span>{t("license.tokenLabel")}</span>
+                  <textarea
+                    rows={3}
+                    value={licenseToken}
+                    placeholder={t("license.tokenPlaceholder")}
+                    onChange={(event) => {
+                      setLicenseToken(event.currentTarget.value);
+                      setLicenseError("");
+                    }}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    disabled={licenseBusy}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void activateLicense()}
+                  disabled={licenseBusy || !licenseToken.trim()}
+                >
+                  {licenseBusy ? t("license.activating") : t("license.activate")}
+                </button>
+              </div>
+            )}
+
+            {monetizationState ? (
+              <div className="license-usage" aria-label={t("monetization.usageTitle")}>
+                {monetizationState.tier === "pro" ? (
+                  <div className="license-usage__pro">{t("monetization.unlimited")}</div>
+                ) : (
+                  <>
+                    <div className="license-usage__row">
+                      <span>{t("monetization.compressions")}</span>
+                      <strong>{t("monetization.remainingOfLimit", {
+                        remaining: monetizationState.usage.compression.remaining,
+                        limit: monetizationState.usage.compression.limit,
+                      })}</strong>
+                    </div>
+                    <div className="license-usage__row">
+                      <span>{t("monetization.splits")}</span>
+                      <strong>{t("monetization.remainingOfLimit", {
+                        remaining: monetizationState.usage.split.remaining,
+                        limit: monetizationState.usage.split.limit,
+                      })}</strong>
+                    </div>
+                    <div className={cooldownRemainingSeconds > 0
+                      ? "license-usage__cooldown license-usage__cooldown--active"
+                      : "license-usage__cooldown"}>
+                      {cooldownRemainingSeconds > 0
+                        ? t("monetization.cooldownCountdown", { seconds: cooldownRemainingSeconds })
+                        : t("monetization.ready")}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {licenseError ? <p className="license-card__error" role="alert">{licenseError}</p> : null}
+          </article>
+
           <article className="input-card">
             <div className="input-card__header">
               <div className="input-card__title">
@@ -1530,6 +1801,12 @@ function Popup() {
                 />
                 <span>{t("split.compressAfter")}</span>
               </label>
+              {split.compressAfter && !licenseState?.isPro ? (
+                <div className="split-pro-notice" role="alert">
+                  <strong>{t("monetization.proRequiredTitle")}</strong>
+                  <span>{t("monetization.proRequired")}</span>
+                </div>
+              ) : null}
 
               <div className="split-progress" role="progressbar" aria-valuenow={split.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="split-progress__track">
@@ -1573,6 +1850,9 @@ function Popup() {
               </div>
 
               <div className="split-actions">
+                {split.status === "error" && split.error ? (
+                  <p className="split-actions__error" role="alert">{split.error}</p>
+                ) : null}
                 <button type="button" className="primary" onClick={() => void startSplit()} disabled={!splitCanStart}>
                   {splitBusy ? t("split.splitting") : t("split.start")}
                 </button>
@@ -1671,7 +1951,26 @@ function Popup() {
               </div>
 
               <div className="compression-card__status">{compressionStatusLabel}</div>
-              <div className="compression-card__mode">{t("compression.balanced")}</div>
+              <label className="compression-quality">
+                <span className="compression-quality__header">
+                  <span>{t("compression.quality")}</span>
+                  <strong>{`${compressionQuality}%`}</strong>
+                </span>
+                <input
+                  type="range"
+                  min={MIN_COMPRESSION_QUALITY}
+                  max={MAX_COMPRESSION_QUALITY}
+                  step={5}
+                  value={compressionQuality}
+                  disabled={sharedBusy}
+                  onChange={(event) => changeCompressionQuality(Number(event.currentTarget.value))}
+                />
+                <span className="compression-quality__labels" aria-hidden="true">
+                  <span>{t("compression.qualityLow")}</span>
+                  <span>{t("compression.qualityMedium")}</span>
+                  <span>{t("compression.qualityHigh")}</span>
+                </span>
+              </label>
 
               <div className="compression-progress" role="progressbar" aria-valuenow={compression.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="compression-progress__track">

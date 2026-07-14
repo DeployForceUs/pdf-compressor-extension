@@ -1,6 +1,7 @@
 import { EncryptedPDFError, PDFDocument } from "pdf-lib";
+import { FREE_MAX_PDF_BYTES } from "./pdf-size-policy";
 
-export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const MAX_PDF_BYTES = FREE_MAX_PDF_BYTES;
 const PDF_SIGNATURE_BYTES = new TextEncoder().encode("%PDF-");
 
 export type PdfValidationIssue = "empty" | "tooLarge" | "unsupported" | "invalid";
@@ -20,6 +21,7 @@ export type PdfValidationResult =
   | {
       ok: false;
       issue: PdfValidationIssue;
+      maxBytes?: number;
     };
 
 function hasPdfExtension(fileName: string) {
@@ -39,13 +41,18 @@ async function readSignature(file: File) {
   return PDF_SIGNATURE_BYTES.every((value, index) => value === header[index]);
 }
 
-export async function validatePdfFile(file: File): Promise<PdfValidationResult> {
+export async function validatePdfFile(
+  file: File,
+  options: { maxBytes?: number } = {},
+): Promise<PdfValidationResult> {
+  const maxBytes = options.maxBytes ?? MAX_PDF_BYTES;
+
   if (file.size <= 0) {
     return { ok: false, issue: "empty" };
   }
 
-  if (file.size > MAX_PDF_BYTES) {
-    return { ok: false, issue: "tooLarge" };
+  if (file.size > maxBytes) {
+    return { ok: false, issue: "tooLarge", maxBytes };
   }
 
   if (!hasPdfExtension(file.name)) {

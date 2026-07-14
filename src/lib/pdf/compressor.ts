@@ -12,6 +12,7 @@ import {
   formatSafeImageRecompressionDiagnostics,
   recompressSafeImageCandidates,
 } from "./image-xobject-recompression";
+import { normalizeCompressionQuality } from "../compression-quality";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
@@ -34,6 +35,7 @@ export type CompressionRequest = {
   fileName: string;
   mimeType: string | null;
   mode: CompressionMode;
+  quality?: number;
   timeoutMs: number;
 };
 
@@ -265,7 +267,7 @@ export async function compressBalancedPdf(
       request.input,
       pdfDocument,
       imageClassification,
-      75,
+      normalizeCompressionQuality(request.quality),
       isCancelled,
     );
     if (import.meta.env.DEV) {

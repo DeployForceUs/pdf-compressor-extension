@@ -105,4 +105,4 @@ Do not invent these missing product/security decisions during implementation. Re
 - Historical alias retention: **Requires future specification update** only if the product wants repository identifiers renamed; no runtime rename is currently recommended.
 - Stage 5 deferral: **Partially matches specification** because JPEG2000 remains a canonical MVP requirement but is not implemented.
 - Stage 6 Split: **Fully matches the implemented Split requirements**, with the historical Phase 5 naming discrepancy documented here.
-- Stage 7: **Not implemented**; security and offline-validation ambiguities must be resolved before the licensing slice.
+- Stage 7: **Implemented on `feature/phase7-freemium-licensing`; browser acceptance passed and the branch is awaiting review/merge**; the approved MVP uses offline ES256 perpetual tokens, local Free counters, persisted quality, and device-aware size limits.

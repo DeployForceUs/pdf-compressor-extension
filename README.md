@@ -7,7 +7,7 @@ Local-first Chrome extension for PDF compression and splitting, based on specifi
 - Stages 1-4 are merged into `main`.
 - Canonical Stage 5 JPEG2000 support is deferred and not implemented.
 - Canonical Stage 6 PDF Split is implemented, manually accepted in Chrome, and merged into `main` under the historical branch/report label "Phase 5".
-- Canonical Stage 7 Freemium and licensing has not started.
+- Canonical Stage 7 Freemium and licensing is implemented on `feature/phase7-freemium-licensing`; browser acceptance has passed and the branch is awaiting review and merge.
 
 See [`docs/PHASE_ROADMAP.md`](docs/PHASE_ROADMAP.md) before creating a phase branch or interpreting historical `PHASE_5_*` reports.
 
@@ -49,12 +49,12 @@ Implemented on the current cumulative feature branch:
 - PDF splitting by pages, maximum size, and manual ranges
 - single ZIP, individual PDF, and separate ZIP output modes
 - IndexedDB persistence and restored downloads
+- Free daily limits with a shared cooldown and persistent usage display
+- offline ES256 Pro-license activation and Pro-only Split recompression
+- persistent compression quality and device-memory-aware PDF size limits
 
 Not yet implemented:
 
 - JPEG2000 / OpenJPEG
-- Free daily limits and rate limiting
-- production Pro-license verification and activation
-- quality slider persistence
 - URL/viewer/context-menu PDF acquisition required by the full specification
 - On-Premise / Enterprise features

@@ -422,6 +422,7 @@ async function startSplit(
         strategy: message.strategy,
         outputMode: message.outputMode,
         compressAfter: message.compressAfter,
+        compressionQuality: message.compressionQuality,
       },
       {
         workerApi: getSplitWorkerGateway(),
@@ -598,6 +599,7 @@ async function startCompression(
           fileName: selected.name,
           mimeType: selected.type,
           mode: message.mode,
+          quality: message.quality,
           timeoutMs: COMPRESSION_TIMEOUT_MS,
         },
         [inputBuffer],

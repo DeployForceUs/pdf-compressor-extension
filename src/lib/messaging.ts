@@ -2,6 +2,9 @@ import browser from "webextension-polyfill";
 import type { SplitStrategy } from "./pdf/split-strategies";
 import type { SplitErrorCode } from "./pdf/split-errors";
 import type { SplitOutputMode } from "./split-output-mode";
+import type { UsageSnapshot } from "./monetization/limits";
+import type { STAGE_7_MVP_POLICY } from "./monetization/policy";
+import type { LicenseCheckErrorCode } from "./monetization/license";
 
 export {
   SPLIT_OUTPUT_MODES,
@@ -292,6 +295,7 @@ export type SplitLocalRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type SplitCancelRequest = {
@@ -313,6 +317,7 @@ export type BackgroundSplitStartRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type BackgroundSplitCancelRequest = {
@@ -334,6 +339,7 @@ export type OffscreenSplitRequest = {
   strategy: SplitStrategy;
   outputMode?: SplitOutputMode;
   compressAfter?: boolean;
+  compressionQuality?: number;
 };
 
 export type OffscreenSplitCancelRequest = {
@@ -416,6 +422,7 @@ export type CompressionHealthRequest = {
 export type CompressionStartRequest = {
   type: "compression:start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type CompressionCancelRequest = {
@@ -437,6 +444,7 @@ export type BackgroundCompressionHealthRequest = {
 export type BackgroundCompressionStartRequest = {
   type: "background:compression-start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type BackgroundCompressionCancelRequest = {
@@ -459,6 +467,7 @@ export type OffscreenCompressionHealthRequest = {
 export type OffscreenCompressionStartRequest = {
   type: "offscreen:compression-start";
   mode: CompressionMode;
+  quality?: number;
 };
 
 export type OffscreenCompressionCancelRequest = {
@@ -559,6 +568,38 @@ export type OffscreenCloseRequest = {
   type: "offscreen:close";
 };
 
+export type MonetizationStateRequest = {
+  type: "monetization:state";
+};
+
+export type MonetizationStateResponse = {
+  ok: true;
+  tier: "free" | "pro";
+  policy: typeof STAGE_7_MVP_POLICY;
+  usage: UsageSnapshot;
+};
+
+export type LicenseActivateRequest = {
+  type: "license:activate";
+  token: string;
+};
+
+export type LicenseCheckRequest = {
+  type: "license:check";
+};
+
+export type LicenseRevokeRequest = {
+  type: "license:revoke";
+};
+
+export type LicenseStateResponse = {
+  ok: true;
+  isPro: boolean;
+  status: "active" | "inactive" | "invalid";
+  licenseId?: string;
+  code?: LicenseCheckErrorCode;
+};
+
 export type BackgroundRequest =
   | BackgroundHealthRequest
   | OffscreenOpenRequest
@@ -568,6 +609,10 @@ export type BackgroundRequest =
   | BackgroundCompressionCancelRequest
   | BackgroundCompressionResultReadRequest
   | BackgroundCompressionResultDeleteRequest
+  | MonetizationStateRequest
+  | LicenseActivateRequest
+  | LicenseCheckRequest
+  | LicenseRevokeRequest
   | SplitLocalRequest
   | SplitCancelRequest
   | SplitResultReadRequest
@@ -588,6 +633,10 @@ export type OffscreenControlResponse = {
 export type BackgroundErrorResponse = {
   ok: false;
   error: string;
+  code?: "PRO_REQUIRED" | "FREE_DAILY_LIMIT_REACHED" | "FREE_COOLDOWN_ACTIVE";
+  operation?: "compression" | "split";
+  remaining?: number;
+  retryAfterMs?: number;
 };
 
 export type BackgroundResponse =
@@ -603,6 +652,8 @@ export type BackgroundResponse =
   | SplitCancelResponse
   | SplitResultReadResponse
   | SplitResultDeleteResponse
+  | MonetizationStateResponse
+  | LicenseStateResponse
   | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {
