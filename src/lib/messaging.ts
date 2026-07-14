@@ -627,6 +627,10 @@ export type OffscreenControlResponse = {
 export type BackgroundErrorResponse = {
   ok: false;
   error: string;
+  code?: "PRO_REQUIRED" | "FREE_DAILY_LIMIT_REACHED" | "FREE_COOLDOWN_ACTIVE";
+  operation?: "compression" | "split";
+  remaining?: number;
+  retryAfterMs?: number;
 };
 
 export type BackgroundResponse =

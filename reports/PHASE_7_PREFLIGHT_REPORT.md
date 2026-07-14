@@ -24,7 +24,7 @@
 2. Persistence: a `chrome.storage.local` adapter and background messaging for current entitlement/usage state. **Implemented.**
 3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Implemented, including activation/check/revoke background messaging.**
 4. Issuance: a local-only CLI signs perpetual customer tokens with the encrypted private key and writes them mode `600`. **Implemented.**
-5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`.
+5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`. **Implemented.**
 6. UI: localized activation and Pro state. **Implemented.** Remaining usage and cooldown feedback are pending enforcement.
 7. Quality/device policy: persisted quality selection and device-memory-aware size limits.
 
@@ -66,3 +66,11 @@
 - A successful activation clears the token textarea and displays the verified license ID.
 - Reopening the popup re-checks the stored signature and restores `Pro active` state.
 - Deactivation removes the locally stored token and returns the popup to Free state.
+
+## Runtime Enforcement
+
+- Background authorization runs before creating or forwarding work to the offscreen runtime.
+- Verified Pro licenses bypass local counters and the shared cooldown.
+- Free compression and Split requests reserve their daily usage atomically before execution.
+- Free `compressAfter` requests are rejected as Pro-only without consuming a Split allowance.
+- Cooldown, daily-limit, and Pro-required denials use structured codes rendered as localized popup errors.

@@ -25,6 +25,12 @@
     "checkFailed": "No se pudo comprobar la licencia.",
     "revokeFailed": "No se pudo desactivar la licencia."
   },
+  "monetization": {
+    "proRequired": "Esta opción requiere una licencia Pro activa.",
+    "compressionLimitReached": "Límite diario gratuito alcanzado: 3 compresiones al día.",
+    "splitLimitReached": "Límite diario gratuito alcanzado: 10 divisiones al día.",
+    "cooldownActive": "Espera {{seconds}} segundos antes de iniciar otra operación."
+  },
   "language": {
     "label": "Idioma",
     "english": "Inglés",

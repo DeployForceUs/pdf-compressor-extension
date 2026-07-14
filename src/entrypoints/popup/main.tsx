@@ -38,6 +38,7 @@ import type {
   StorageReadResponse,
   StorageWriteResponse,
   LicenseStateResponse,
+  BackgroundErrorResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
@@ -113,6 +114,23 @@ function errorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function monetizationErrorMessage(t: ReturnType<typeof useTranslation>["t"], response: BackgroundErrorResponse) {
+  switch (response.code) {
+    case "PRO_REQUIRED":
+      return t("monetization.proRequired");
+    case "FREE_DAILY_LIMIT_REACHED":
+      return t(response.operation === "compression"
+        ? "monetization.compressionLimitReached"
+        : "monetization.splitLimitReached");
+    case "FREE_COOLDOWN_ACTIVE":
+      return t("monetization.cooldownActive", {
+        seconds: Math.max(1, Math.ceil((response.retryAfterMs ?? 0) / 1000)),
+      });
+    default:
+      return response.error;
+  }
 }
 
 function isCompressionProgressEvent(message: unknown): message is CompressionProgressEvent {
@@ -671,12 +689,12 @@ function Popup() {
     });
 
     try {
-      const response = await sendMessage<CompressionStartResponse | { ok: false; error: string }>(
+      const response = await sendMessage<CompressionStartResponse | BackgroundErrorResponse>(
         { type: "background:compression-start", mode: "Balanced" } as BackgroundCompressionStartRequest,
       );
 
       if (!response.ok) {
-        throw new Error(response.error);
+        throw new Error(monetizationErrorMessage(t, response));
       }
 
       applyCompressionResult(response.result);
@@ -820,7 +838,7 @@ function Popup() {
         messageDirection: "popup->background",
         success: true,
       });
-      const response = await sendMessage<SplitStartResponse | { ok: false; error: string }>(
+      const response = await sendMessage<SplitStartResponse | BackgroundErrorResponse>(
         {
           type: "split:local",
           strategy: request.strategy,
@@ -830,7 +848,7 @@ function Popup() {
       );
 
       if (!response.ok) {
-        throw new Error(response.error);
+        throw new Error(monetizationErrorMessage(t, response));
       }
 
       tracePdfSplit({

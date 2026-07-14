@@ -25,6 +25,12 @@
     "checkFailed": "Could not check the license.",
     "revokeFailed": "Could not deactivate the license."
   },
+  "monetization": {
+    "proRequired": "This option requires an active Pro license.",
+    "compressionLimitReached": "Free daily limit reached: 3 compressions per day.",
+    "splitLimitReached": "Free daily limit reached: 10 splits per day.",
+    "cooldownActive": "Please wait {{seconds}} seconds before starting another operation."
+  },
   "language": {
     "label": "Language",
     "english": "English",
