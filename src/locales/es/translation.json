@@ -26,6 +26,13 @@
     "revokeFailed": "No se pudo desactivar la licencia."
   },
   "monetization": {
+    "usageTitle": "Uso",
+    "compressions": "Compresiones",
+    "splits": "Divisiones",
+    "remainingOfLimit": "Quedan {{remaining}} de {{limit}}",
+    "unlimited": "Operaciones Pro ilimitadas",
+    "ready": "Listo para la siguiente operación",
+    "cooldownCountdown": "Siguiente operación disponible en {{seconds}} s",
     "proRequiredTitle": "Se requiere licencia Pro",
     "proRequired": "Esta opción requiere una licencia Pro activa.",
     "compressionLimitReached": "Límite diario gratuito alcanzado: 3 compresiones al día.",

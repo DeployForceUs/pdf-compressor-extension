@@ -25,7 +25,7 @@
 3. Licensing: signed-token parsing and asymmetric verification with an embedded production public key supplied separately from the private issuer key. **Implemented, including activation/check/revoke background messaging.**
 4. Issuance: a local-only CLI signs perpetual customer tokens with the encrypted private key and writes them mode `600`. **Implemented.**
 5. Enforcement: reserve Free operations at the background boundary, keep Pro unlimited, and enforce Pro-only `compressAfter`. **Implemented.**
-6. UI: localized activation and Pro state. **Implemented.** Remaining usage and cooldown feedback are pending enforcement.
+6. UI: localized activation, Pro state, remaining usage, and live cooldown feedback. **Implemented.**
 7. Quality/device policy: persisted quality selection and device-memory-aware size limits.
 
 ## Foundation Safety Properties
@@ -75,3 +75,4 @@
 - Free `compressAfter` requests are rejected as Pro-only without consuming a Split allowance.
 - Cooldown, daily-limit, and Pro-required denials use structured codes rendered as localized popup errors.
 - Free users see a persistent inline Pro-required notice beside `compressAfter`; runtime denials are repeated beside the Split action.
+- The license card shows current Free compression/Split allowances and a live shared-cooldown countdown; Pro displays unlimited operations.

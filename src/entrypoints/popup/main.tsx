@@ -39,6 +39,7 @@ import type {
   StorageWriteResponse,
   LicenseStateResponse,
   BackgroundErrorResponse,
+  MonetizationStateResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
@@ -321,6 +322,9 @@ function Popup() {
   const [licenseState, setLicenseState] = useState<LicenseStateResponse | null>(null);
   const [licenseBusy, setLicenseBusy] = useState(false);
   const [licenseError, setLicenseError] = useState("");
+  const [monetizationState, setMonetizationState] = useState<MonetizationStateResponse | null>(null);
+  const [monetizationCheckedAt, setMonetizationCheckedAt] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(() => Date.now());
 
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
@@ -351,7 +355,23 @@ function Popup() {
   useEffect(() => {
     void runBackgroundHealthCheck();
     void checkLicense();
+    void refreshMonetization();
   }, []);
+
+  useEffect(() => {
+    if (!monetizationState || monetizationState.tier === "pro" || !monetizationState.usage.cooldown.active) {
+      return;
+    }
+    const timer = window.setInterval(() => setCooldownNow(Date.now()), 500);
+    const refreshTimer = window.setTimeout(
+      () => void refreshMonetization(),
+      monetizationState.usage.cooldown.retryAfterMs + 50,
+    );
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(refreshTimer);
+    };
+  }, [monetizationState]);
 
   useEffect(() => {
     void restoreSelectedPdf();
@@ -444,6 +464,18 @@ function Popup() {
     }
   }
 
+  async function refreshMonetization() {
+    try {
+      const response = await sendMessage<MonetizationStateResponse>({ type: "monetization:state" });
+      const timestamp = Date.now();
+      setMonetizationState(response);
+      setMonetizationCheckedAt(timestamp);
+      setCooldownNow(timestamp);
+    } catch {
+      // Usage display is best-effort; operation responses remain authoritative.
+    }
+  }
+
   async function activateLicense() {
     const token = licenseToken.trim();
     if (!token) {
@@ -461,6 +493,7 @@ function Popup() {
       } else {
         setLicenseError(t("license.invalidToken"));
       }
+      await refreshMonetization();
     } catch (error) {
       setLicenseError(errorMessage(error, t("license.activationFailed")));
     } finally {
@@ -474,6 +507,7 @@ function Popup() {
     try {
       setLicenseState(await sendMessage<LicenseStateResponse>({ type: "license:revoke" }));
       setLicenseToken("");
+      await refreshMonetization();
     } catch (error) {
       setLicenseError(errorMessage(error, t("license.revokeFailed")));
     } finally {
@@ -705,6 +739,8 @@ function Popup() {
         stage: "idle",
         error: errorMessage(error, t("compression.compressionFailed")),
       });
+    } finally {
+      await refreshMonetization();
     }
   }
 
@@ -873,6 +909,8 @@ function Popup() {
         stage: "idle",
         error: errorMessage(error, t("split.errors.splitFailed")),
       });
+    } finally {
+      await refreshMonetization();
     }
   }
 
@@ -1350,6 +1388,10 @@ function Popup() {
     t,
     formatBytes: (value) => formatBytes(value, locale),
   });
+  const cooldownRemainingMs = monetizationState?.tier === "free" && monetizationState.usage.cooldown.active
+    ? Math.max(0, monetizationState.usage.cooldown.retryAfterMs - (cooldownNow - monetizationCheckedAt))
+    : 0;
+  const cooldownRemainingSeconds = Math.ceil(cooldownRemainingMs / 1000);
 
   return (
     <main className="app">
@@ -1435,6 +1477,38 @@ function Popup() {
                 </button>
               </div>
             )}
+
+            {monetizationState ? (
+              <div className="license-usage" aria-label={t("monetization.usageTitle")}>
+                {monetizationState.tier === "pro" ? (
+                  <div className="license-usage__pro">{t("monetization.unlimited")}</div>
+                ) : (
+                  <>
+                    <div className="license-usage__row">
+                      <span>{t("monetization.compressions")}</span>
+                      <strong>{t("monetization.remainingOfLimit", {
+                        remaining: monetizationState.usage.compression.remaining,
+                        limit: monetizationState.usage.compression.limit,
+                      })}</strong>
+                    </div>
+                    <div className="license-usage__row">
+                      <span>{t("monetization.splits")}</span>
+                      <strong>{t("monetization.remainingOfLimit", {
+                        remaining: monetizationState.usage.split.remaining,
+                        limit: monetizationState.usage.split.limit,
+                      })}</strong>
+                    </div>
+                    <div className={cooldownRemainingSeconds > 0
+                      ? "license-usage__cooldown license-usage__cooldown--active"
+                      : "license-usage__cooldown"}>
+                      {cooldownRemainingSeconds > 0
+                        ? t("monetization.cooldownCountdown", { seconds: cooldownRemainingSeconds })
+                        : t("monetization.ready")}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
 
             {licenseError ? <p className="license-card__error" role="alert">{licenseError}</p> : null}
           </article>
