@@ -58,7 +58,12 @@ export type OffscreenRequest =
   | StorageCompareRequest
   | PdfStoreRequest
   | PdfReadRequest
-  | PdfDeleteRequest;
+  | PdfDeleteRequest
+  | OffscreenCompressionHealthRequest
+  | OffscreenCompressionStartRequest
+  | OffscreenCompressionCancelRequest
+  | OffscreenCompressionResultReadRequest
+  | OffscreenCompressionResultDeleteRequest;
 
 export type OffscreenHealthResponse = {
   ok: true;
@@ -73,7 +78,7 @@ export type StorageWriteResponse = {
 
 export type StorageReadResponse = {
   ok: true;
-  value: ArrayBuffer | null;
+  value: number[] | null;
   byteLength: number;
 };
 
@@ -84,7 +89,7 @@ export type StorageDeleteResponse = {
 export type StorageCompareResponse = {
   ok: true;
   equal: boolean;
-  value: ArrayBuffer | null;
+  value: number[] | null;
   byteLength: number;
 };
 
@@ -107,6 +112,153 @@ export type PdfDeleteResponse = {
   deleted: boolean;
 };
 
+export type CompressionMode = "Balanced";
+
+export type CompressionEngineStatus = "loading" | "ready" | "unsupported" | "failed";
+
+export type CompressionStage = "loading-engine" | "opening" | "scrubbing" | "rewriting" | "verifying" | "persisting" | "complete";
+
+export type CompressionStatus = "idle" | "loading-engine" | "compressing" | "cancelling" | "complete" | "error" | "cancelled";
+
+export type CompressionErrorCode = "WASM_NOT_SUPPORTED" | "WASM_LOAD_FAILED" | "INVALID_PDF" | "ENCRYPTED_PDF" | "TIMEOUT" | "CANCELLED" | "UNKNOWN";
+
+export type CompressionResultRecord = {
+  id: string;
+  sourceRecordId: string;
+  fileName: string;
+  mimeType: string | null;
+  originalSize: number;
+  compressedSize: number;
+  savedBytes: number;
+  savedPercent: number;
+  pageCount: number;
+  data: ArrayBuffer;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CompressionResultMetadata = Omit<CompressionResultRecord, "data"> & {
+  status: "complete";
+};
+
+export type CompressionHealthRequest = {
+  type: "compression:health";
+};
+
+export type CompressionStartRequest = {
+  type: "compression:start";
+  mode: CompressionMode;
+};
+
+export type CompressionCancelRequest = {
+  type: "compression:cancel";
+};
+
+export type CompressionResultReadRequest = {
+  type: "compression:result-read";
+};
+
+export type CompressionResultDeleteRequest = {
+  type: "compression:result-delete";
+};
+
+export type BackgroundCompressionHealthRequest = {
+  type: "background:compression-health";
+};
+
+export type BackgroundCompressionStartRequest = {
+  type: "background:compression-start";
+  mode: CompressionMode;
+};
+
+export type BackgroundCompressionCancelRequest = {
+  type: "background:compression-cancel";
+};
+
+export type BackgroundCompressionResultReadRequest = {
+  type: "background:compression-result-read";
+  recordId?: string;
+};
+
+export type BackgroundCompressionResultDeleteRequest = {
+  type: "background:compression-result-delete";
+};
+
+export type OffscreenCompressionHealthRequest = {
+  type: "offscreen:compression-health";
+};
+
+export type OffscreenCompressionStartRequest = {
+  type: "offscreen:compression-start";
+  mode: CompressionMode;
+};
+
+export type OffscreenCompressionCancelRequest = {
+  type: "offscreen:compression-cancel";
+};
+
+export type OffscreenCompressionResultReadRequest = {
+  type: "offscreen:compression-result-read";
+  recordId?: string;
+};
+
+export type OffscreenCompressionResultDeleteRequest = {
+  type: "offscreen:compression-result-delete";
+};
+
+export type CompressionProgressEvent = {
+  type: "compression:progress";
+  recordId: string;
+  stage: CompressionStage;
+  progress: number;
+  pageCount: number;
+  currentPage: number;
+  message: string;
+};
+
+export type CompressionResultEvent = {
+  type: "compression:result";
+  result: CompressionResultMetadata;
+};
+
+export type CompressionErrorEvent = {
+  type: "compression:error";
+  recordId: string | null;
+  code: CompressionErrorCode;
+  message: string;
+};
+
+export type CompressionHealthResponse = {
+  ok: true;
+  engine: "mupdf";
+  status: CompressionEngineStatus;
+  details: string;
+  pageCount: number;
+};
+
+export type CompressionStartResponse = {
+  ok: true;
+  recordId: string;
+  result: CompressionResultMetadata;
+  details: string;
+};
+
+export type CompressionCancelResponse = {
+  ok: true;
+  cancelled: boolean;
+  details: string;
+};
+
+export type CompressionResultReadResponse = {
+  ok: true;
+  result: CompressionResultMetadata | null;
+};
+
+export type CompressionResultDeleteResponse = {
+  ok: true;
+  deleted: boolean;
+};
+
 export type OffscreenResponse =
   | OffscreenHealthResponse
   | StorageWriteResponse
@@ -115,7 +267,12 @@ export type OffscreenResponse =
   | StorageCompareResponse
   | PdfStoreResponse
   | PdfReadResponse
-  | PdfDeleteResponse;
+  | PdfDeleteResponse
+  | CompressionHealthResponse
+  | CompressionStartResponse
+  | CompressionCancelResponse
+  | CompressionResultReadResponse
+  | CompressionResultDeleteResponse;
 
 export type BackgroundHealthRequest = {
   type: "health:check";
@@ -129,7 +286,15 @@ export type OffscreenCloseRequest = {
   type: "offscreen:close";
 };
 
-export type BackgroundRequest = BackgroundHealthRequest | OffscreenOpenRequest | OffscreenCloseRequest;
+export type BackgroundRequest =
+  | BackgroundHealthRequest
+  | OffscreenOpenRequest
+  | OffscreenCloseRequest
+  | BackgroundCompressionHealthRequest
+  | BackgroundCompressionStartRequest
+  | BackgroundCompressionCancelRequest
+  | BackgroundCompressionResultReadRequest
+  | BackgroundCompressionResultDeleteRequest;
 
 export type BackgroundHealthResponse = {
   ok: true;
@@ -148,7 +313,15 @@ export type BackgroundErrorResponse = {
   error: string;
 };
 
-export type BackgroundResponse = BackgroundHealthResponse | OffscreenControlResponse | BackgroundErrorResponse;
+export type BackgroundResponse =
+  | BackgroundHealthResponse
+  | OffscreenControlResponse
+  | CompressionHealthResponse
+  | CompressionStartResponse
+  | CompressionCancelResponse
+  | CompressionResultReadResponse
+  | CompressionResultDeleteResponse
+  | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {
   return (await browser.runtime.sendMessage(message)) as TResponse;

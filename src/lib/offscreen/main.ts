@@ -1,10 +1,33 @@
+import { proxy, transfer, wrap } from "comlink";
 import browser from "webextension-polyfill";
 import { createLogger, initTelemetry } from "../bootstrap";
-import type { OffscreenRequest, OffscreenResponse, PdfRecord } from "../messaging";
+import { COMPRESSED_PDF_RECORD_ID, SELECTED_PDF_RECORD_ID } from "../pdf-records";
+import { deleteCompressionResult, readCompressionResult, writeCompressionResult } from "../storage/pdf-compression-db";
+import type {
+  CompressionCancelResponse,
+  CompressionErrorEvent,
+  CompressionHealthResponse,
+  CompressionProgressEvent,
+  CompressionResultMetadata,
+  CompressionResultDeleteResponse,
+  CompressionResultReadResponse,
+  CompressionStartResponse,
+  OffscreenCompressionCancelRequest,
+  OffscreenCompressionHealthRequest,
+  OffscreenCompressionResultDeleteRequest,
+  OffscreenCompressionResultReadRequest,
+  OffscreenCompressionStartRequest,
+  OffscreenRequest,
+  OffscreenResponse,
+  PdfRecord,
+} from "../messaging";
+import type { CompressionWorkerApi } from "./worker";
 
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
 const DB_VERSION = 2;
+const COMPRESSION_TIMEOUT_MS = 30_000;
+const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 
 const logger = createLogger("offscreen");
 void initTelemetry("offscreen");
@@ -12,6 +35,17 @@ void initTelemetry("offscreen");
 type DatabaseHandle = {
   db: IDBDatabase;
 };
+
+type CompressionRunState = {
+  abortController: AbortController;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  reason: "cancelled" | "timeout" | null;
+  recordId: string;
+};
+
+let workerInstance: Worker | null = null;
+let workerApi: CompressionWorkerApi | null = null;
+let activeCompression: CompressionRunState | null = null;
 
 function openDatabase(): Promise<DatabaseHandle> {
   return new Promise((resolve, reject) => {
@@ -62,10 +96,38 @@ function requestToPromise<T>(request: IDBRequest<T>) {
   });
 }
 
+function normalizeSmokeBytes(record: unknown, key: string) {
+  if (!record || typeof record !== "object") {
+    throw new Error(`IndexedDB smoke test record shape is invalid for key ${key}`);
+  }
+
+  const candidate = record as { id?: unknown; data?: unknown; byteLength?: unknown };
+  if (candidate.id !== key) {
+    throw new Error(`IndexedDB smoke test record id mismatch for key ${key}`);
+  }
+
+  if (!Array.isArray(candidate.data) || !candidate.data.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)) {
+    throw new Error(`IndexedDB smoke test record data is invalid for key ${key}`);
+  }
+
+  return {
+    id: key,
+    data: candidate.data as number[],
+    byteLength:
+      typeof candidate.byteLength === "number" && Number.isFinite(candidate.byteLength)
+        ? candidate.byteLength
+        : (candidate.data as number[]).length,
+  };
+}
+
 async function putBytes(key: string, bytes: number[]) {
-  const buffer = new Uint8Array(bytes).buffer;
-  await withStore("readwrite", (store) => requestToPromise(store.put(buffer, key)));
-  return { ok: true as const, byteLength: bytes.length };
+  const record = {
+    id: key,
+    data: [...bytes],
+    byteLength: bytes.length,
+  };
+  await withStore("readwrite", (store) => requestToPromise(store.put(record)));
+  return { ok: true as const, byteLength: record.byteLength };
 }
 
 async function putPdf(record: PdfRecord) {
@@ -78,8 +140,13 @@ async function putPdf(record: PdfRecord) {
 }
 
 async function readBytes(key: string) {
-  const value = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
-  return { ok: true as const, value: value ?? null, byteLength: value?.byteLength ?? 0 };
+  const value = await withStore("readonly", (store) => requestToPromise(store.get(key)));
+  if (value === undefined) {
+    return { ok: true as const, value: null, byteLength: 0 };
+  }
+
+  const record = normalizeSmokeBytes(value, key);
+  return { ok: true as const, value: record.data, byteLength: record.byteLength };
 }
 
 async function readPdf(recordId: string) {
@@ -99,18 +166,261 @@ async function deletePdf(recordId: string) {
 }
 
 async function compareBytes(key: string, bytes: number[]) {
-  const current = (await withStore("readonly", (store) => requestToPromise(store.get(key)))) as ArrayBuffer | undefined;
-  if (!current) {
+  const current = await withStore("readonly", (store) => requestToPromise(store.get(key)));
+  if (current === undefined) {
     return { ok: true as const, equal: false, value: null, byteLength: 0 };
   }
 
-  const left = new Uint8Array(current);
-  const right = new Uint8Array(bytes);
-  const equal = left.length === right.length && left.every((value, index) => value === right[index]);
-  return { ok: true as const, equal, value: current, byteLength: current.byteLength };
+  const record = normalizeSmokeBytes(current, key);
+  const equal =
+    record.data.length === bytes.length && record.data.every((value, index) => value === bytes[index]);
+  return { ok: true as const, equal, value: record.data, byteLength: record.byteLength };
 }
 
-async function handle(message: OffscreenRequest): Promise<OffscreenResponse | null> {
+function broadcast<T extends { type: string }>(message: T) {
+  void browser.runtime.sendMessage(message).catch(() => undefined);
+}
+
+function getCompressionWorker() {
+  if (!workerInstance) {
+    workerInstance = new Worker(new URL("./worker.ts", import.meta.url), {
+      type: "module",
+    });
+    workerApi = wrap<CompressionWorkerApi>(workerInstance);
+  }
+
+  if (!workerApi) {
+    throw new Error("Compression worker is not available");
+  }
+
+  return workerApi;
+}
+
+function getMuPdfRuntimeUrl() {
+  return browser.runtime.getURL(MUPDF_RUNTIME_PATH);
+}
+
+function resetCompressionState() {
+  if (activeCompression?.timeoutId) {
+    clearTimeout(activeCompression.timeoutId);
+  }
+
+  activeCompression = null;
+}
+
+function compressionErrorPayload(
+  code: string,
+  message: string,
+  recordId: string | null = COMPRESSED_PDF_RECORD_ID,
+): CompressionErrorEvent {
+  return {
+    type: "compression:error",
+    recordId,
+    code: code as CompressionErrorEvent["code"],
+    message,
+  };
+}
+
+function compressionResultEvent(result: Awaited<ReturnType<typeof writeCompressionResult>>) {
+  return {
+    type: "compression:result" as const,
+    result: toCompressionMetadata(result),
+  };
+}
+
+function toCompressionMetadata(result: Awaited<ReturnType<typeof writeCompressionResult>>): CompressionResultMetadata {
+  return {
+    id: result.id,
+    sourceRecordId: result.sourceRecordId,
+    fileName: result.fileName,
+    mimeType: result.mimeType,
+    originalSize: result.originalSize,
+    compressedSize: result.compressedSize,
+    savedBytes: result.savedBytes,
+    savedPercent: result.savedPercent,
+    pageCount: result.pageCount,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
+    status: "complete",
+  };
+}
+
+function compressionProgressFromMessage(
+  event: CompressionProgressEvent,
+): CompressionProgressEvent {
+  return event;
+}
+
+async function ensureCompressionHealth(): Promise<CompressionHealthResponse> {
+  const api = getCompressionWorker();
+  return api.health(getMuPdfRuntimeUrl());
+}
+
+async function readCompressionState(recordId?: string) {
+  const result = await readCompressionResult(recordId);
+  return { ok: true as const, result: result ? toCompressionMetadata(result) : null };
+}
+
+async function deleteCompressionState() {
+  const deleted = await deleteCompressionResult();
+  return { ok: true as const, deleted };
+}
+
+async function cancelCompression() {
+  if (!activeCompression) {
+    return { ok: true as const, cancelled: false, details: "No compression job is active" };
+  }
+
+  activeCompression.reason = "cancelled";
+  activeCompression.abortController.abort();
+  return { ok: true as const, cancelled: true, details: "Cancellation requested" };
+}
+
+async function startCompression(
+  message: OffscreenCompressionStartRequest,
+): Promise<CompressionStartResponse | { ok: false; error: string }> {
+  if (activeCompression) {
+    return {
+      ok: false,
+      error: "Compression is already in progress",
+    };
+  }
+
+  const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
+  if (!selected) {
+    return {
+      ok: false,
+      error: "No selected PDF record is available",
+    };
+  }
+
+  const inputBytes = Uint8Array.from(selected.data);
+  const inputBuffer = inputBytes.buffer;
+  const api = getCompressionWorker();
+  const abortController = new AbortController();
+  const started = performance.now();
+
+  activeCompression = {
+    abortController,
+    timeoutId: null,
+    reason: null,
+    recordId: COMPRESSED_PDF_RECORD_ID,
+  };
+
+  activeCompression.timeoutId = setTimeout(() => {
+    if (activeCompression) {
+      activeCompression.reason = "timeout";
+      activeCompression.abortController.abort();
+    }
+  }, COMPRESSION_TIMEOUT_MS);
+
+  const onProgress = (event: CompressionProgressEvent) => {
+    const progressEvent = compressionProgressFromMessage(event);
+    logger.info("Compression progress", {
+      recordId: progressEvent.recordId,
+      stage: progressEvent.stage,
+      progress: progressEvent.progress,
+      pageCount: progressEvent.pageCount,
+    });
+    broadcast(progressEvent);
+  };
+
+  const isCancelled = () => abortController.signal.aborted;
+
+  try {
+    broadcast({
+      type: "compression:progress",
+      recordId: COMPRESSED_PDF_RECORD_ID,
+      stage: "loading-engine",
+      progress: 0,
+      pageCount: 0,
+      currentPage: 0,
+      message: "Loading engine",
+    });
+
+    const outcome = await api.compress(
+      transfer(
+        {
+          input: inputBuffer,
+          mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
+          recordId: COMPRESSED_PDF_RECORD_ID,
+          sourceRecordId: selected.id,
+          fileName: selected.name,
+          mimeType: selected.type,
+          mode: message.mode,
+          timeoutMs: COMPRESSION_TIMEOUT_MS,
+        },
+        [inputBuffer],
+      ),
+      proxy(isCancelled),
+      proxy(onProgress),
+    );
+
+    await writeCompressionResult(outcome.result);
+    broadcast({
+      type: "compression:progress",
+      recordId: outcome.result.id,
+      stage: "complete",
+      progress: 100,
+      pageCount: outcome.pageCount,
+      currentPage: outcome.pageCount,
+      message: "Compression complete",
+    });
+    broadcast(compressionResultEvent(outcome.result));
+    logger.info("Compression completed", {
+      recordId: outcome.result.id,
+      pageCount: outcome.pageCount,
+      originalSize: outcome.result.originalSize,
+      compressedSize: outcome.result.compressedSize,
+      savedBytes: outcome.result.savedBytes,
+      elapsedMs: performance.now() - started,
+    });
+
+    return {
+      ok: true,
+      recordId: outcome.result.id,
+      result: toCompressionMetadata(outcome.result),
+      details: outcome.result.savedBytes > 0 ? "Compression complete" : "Compression complete with no size reduction",
+    };
+  } catch (error) {
+    const timedOut = activeCompression?.reason === "timeout";
+    const cancelled = activeCompression?.reason === "cancelled" || abortController.signal.aborted;
+
+    let code = "UNKNOWN";
+    let message = error instanceof Error ? error.message : "Unknown compression error";
+
+    if (error && typeof error === "object" && "code" in error && "message" in error) {
+      code = String((error as { code?: string }).code ?? "UNKNOWN");
+      message = String((error as { message?: string }).message ?? message);
+    } else if (timedOut) {
+      code = "TIMEOUT";
+      message = "Compression timed out";
+    } else if (cancelled) {
+      code = "CANCELLED";
+      message = "Compression was cancelled";
+    } else if (error instanceof WebAssembly.RuntimeError) {
+      code = "WASM_LOAD_FAILED";
+    }
+
+    const payload = compressionErrorPayload(code, message, COMPRESSED_PDF_RECORD_ID);
+    broadcast(payload);
+    logger.error("Compression failed", {
+      recordId: COMPRESSED_PDF_RECORD_ID,
+      code,
+      message,
+      elapsedMs: performance.now() - started,
+    });
+
+    return {
+      ok: false,
+      error: message,
+    };
+  } finally {
+    resetCompressionState();
+  }
+}
+
+async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { ok: false; error: string } | null> {
   switch (message.type) {
     case "offscreen:health":
       return {
@@ -147,6 +457,18 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | nu
       });
     case "pdf:delete":
       return deletePdf(message.recordId);
+    case "offscreen:compression-health": {
+      const health = await ensureCompressionHealth();
+      return health;
+    }
+    case "offscreen:compression-start":
+      return startCompression(message);
+    case "offscreen:compression-cancel":
+      return cancelCompression();
+    case "offscreen:compression-result-read":
+      return readCompressionState(message.recordId);
+    case "offscreen:compression-result-delete":
+      return deleteCompressionState();
     default:
       return null;
   }

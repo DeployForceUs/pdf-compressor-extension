@@ -12,7 +12,7 @@ export default defineConfig({
       manifest.action.default_title = "__MSG_extensionTitle__";
     },
   },
-  manifest: {
+    manifest: {
     name: "__MSG_extensionName__",
     description: "__MSG_extensionDescription__",
     default_locale: "en",
@@ -26,7 +26,7 @@ export default defineConfig({
       type: "module",
     },
     content_security_policy: {
-      extension_pages: "script-src 'self'; object-src 'self';",
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';",
     },
   },
 } as any);
