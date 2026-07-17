@@ -2,7 +2,7 @@
 
 ## Status
 
-Preflight and runtime implementation are complete. Automated validation passed. Manual Chrome accessibility and theme acceptance remains pending.
+Preflight and runtime implementation are complete. Automated validation passed. The project owner accepted the Stage 8 Chrome presentation on 2026-07-17 and authorized the PR for merge.
 
 Canonical Stage 8 is independent of the paused Stage 5 JPEG2000 decision and may proceed without changing Compression, Split, licensing, or artifact-generation business rules.
 
@@ -241,15 +241,25 @@ Passed on 2026-07-14:
 
 The Stage 8 test proves expiration of source, Compression, Split bundle, and Split artifact data; atomic artifact removal; idempotent repeated cleanup; and safe legacy source timestamp migration. It also asserts the corrected semantics, Escape boundary, accessible progress names, focus CSS, automatic light theme, and reduced-motion rule.
 
-## Manual Chrome Acceptance Required
+Final acceptance validation re-run on 2026-07-17:
 
-Before merging, validate in the unpacked production build:
+- synchronized the lockfile's missing optional platform records so the manifest and lockfile contract is complete;
+- passed TypeScript, production build, Worker-boundary, Stage 8, Stage 7, selected-PDF, Split Worker, quota, manifest, and `git diff --check` validation;
+- updated the historical quota regression assertion to expect Stage 8's approved `updatedAt = last successful persistence` behavior while still proving that a failed quota write cannot replace the previous stored result.
 
-1. Complete file selection, Compression, Split, cancellation, result download, and result deletion using only Tab, Shift+Tab, Enter/Space, and Escape.
-2. Confirm visible focus on every actionable control and focus recovery after Escape cancellation.
-3. Confirm screen-reader announcements for operation status, errors, completion, and cooldown in English and Spanish.
-4. Toggle the operating-system/browser light and dark preference and confirm readable contrast at normal size and increased text zoom.
-5. Confirm existing Compression, Split, Free-limit, and Pro-license behavior remains unchanged.
+The workspace package-registry transport failed while extracting a fresh dependency tree, so the final compile/build/test pass used the repository's existing installed dependency set after the lockfile-only synchronization. No package versions or application dependencies changed.
+
+## Manual Chrome Acceptance
+
+Accepted by the project owner on 2026-07-17.
+
+Recorded owner confirmation:
+
+> Stage 8 is visually good in Chrome, is accepted, and may be completed and merged.
+
+This confirmation closes the product-owner visual Chrome gate for the current Stage 8 build. The automated suite continues to cover the implemented keyboard, Escape, focus, ARIA, live-region, theme, reduced-motion, retention, and regression contracts.
+
+A dedicated manual pass with external assistive-technology software was not independently recorded in this acceptance. That additional hardening check is retained for canonical Stage 9 and does not change the owner's explicit Stage 8 acceptance decision.
 
 ## SPECIFICATION COMPLIANCE
 
@@ -260,4 +270,5 @@ Before merging, validate in the unpacked production build:
 - 24-hour cleanup through `chrome.alarms`: **Fully matches specification**.
 - Source-record persistence timestamps and safe legacy migration: **Extends specification** as the data-model requirement needed to enforce the stated retention rule safely.
 - Excluding license, counters, and preferences from binary cleanup: **Requires future specification update** for an explicit retention boundary.
-- Manual screen-reader, theme, text-zoom, and keyboard acceptance: **Partially matches specification** until the listed Chrome checks are completed.
+- Product-owner visual Chrome acceptance: **Fully matches the accepted Stage 8 product gate**.
+- Dedicated manual assistive-technology software pass: **Requires future specification update** as an explicit Stage 9 hardening item; the Stage 8 implementation retains automated ARIA/live-region coverage.
