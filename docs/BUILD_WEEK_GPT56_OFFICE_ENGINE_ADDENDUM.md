@@ -419,9 +419,9 @@ Never remove GPT-5.6 runtime integration, schema/policy validation, deterministi
 | Rendering dependency | Approved | Reuse MuPDF; do not add `pdf.js` solely for previews |
 | Retry | Approved bound | At most one approved safer retry; previous valid result retained |
 | Gateway language | Provisional | TypeScript/Node for deadline consistency |
-| Gateway host | Provisional | Contabo beside Office API; Worker only if already proven faster |
+| Gateway host | Approved for contest | Contabo beside Office API; judges use the hosted path while Docker remains reproducibility proof |
 | Submission/product name | Pending | Working name remains `PDF Office Engine — AI-Planned, Private PDF Processing` |
-| Processing engine/license | Blocking | Select AGPL-compliant, commercial, or approved alternative path |
+| Processing engine/license | Approved with artifact gate | Owner selected AGPL contest distribution; each published Engine artifact still requires complete notices, source links, and corresponding source |
 | Balanced Engine parameters | Blocking | Benchmark and approve exact commands/preset |
 | Quality/DPI/target-size bounds | Blocking | Approve before executing model numeric output |
 | Hosted upload/preview retention | Blocking | Approve exact short retention and prove cleanup |

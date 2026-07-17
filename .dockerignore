@@ -1,0 +1,10 @@
+.git
+.github
+.output
+.wxt
+node_modules
+public/vendor
+reports
+*.log
+.env
+.env.*

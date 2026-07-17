@@ -10,6 +10,8 @@
     "check": "tsc --noEmit",
     "check:worker-boundary": "node scripts/assert-worker-runtime-boundary.mjs",
     "dev": "wxt",
+    "engine:start": "node engine/server.mjs",
+    "engine:test": "node --test tests/phase11_office_engine_health.test.mjs",
     "license:issue": "node scripts/issue-pro-license.mjs",
     "typecheck": "tsc --noEmit"
   },

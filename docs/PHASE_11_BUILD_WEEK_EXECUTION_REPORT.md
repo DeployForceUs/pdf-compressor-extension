@@ -39,12 +39,31 @@ Implemented:
 
 The approved addendum defines the allowed aggregate metrics but does not define the deterministic MuPDF rules that classify a page as `scanned`, `vector`, or `text`, estimate per-page byte size, or estimate DPI without rendering or extracting content. Those rules were not guessed. The new builder accepts only already classified structural observations; the MuPDF observation adapter remains a separate pending slice that requires the classification rules to be recorded first.
 
+## Completed slice: Docker Office Engine health and capabilities
+
+Implemented:
+
+- dependency-free Node HTTP service and Docker/Compose packaging;
+- `GET /api/v1/health` with explicit API/service versions, readiness, capabilities, and unresolved limits;
+- healthy service status separated from blocked processing readiness;
+- no advertised preset, processor, upload limit, timeout, or retention value while their release policies remain unapproved;
+- closed `POST /api/v1/compress` gate returning `503 processing_unavailable` until the numeric policy is approved;
+- loopback-only default Compose binding for placement behind the future authenticated TLS proxy;
+- non-root, read-only container, dropped Linux capabilities, `no-new-privileges`, bounded `/tmp`, and container health check;
+- structured request logs that classify routes without recording raw URLs, query strings, filenames, request bodies, or secret state;
+- contract tests for health, closed processing, and content-blind logging.
+
+Ghostscript is intentionally absent from this slice. Its exact version, source,
+notice, reproducible build, Balanced command, and numeric policy remain release
+gates for the processing slice.
+
 ## Validation
 
 Passed locally against the clean contest worktree:
 
 ```text
 npm run check
+npm run engine:test
 node --import tsx tests/phase11_smart_planner_contract.test.ts
 node --import tsx tests/phase11_openai_smart_planner_client.test.ts
 node --import tsx tests/phase11_smart_planner_gateway.test.ts
@@ -57,6 +76,10 @@ git diff --check
 
 The first Worker-boundary attempt was run before a build and correctly failed because `.output` did not exist. It passed after `npm run build` generated the production bundle.
 
+Docker CLI is not installed in the current execution environment, so
+`docker compose config`, Image build, and container smoke testing were not run.
+They remain required before deployment; no Docker runtime result is claimed.
+
 API contract references checked on 2026-07-17:
 
 - [GPT-5.6 Sol model](https://developers.openai.com/api/docs/models/gpt-5.6-sol) — the `gpt-5.6` alias, Responses API, reasoning, and Structured Outputs are supported;
@@ -65,7 +88,7 @@ API contract references checked on 2026-07-17:
 ## Current blockers and next actions
 
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
-2. Complete the selected AGPL Office Engine artifact package. The owner selected Option A on 2026-07-17, the repository now carries `AGPL-3.0-or-later`, and the initial MuPDF notice is present. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
+2. Implement and benchmark the bounded Balanced processing slice, then complete its AGPL artifact package. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
 3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store according to `OPENAI_API_KEY_HANDLING.md`; never in Extension code, GitHub source, logs, or request payloads.
 5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
@@ -80,5 +103,6 @@ API contract references checked on 2026-07-17:
 - Strict `ProcessingPlan` and Responses API client: **Extends specification** under the approved Build Week addendum.
 - Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
 - AI-generated numeric execution: **Requires future specification update** after exact benchmarked ranges are approved; execution is currently blocked.
-- Office Engine execution: **Requires future specification update** and remains unimplemented in this slice. The repository-level AGPL path is owner-approved; artifact-specific compliance remains a release gate.
+- Office Engine health/capabilities: **Partially matches Stage 11**; the service shell is implemented while processing is explicitly blocked.
+- Office Engine execution: **Requires future specification update** and remains unimplemented. The repository-level AGPL path is owner-approved; numeric policy and artifact-specific compliance remain release gates.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.

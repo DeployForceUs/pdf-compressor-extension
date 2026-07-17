@@ -1,0 +1,19 @@
+services:
+  office-engine:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    ports:
+      - "127.0.0.1:${OFFICE_ENGINE_PORT:-8787}:8787"
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
