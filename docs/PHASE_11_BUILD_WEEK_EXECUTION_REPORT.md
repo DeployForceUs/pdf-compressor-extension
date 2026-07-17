@@ -20,6 +20,7 @@ Implemented:
 - server-side Responses API client fixed to `gpt-5.6`, `store: false`, low reasoning effort, no tools, and strict Structured Output;
 - response handling for HTTP failures, rate limits, network errors, incomplete responses, refusals, invalid JSON, and invalid plans;
 - deterministic fallback signal that keeps the existing Local Engine settings and never executes model-generated parameters;
+- framework-neutral `/api/v1/plans` gateway handler with required injected authorization and rate-limit policies, JSON-only input, byte limits, timeout cancellation, no-store responses, and redacted fallback errors;
 - tests proving that the API key is carried only in the Authorization header;
 - build inspection proving the OpenAI endpoint and test secret are absent from the Chrome Extension bundle.
 
@@ -33,6 +34,7 @@ Passed locally against the clean contest worktree:
 npm run check
 node --import tsx tests/phase11_smart_planner_contract.test.ts
 node --import tsx tests/phase11_openai_smart_planner_client.test.ts
+node --import tsx tests/phase11_smart_planner_gateway.test.ts
 npm run build
 npm run check:worker-boundary
 rg "api.openai.com|server-secret-test-key" .output  # no matches
@@ -50,7 +52,7 @@ API contract references checked on 2026-07-17:
 
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
 2. Resolve the Office Engine production license and selected executable before connecting plan execution.
-3. Add the authenticated `/api/v1/plans` gateway route, request-size/rate limits, timeout, and request correlation.
+3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store; never in Extension code, GitHub source, logs, or request payloads.
 5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
 6. Connect the Extension consent/disclosure UI only after the server boundary and fallback tests pass.
