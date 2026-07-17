@@ -14,7 +14,7 @@ interface CompressionDbSchema extends DBSchema {
   };
 }
 
-type CompressionDb = Pick<IDBPDatabase<CompressionDbSchema>, "get" | "put" | "delete">;
+type CompressionDb = Pick<IDBPDatabase<CompressionDbSchema>, "get" | "getAll" | "put" | "delete">;
 
 const memoryStores = new Map<string, Map<string, CompressionResultRecord>>();
 
@@ -60,6 +60,9 @@ function createMemoryDb(): CompressionDb {
     async get(storeName, key) {
       return memoryStores.get(storeName)?.get(String(key)) ?? undefined;
     },
+    async getAll(storeName) {
+      return [...(memoryStores.get(storeName)?.values() ?? [])];
+    },
     async put(storeName, value, key) {
       const store = memoryStores.get(storeName) ?? new Map<string, CompressionResultRecord>();
       store.set(String(key), value);
@@ -97,8 +100,14 @@ export async function readCompressionResult(recordId = COMPRESSED_PDF_RECORD_ID)
 export async function writeCompressionResult(record: CompressionResultRecord) {
   const db = await getDb();
   try {
-    await db.put(STORE_NAME, record, record.id);
-    return record;
+    const existing = await db.get(STORE_NAME, record.id);
+    const stored: CompressionResultRecord = {
+      ...record,
+      createdAt: existing?.createdAt ?? record.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    await db.put(STORE_NAME, stored, stored.id);
+    return stored;
   } catch (error) {
     normalizeCompressionPersistenceError(error);
   }
@@ -109,4 +118,17 @@ export async function deleteCompressionResult(recordId = COMPRESSED_PDF_RECORD_I
   const existing = await db.get(STORE_NAME, recordId);
   await db.delete(STORE_NAME, recordId);
   return existing !== undefined;
+}
+
+export async function cleanupExpiredCompressionResults(cutoff: number) {
+  const db = await getDb();
+  const records = await db.getAll(STORE_NAME);
+  let deleted = 0;
+  for (const record of records) {
+    if (record.updatedAt <= cutoff) {
+      await db.delete(STORE_NAME, record.id);
+      deleted += 1;
+    }
+  }
+  return deleted;
 }

@@ -328,6 +328,10 @@ function translateSplitError(t: (key: string, options?: Record<string, unknown>)
 function Popup() {
   const { i18n, t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const compressionStartRef = useRef<HTMLButtonElement>(null);
+  const splitStartRef = useRef<HTMLButtonElement>(null);
+  const compressionFocusAfterCancelRef = useRef(false);
+  const splitFocusAfterCancelRef = useRef(false);
   const [licenseToken, setLicenseToken] = useState("");
   const [licenseState, setLicenseState] = useState<LicenseStateResponse | null>(null);
   const [licenseBusy, setLicenseBusy] = useState(false);
@@ -394,6 +398,42 @@ function Popup() {
     void restoreCompressionResult();
     void restoreSplitResult();
   }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (split.status === "loading" || split.status === "running") {
+        event.preventDefault();
+        void cancelSplit();
+        return;
+      }
+
+      if (compression.status === "loading-engine" || compression.status === "compressing") {
+        event.preventDefault();
+        void cancelCompression();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [compression.status, split.status]);
+
+  useEffect(() => {
+    if (compressionFocusAfterCancelRef.current && !["loading-engine", "compressing", "cancelling"].includes(compression.status)) {
+      compressionFocusAfterCancelRef.current = false;
+      compressionStartRef.current?.focus();
+    }
+  }, [compression.status]);
+
+  useEffect(() => {
+    if (splitFocusAfterCancelRef.current && !["loading", "running", "cancelling"].includes(split.status)) {
+      splitFocusAfterCancelRef.current = false;
+      splitStartRef.current?.focus();
+    }
+  }, [split.status]);
 
   useEffect(() => {
     const listener = (message: unknown) => {
@@ -787,6 +827,7 @@ function Popup() {
   }
 
   async function cancelCompression() {
+    compressionFocusAfterCancelRef.current = true;
     setCompression({
       status: "cancelling",
       error: "",
@@ -969,6 +1010,7 @@ function Popup() {
   }
 
   async function cancelSplit() {
+    splitFocusAfterCancelRef.current = true;
     setSplit({
       status: "cancelling",
       error: "",
@@ -1561,7 +1603,7 @@ function Popup() {
                         limit: monetizationState.usage.split.limit,
                       })}</strong>
                     </div>
-                    <div className={cooldownRemainingSeconds > 0
+                    <div role="status" aria-live="polite" aria-atomic="true" className={cooldownRemainingSeconds > 0
                       ? "license-usage__cooldown license-usage__cooldown--active"
                       : "license-usage__cooldown"}>
                       {cooldownRemainingSeconds > 0
@@ -1606,19 +1648,6 @@ function Popup() {
                 event.preventDefault();
                 setDragActive(false);
                 void handlePickedFile(event.dataTransfer.files?.[0]);
-              }}
-              onClick={(event) => {
-                if (event.currentTarget === event.target) {
-                  fileInputRef.current?.click();
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  fileInputRef.current?.click();
-                }
               }}
             >
               <input
@@ -1698,7 +1727,7 @@ function Popup() {
                 </span>
               </div>
 
-              <div className="split-card__status">{splitStatusLabel}</div>
+              <div className="split-card__status" role="status" aria-live="polite" aria-atomic="true">{splitStatusLabel}</div>
 
               <div className="split-mode">
                 <div className="split-mode__label">{t("split.outputMode")}</div>
@@ -1727,7 +1756,7 @@ function Popup() {
                 </div>
               </div>
 
-              <div className="split-card__strategies" role="tablist" aria-label={t("split.strategy")}>
+              <div className="split-card__strategies" role="group" aria-label={t("split.strategy")}>
                 {[
                   ["by-pages", t("split.byPages")],
                   ["by-max-size", t("split.bySize")],
@@ -1808,7 +1837,7 @@ function Popup() {
                 </div>
               ) : null}
 
-              <div className="split-progress" role="progressbar" aria-valuenow={split.progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="split-progress" role="progressbar" aria-label={t("split.progressLabel")} aria-valuetext={splitProgressMetaLabel} aria-valuenow={split.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="split-progress__track">
                   <div className="split-progress__fill" style={{ width: `${split.progress}%` }} />
                 </div>
@@ -1853,7 +1882,7 @@ function Popup() {
                 {split.status === "error" && split.error ? (
                   <p className="split-actions__error" role="alert">{split.error}</p>
                 ) : null}
-                <button type="button" className="primary" onClick={() => void startSplit()} disabled={!splitCanStart}>
+                <button ref={splitStartRef} type="button" className="primary" onClick={() => void startSplit()} disabled={!splitCanStart}>
                   {splitBusy ? t("split.splitting") : t("split.start")}
                 </button>
                 {splitBusy ? (
@@ -1950,7 +1979,7 @@ function Popup() {
                 </span>
               </div>
 
-              <div className="compression-card__status">{compressionStatusLabel}</div>
+              <div className="compression-card__status" role="status" aria-live="polite" aria-atomic="true">{compressionStatusLabel}</div>
               <label className="compression-quality">
                 <span className="compression-quality__header">
                   <span>{t("compression.quality")}</span>
@@ -1972,7 +2001,7 @@ function Popup() {
                 </span>
               </label>
 
-              <div className="compression-progress" role="progressbar" aria-valuenow={compression.progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="compression-progress" role="progressbar" aria-label={t("compression.progressLabel")} aria-valuetext={compressionStatusLabel} aria-valuenow={compression.progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="compression-progress__track">
                   <div className="compression-progress__fill" style={{ width: `${compression.progress}%` }} />
                 </div>
@@ -2002,7 +2031,7 @@ function Popup() {
               </div>
 
               <div className="compression-actions">
-                <button type="button" className="primary" onClick={() => void startCompression()} disabled={!compressionCanStart}>
+                <button ref={compressionStartRef} type="button" className="primary" onClick={() => void startCompression()} disabled={!compressionCanStart}>
                   {compressionHasResult ? t("compression.compressAgain") : t("compression.compressPdf")}
                 </button>
                 {compressionBusy ? (
@@ -2028,8 +2057,8 @@ function Popup() {
               </div>
             </article>
 
-            {pdf.error ? <div className="error">{pdf.error}</div> : null}
-            {compression.status === "error" && compression.error ? <div className="error">{compression.error}</div> : null}
+            {pdf.error ? <div className="error" role="alert">{pdf.error}</div> : null}
+            {compression.status === "error" && compression.error ? <div className="error" role="alert">{compression.error}</div> : null}
           </article>
 
           <details

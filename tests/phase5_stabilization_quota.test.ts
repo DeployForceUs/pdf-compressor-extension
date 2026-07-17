@@ -67,7 +67,8 @@ function createCompressionResultRecord(id: string): CompressionResultRecord {
 {
   const record = createCompressionResultRecord("compression-quota-normalization-smoke");
 
-  await writeCompressionResult(record);
+  const persisted = await writeCompressionResult(record);
+  assert.ok(persisted);
 
   const stored = await readCompressionResult(record.id);
   assert.ok(stored);
@@ -81,7 +82,8 @@ function createCompressionResultRecord(id: string): CompressionResultRecord {
   assert.equal(stored.savedPercent, record.savedPercent);
   assert.equal(stored.pageCount, record.pageCount);
   assert.equal(stored.createdAt, record.createdAt);
-  assert.equal(stored.updatedAt, record.updatedAt);
+  assert.equal(stored.updatedAt, persisted.updatedAt);
+  assert.ok(stored.updatedAt >= record.updatedAt);
   assert.equal(stored.data.byteLength, record.data.byteLength);
   assert.deepEqual(bytesToArray(stored.data), bytesToArray(record.data));
 
@@ -123,7 +125,8 @@ function createCompressionResultRecord(id: string): CompressionResultRecord {
   assert.equal(outcome.pageCount, 1);
   assert.equal(new TextDecoder().decode(new Uint8Array(outcome.outputBytes).slice(0, 5)), "%PDF-");
   const existing = createCompressionResultRecord(COMPRESSED_PDF_RECORD_ID);
-  await writeCompressionResult(existing);
+  const persistedExisting = await writeCompressionResult(existing);
+  assert.ok(persistedExisting);
 
   const broadcasts: Array<{ type: string; [key: string]: unknown }> = [];
   const persistCalls: CompressionResultRecord[] = [];
@@ -169,8 +172,8 @@ function createCompressionResultRecord(id: string): CompressionResultRecord {
   assert.equal(stored.savedBytes, existing.savedBytes);
   assert.equal(stored.savedPercent, existing.savedPercent);
   assert.equal(stored.pageCount, existing.pageCount);
-  assert.equal(stored.createdAt, existing.createdAt);
-  assert.equal(stored.updatedAt, existing.updatedAt);
+  assert.equal(stored.createdAt, persistedExisting.createdAt);
+  assert.equal(stored.updatedAt, persistedExisting.updatedAt);
   assert.equal(stored.data.byteLength, existing.data.byteLength);
   assert.deepEqual(bytesToArray(stored.data), bytesToArray(existing.data));
 }

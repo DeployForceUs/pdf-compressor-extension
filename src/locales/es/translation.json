@@ -87,6 +87,7 @@
   },
   "compression": {
     "title": "Compresión de PDF",
+    "progressLabel": "Progreso de compresión",
     "balanced": "Equilibrado",
     "quality": "Calidad de imagen",
     "qualityLow": "Baja",
@@ -120,6 +121,7 @@
   },
   "split": {
     "title": "Dividir PDF",
+    "progressLabel": "Progreso de división",
     "strategy": "Estrategia de división",
     "outputMode": "Modo de salida",
     "outputModes": {

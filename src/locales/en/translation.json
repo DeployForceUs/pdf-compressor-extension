@@ -87,6 +87,7 @@
   },
   "compression": {
     "title": "PDF compression",
+    "progressLabel": "Compression progress",
     "balanced": "Balanced",
     "quality": "Image quality",
     "qualityLow": "Low",
@@ -120,6 +121,7 @@
   },
   "split": {
     "title": "Split PDF",
+    "progressLabel": "Split progress",
     "strategy": "Split strategy",
     "outputMode": "Output mode",
     "outputModes": {
