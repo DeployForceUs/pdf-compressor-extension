@@ -543,7 +543,7 @@ The endpoints require separate request validators, schemas, size limits, prompts
   "dpi": 180,
   "split": {
     "enabled": true,
-    "strategy": "max-size",
+    "strategy": "by-max-size",
     "targetPartSizeMb": 20
   },
   "retryPolicy": {
