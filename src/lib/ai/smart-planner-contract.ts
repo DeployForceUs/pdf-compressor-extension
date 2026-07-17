@@ -537,7 +537,42 @@ export function validateSmartPlannerRequest(
   }
 
   if (errors.length > 0) return { ok: false, errors: [...new Set(errors)] };
-  return { ok: true, value: input as SmartPlannerRequest };
+  const valid = input as SmartPlannerRequest;
+  return {
+    ok: true,
+    value: {
+      schemaVersion: valid.schemaVersion,
+      requestId: valid.requestId,
+      userGoal: {
+        deliveryTarget: valid.userGoal.deliveryTarget,
+        qualityIntent: valid.userGoal.qualityIntent,
+        speedPreference: valid.userGoal.speedPreference,
+        splitAllowed: valid.userGoal.splitAllowed,
+        ...(valid.userGoal.instruction === undefined
+          ? {}
+          : { instruction: valid.userGoal.instruction }),
+      },
+      documentProfile: {
+        fileSizeBytes: valid.documentProfile.fileSizeBytes,
+        pageCount: valid.documentProfile.pageCount,
+        imageObjectCount: valid.documentProfile.imageObjectCount,
+        scannedPageRatio: valid.documentProfile.scannedPageRatio,
+        vectorPageRatio: valid.documentProfile.vectorPageRatio,
+        textPageRatio: valid.documentProfile.textPageRatio,
+        estimatedDpiBuckets: { ...valid.documentProfile.estimatedDpiBuckets },
+        codecCounts: { ...valid.documentProfile.codecCounts },
+        pageSizeDistributionBytes: { ...valid.documentProfile.pageSizeDistributionBytes },
+      },
+      engineCapabilities: {
+        localAvailable: valid.engineCapabilities.localAvailable,
+        officeAvailable: valid.engineCapabilities.officeAvailable,
+        officeCpuCount: valid.engineCapabilities.officeCpuCount,
+        officeMemoryGb: valid.engineCapabilities.officeMemoryGb,
+        allowedPresets: [...valid.engineCapabilities.allowedPresets],
+        maxFileSizeMb: valid.engineCapabilities.maxFileSizeMb,
+      },
+    },
+  };
 }
 
 function validateNumericRange(
@@ -565,8 +600,8 @@ export function validateProcessingPlan(
   }
   expectEnum(plan.engine, ["local", "office"], "$.engine", errors);
   expectEnum(plan.preset, policy.allowedPresets, "$.preset", errors);
-  if (!Number.isInteger(plan.quality)) errors.push("$.quality: expected integer");
-  if (!Number.isInteger(plan.dpi)) errors.push("$.dpi: expected integer");
+  if (!Number.isSafeInteger(plan.quality)) errors.push("$.quality: expected safe integer");
+  if (!Number.isSafeInteger(plan.dpi)) errors.push("$.dpi: expected safe integer");
   if (plan.engine === "local" && !policy.localAvailable) {
     errors.push("$.engine: Local Engine is unavailable");
   }
@@ -582,8 +617,8 @@ export function validateProcessingPlan(
     rejectUnknownKeys(split, SPLIT_KEYS, "$.split", errors);
     expectBoolean(split.enabled, "$.split.enabled", errors);
     expectEnum(split.strategy, ["by-max-size"], "$.split.strategy", errors);
-    if (!Number.isInteger(split.targetPartSizeMb)) {
-      errors.push("$.split.targetPartSizeMb: expected integer");
+    if (!Number.isSafeInteger(split.targetPartSizeMb)) {
+      errors.push("$.split.targetPartSizeMb: expected safe integer");
     }
     if (split.enabled === true && !policy.splitAllowed) {
       errors.push("$.split.enabled: Split is forbidden by the user goal");
@@ -633,4 +668,26 @@ export function validateProcessingPlan(
     return { ok: false, errors: [...new Set(errors)], executionAllowed: false };
   }
   return { ok: true, value: input as ProcessingPlan, executionAllowed: true };
+}
+
+export function validateProcessingPlanStructure(
+  input: unknown,
+  allowedPresets: readonly string[],
+): ContractValidationResult<ProcessingPlan> {
+  const structuralResult = validateProcessingPlan(input, {
+    allowedPresets,
+    localAvailable: true,
+    officeAvailable: true,
+    splitAllowed: true,
+    officeEntitled: true,
+    numericPolicy: {
+      quality: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
+      dpi: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
+      targetPartSizeMb: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
+    },
+  });
+  if (!structuralResult.ok) {
+    return { ok: false, errors: structuralResult.errors };
+  }
+  return { ok: true, value: structuralResult.value };
 }
