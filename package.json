@@ -7,6 +7,8 @@
   "scripts": {
     "prebuild": "node scripts/vendor-mupdf.mjs",
     "build": "wxt build",
+    "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
+    "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
     "check:worker-boundary": "node scripts/assert-worker-runtime-boundary.mjs",
     "dev": "wxt",

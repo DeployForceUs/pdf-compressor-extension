@@ -57,6 +57,16 @@ Ghostscript is intentionally absent from this slice. Its exact version, source,
 notice, reproducible build, Balanced command, and numeric policy remain release
 gates for the processing slice.
 
+## Completed slice: Balanced calibration harness
+
+Implemented a reproducible synthetic scanned fixture generator and a fixed
+four-candidate Ghostscript matrix. The first calibration proved output-open and
+page-count validation and produced distinct compression results after disabling
+JPEG pass-through and explicitly setting Distiller image dictionaries. Exact
+results and limitations are recorded in
+`PHASE_11_BALANCED_BENCHMARK_CALIBRATION.md`. Numeric execution remains blocked
+until the required real/public fixture matrix and visual review are complete.
+
 ## Validation
 
 Passed locally against the clean contest worktree:
@@ -64,6 +74,8 @@ Passed locally against the clean contest worktree:
 ```text
 npm run check
 npm run engine:test
+npm run engine:fixture -- /tmp/pdf-office-synthetic-24p.pdf
+npm run engine:benchmark -- /tmp/pdf-office-synthetic-24p.pdf /tmp/results
 node --import tsx tests/phase11_smart_planner_contract.test.ts
 node --import tsx tests/phase11_openai_smart_planner_client.test.ts
 node --import tsx tests/phase11_smart_planner_gateway.test.ts
