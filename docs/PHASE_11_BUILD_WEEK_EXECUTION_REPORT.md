@@ -74,6 +74,11 @@ that Office processing needs a deterministic size-regression guard and should
 not replace the original for this text/vector profile. This result does not
 approve numeric bounds.
 
+The resulting deterministic output-artifact policy is implemented and tested:
+only an open, page-count-preserving, strictly smaller output may replace the
+original. Invalid, mismatched, equal-size, or larger output retains the original
+valid file.
+
 ## Validation
 
 Passed locally against the clean contest worktree:
