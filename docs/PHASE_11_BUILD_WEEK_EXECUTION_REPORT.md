@@ -26,6 +26,19 @@ Implemented:
 
 No PDF, page image, preview, extracted text, filename, document metadata, license token, account identity, or device fingerprint is accepted by the Smart Planner request validator.
 
+## Completed slice: content-blind profile aggregation boundary
+
+Implemented:
+
+- an exact, unknown-key-rejecting structural observation contract;
+- one unique, contiguous observation requirement for every page;
+- aggregation of approved page classification ratios, DPI buckets, codec counts, image-object counts, and page-size percentiles;
+- cancellation checks before and throughout aggregation so a partial profile is never returned;
+- rejection tests for filename, extracted text, image-byte fields, duplicate pages, and incomplete page sets;
+- output restricted to the existing `SmartPlannerDocumentProfile` contract.
+
+The approved addendum defines the allowed aggregate metrics but does not define the deterministic MuPDF rules that classify a page as `scanned`, `vector`, or `text`, estimate per-page byte size, or estimate DPI without rendering or extracting content. Those rules were not guessed. The new builder accepts only already classified structural observations; the MuPDF observation adapter remains a separate pending slice that requires the classification rules to be recorded first.
+
 ## Validation
 
 Passed locally against the clean contest worktree:
@@ -35,6 +48,7 @@ npm run check
 node --import tsx tests/phase11_smart_planner_contract.test.ts
 node --import tsx tests/phase11_openai_smart_planner_client.test.ts
 node --import tsx tests/phase11_smart_planner_gateway.test.ts
+node --import tsx tests/phase11_content_blind_profile_builder.test.ts
 npm run build
 npm run check:worker-boundary
 rg "api.openai.com|server-secret-test-key" .output  # no matches
@@ -56,6 +70,7 @@ API contract references checked on 2026-07-17:
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store; never in Extension code, GitHub source, logs, or request payloads.
 5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
 6. Connect the Extension consent/disclosure UI only after the server boundary and fallback tests pass.
+7. Record deterministic MuPDF page-classification, DPI-estimation, and page-size-estimation rules, then implement the structural observation adapter without text extraction or page rendering.
 
 ## Specification compliance
 
@@ -63,6 +78,7 @@ API contract references checked on 2026-07-17:
 - Canonical Split identifier `by-max-size`: **Fully matches specification** and current implementation.
 - Smart Planner request privacy boundary: **Extends specification** under the approved Build Week addendum.
 - Strict `ProcessingPlan` and Responses API client: **Extends specification** under the approved Build Week addendum.
+- Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
 - AI-generated numeric execution: **Requires future specification update** after exact benchmarked ranges are approved; execution is currently blocked.
 - Office Engine execution and licensing: **Requires future specification update** and remains unimplemented in this slice.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.
