@@ -99,6 +99,9 @@ Before license implementation, the following specification inconsistencies requi
 
 Do not invent these missing product/security decisions during implementation. Record the approved decision before building the license-verification slice.
 
+## Unapproved Research Proposals
+
+- [`SMART_COMPRESSION_RESEARCH_PROPOSAL.md`](./SMART_COMPRESSION_RESEARCH_PROPOSAL.md) — bounded Smart Compression research and benchmark program. It is not approved for implementation and is not assigned a canonical stage.
 ## Specification Compliance
 
 - Canonical numbering: **Fully matches specification**.
