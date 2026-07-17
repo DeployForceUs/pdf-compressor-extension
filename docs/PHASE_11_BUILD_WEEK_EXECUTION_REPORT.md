@@ -67,6 +67,13 @@ results and limitations are recorded in
 `PHASE_11_BALANCED_BENCHMARK_CALIBRATION.md`. Numeric execution remains blocked
 until the required real/public fixture matrix and visual review are complete.
 
+The canonical 220-page Canon fixture was also measured. It is print-allowed
+but owner-permission encrypted, opens successfully after processing, and
+preserves all 220 pages. Every candidate increased output size, establishing
+that Office processing needs a deterministic size-regression guard and should
+not replace the original for this text/vector profile. This result does not
+approve numeric bounds.
+
 ## Validation
 
 Passed locally against the clean contest worktree:

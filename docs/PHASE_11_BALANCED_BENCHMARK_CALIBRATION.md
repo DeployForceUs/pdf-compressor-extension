@@ -37,3 +37,24 @@ a larger public scanned PDF, an image-heavy public PDF, and a mixed
 text/vector/image PDF, plus visual inspection and recorded hardware.
 
 The processing endpoint therefore remains blocked.
+
+## Canon 220-page fixture — 2026-07-17
+
+The canonical `Easy-PhotoPrintEditor_V1.10.0_Win_Mac_EN_V01.pdf` fixture is an
+owner-permission-encrypted, print-allowed, 220-page text/vector manual. The
+harness reads only its structure with encryption ignored; Ghostscript remains
+responsible for accepting or rejecting processing.
+
+| Candidate | Output bytes | Output/input | Opens/pages |
+| --- | ---: | ---: | --- |
+| balanced-144-q65 | 6,520,108 | 1.0190 | yes/220 |
+| balanced-180-q72 | 6,843,833 | 1.0696 | yes/220 |
+| balanced-180-q78 | 7,793,894 | 1.2181 | yes/220 |
+| balanced-220-q85 | 8,253,180 | 1.2899 | yes/220 |
+
+Every candidate increased the 6,398,446-byte source. Therefore this fixture
+does not justify an Office Balanced preset. It establishes a mandatory output
+regression rule: an Engine result that is not smaller must not replace the
+original valid file, and the planner should prefer Local/no-op behavior for a
+profile of this kind. Scanned and image-heavy fixtures are still required to
+approve Balanced parameters.

@@ -25,7 +25,10 @@ function requirePdfPath(value) {
 async function inspectPdf(path) {
   const bytes = await readFile(path);
   const pdf = await PDFDocument.load(bytes, {
-    ignoreEncryption: false,
+    // Canonical benchmark fixture is owner-permission encrypted but allows
+    // printing. The harness reads only structure/page count; Ghostscript still
+    // decides whether the actual processing operation is permitted.
+    ignoreEncryption: true,
     updateMetadata: false,
   });
   return { bytes: bytes.byteLength, pageCount: pdf.getPageCount() };
