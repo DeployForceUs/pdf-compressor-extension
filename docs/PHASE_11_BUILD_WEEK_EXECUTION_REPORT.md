@@ -65,7 +65,7 @@ API contract references checked on 2026-07-17:
 ## Current blockers and next actions
 
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
-2. Resolve the Office Engine production license and selected executable before connecting plan execution.
+2. Resolve the Office Engine production license and selected executable before connecting plan execution. `PHASE_11_PROCESSING_ENGINE_LICENSE_DECISION.md` records the verified AGPL/commercial paths and requires an explicit owner decision.
 3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store; never in Extension code, GitHub source, logs, or request payloads.
 5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
