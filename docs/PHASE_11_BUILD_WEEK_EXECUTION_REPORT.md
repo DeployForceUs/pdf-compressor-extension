@@ -65,9 +65,9 @@ API contract references checked on 2026-07-17:
 ## Current blockers and next actions
 
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
-2. Resolve the Office Engine production license and selected executable before connecting plan execution. `PHASE_11_PROCESSING_ENGINE_LICENSE_DECISION.md` records the verified AGPL/commercial paths and requires an explicit owner decision.
+2. Complete the selected AGPL Office Engine artifact package. The owner selected Option A on 2026-07-17, the repository now carries `AGPL-3.0-or-later`, and the initial MuPDF notice is present. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
 3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
-4. Configure `OPENAI_API_KEY` only in the server/deployment secret store; never in Extension code, GitHub source, logs, or request payloads.
+4. Configure `OPENAI_API_KEY` only in the server/deployment secret store according to `OPENAI_API_KEY_HANDLING.md`; never in Extension code, GitHub source, logs, or request payloads.
 5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
 6. Connect the Extension consent/disclosure UI only after the server boundary and fallback tests pass.
 7. Record deterministic MuPDF page-classification, DPI-estimation, and page-size-estimation rules, then implement the structural observation adapter without text extraction or page rendering.
@@ -80,5 +80,5 @@ API contract references checked on 2026-07-17:
 - Strict `ProcessingPlan` and Responses API client: **Extends specification** under the approved Build Week addendum.
 - Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
 - AI-generated numeric execution: **Requires future specification update** after exact benchmarked ranges are approved; execution is currently blocked.
-- Office Engine execution and licensing: **Requires future specification update** and remains unimplemented in this slice.
+- Office Engine execution: **Requires future specification update** and remains unimplemented in this slice. The repository-level AGPL path is owner-approved; artifact-specific compliance remains a release gate.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.

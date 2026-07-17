@@ -59,3 +59,9 @@ Not yet implemented:
 - JPEG2000 / OpenJPEG
 - URL/viewer/context-menu PDF acquisition required by the full specification
 - On-Premise / Enterprise features
+
+## License
+
+This repository is licensed under the GNU Affero General Public License v3.0
+or later (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE) and
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

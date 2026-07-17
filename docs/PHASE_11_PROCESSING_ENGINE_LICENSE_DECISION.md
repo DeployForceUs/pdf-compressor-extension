@@ -1,6 +1,6 @@
 # Stage 11 Processing Engine License Decision
 
-Status: **BLOCKED — owner decision required**  
+Status: **APPROVED — Option A selected by owner on 2026-07-17**
 Branch: `feature/phase11-office-engine-buildweek-spike`  
 Decision scope: Build Week Office Engine distribution, hosted evaluation, and the existing bundled MuPDF runtime
 
@@ -24,7 +24,14 @@ This record is an engineering release gate, not legal advice.
 
 ## Option A — AGPL-compliant contest distribution
 
-Required owner decision:
+**Selected for the Build Week contest build.** The repository is licensed as
+`AGPL-3.0-or-later`; the complete license text and the initial MuPDF notice are
+included at the repository root. This approval does not by itself clear a
+future Ghostscript image: its exact version, notices, source location, build
+instructions, and corresponding-source delivery must be completed with the
+Office Engine artifact.
+
+Approved contest-build commitments:
 
 - license the applicable project/server source under `AGPL-3.0-or-later`;
 - add the complete AGPL license text and third-party notices;
@@ -69,19 +76,23 @@ Consequences:
 
 This avoids adding a new Ghostscript distribution risk but does not remove the existing MuPDF licensing gate.
 
-## Required decision
+## Recorded decision and remaining release gate
 
-No Docker Office Engine implementation, Image publication, hosted PDF-processing endpoint, or public-store build may be described as license-cleared until the owner selects and completes one of the paths above.
+The owner selected Option A on 2026-07-17. Docker Office Engine implementation
+may proceed under the AGPL contest path, but Image publication, the hosted
+PDF-processing endpoint, and the public-store build may not be described as
+license-cleared until their complete corresponding source, notices, source
+links, and build instructions are present and verified.
 
-Recommended deadline path for an owner who accepts open-source distribution:
+Recorded deadline path:
 
 > Select Option A for the contest build, complete the AGPL/notice/source-offer package, and treat future proprietary distribution as a separate commercial-license decision.
 
-If the owner does not approve AGPL distribution, select Option C immediately unless a commercial license is obtained in time.
+Future proprietary distribution remains a separate Option B or architecture decision.
 
 ## SPECIFICATION COMPLIANCE
 
 - License gate enforcement: **Fully matches specification** and the approved Build Week addendum.
-- AGPL contest path: **Requires owner approval and future specification update** before implementation.
+- AGPL contest path: **Owner-approved and implemented for the current repository**; Engine artifact compliance remains a release gate.
 - Commercial-license path: **Requires owner approval and executed external license** before implementation.
 - Plan B fallback: **Fully matches the approved Build Week execution plan**.

@@ -5,3 +5,6 @@ node_modules/
 public/vendor/
 reports/*.md
 !reports/PHASE_2_EXECUTION_REPORT.md
+.env
+.env.*
+!.env.example
