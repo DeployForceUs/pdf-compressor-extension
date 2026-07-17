@@ -176,7 +176,7 @@ Proposed strict response shape:
   "dpi": 180,
   "split": {
     "enabled": true,
-    "strategy": "max-size",
+    "strategy": "by-max-size",
     "targetPartSizeMb": 20
   },
   "retryPolicy": {
@@ -465,4 +465,3 @@ No unresolved blocking value may be guessed in runtime code.
 3. Implement a minimal server-side `gpt-5.6` Responses API round trip with strict output and deterministic fallback.
 4. Capture the exact request in a test and prove absence of PDF bytes/content/metadata.
 5. Resolve the processing-engine license and numeric policy bounds before Engine execution work.
-
