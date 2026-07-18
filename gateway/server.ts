@@ -10,6 +10,7 @@ const DEFAULT_MAX_REQUEST_BYTES = 32_768;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_RATE_LIMIT_REQUESTS = 10;
 const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60;
+const DEFAULT_OPENAI_MODEL = "gpt-5.6";
 
 function readPositiveInteger(name: string, fallback: number) {
   const raw = process.env[name];
@@ -115,6 +116,7 @@ const rateLimitWindowSeconds = readPositiveInteger(
 );
 const apiKey = readSecretFile("OPENAI_API_KEY_FILE");
 const judgeAccessToken = readSecretFile("JUDGE_ACCESS_TOKEN_FILE");
+const openAiModel = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
 const consumeRateLimit = createFixedWindowRateLimiter(
   rateLimitRequests,
   rateLimitWindowSeconds * 1000,
@@ -142,7 +144,7 @@ const server = createServer(async (request, response) => {
         status: "healthy",
         readiness: "ready",
         service: "smart-planner-gateway",
-        model: "gpt-5.6",
+        model: openAiModel,
       });
       return;
     }
@@ -176,6 +178,7 @@ const server = createServer(async (request, response) => {
     });
     const webResponse = await handleSmartPlannerGatewayRequest(webRequest, {
       apiKey,
+      model: openAiModel,
       requestPolicy: {
         deliveryTargets: ["email_20mb"],
         qualityIntents: ["print"],

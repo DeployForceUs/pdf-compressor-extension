@@ -34,7 +34,7 @@ export type SmartPlannerApiOptions = {
   fetchImpl?: SmartPlannerFetch;
   signal?: AbortSignal;
   endpoint?: string;
-  model?: typeof SMART_PLANNER_MODEL;
+  model?: string;
 };
 
 export type SmartPlannerApiResult =

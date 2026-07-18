@@ -10,6 +10,7 @@ import type {
 
 export type SmartPlannerGatewayConfig = {
   apiKey: string;
+  model?: string;
   requestPolicy: SmartPlannerRequestPolicy;
   planPolicy: ProcessingPlanPolicy;
   maxRequestBytes: number;
@@ -82,6 +83,7 @@ export async function handleSmartPlannerGatewayRequest(
   try {
     const result = await (config.requestPlan ?? requestSmartPlannerPlan)({
       apiKey: config.apiKey,
+      model: config.model,
       request: requestBody,
       requestPolicy: config.requestPolicy,
       planPolicy: config.planPolicy,
