@@ -12,7 +12,7 @@ Current safety state:
 - the current upload limit is 1 MB because upload processing is not enabled;
 - no OpenAI key or judge-access token is stored in Git.
 - the optional Planner Gateway binds only to `127.0.0.1:8790`, reads secrets
-  from non-root Docker secret mounts (not container environment variables), and
+  from uid-1000, mode-0400 Docker secret mounts (not container environment variables), and
   applies a 32 KB body limit, 30-second upstream timeout, and global
   10-request/minute contest limit.
 

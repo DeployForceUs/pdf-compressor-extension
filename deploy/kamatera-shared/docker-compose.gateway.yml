@@ -15,16 +15,8 @@ services:
       OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
       JUDGE_ACCESS_TOKEN_FILE: /run/secrets/judge_access_token
     secrets:
-      - source: openai_api_key
-        target: openai_api_key
-        uid: "1000"
-        gid: "1000"
-        mode: 0400
-      - source: judge_access_token
-        target: judge_access_token
-        uid: "1000"
-        gid: "1000"
-        mode: 0400
+      - openai_api_key
+      - judge_access_token
     init: true
     read_only: true
     tmpfs:
@@ -37,6 +29,6 @@ services:
 
 secrets:
   openai_api_key:
-    environment: OPENAI_API_KEY
+    file: ${OPENAI_API_KEY_SECRET_PATH:-/etc/pdf-office-engine/secrets/openai_api_key}
   judge_access_token:
-    environment: JUDGE_ACCESS_TOKEN
+    file: ${JUDGE_ACCESS_TOKEN_SECRET_PATH:-/etc/pdf-office-engine/secrets/judge_access_token}

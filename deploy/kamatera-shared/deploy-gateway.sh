@@ -26,15 +26,17 @@ for secret in "$OPENAI_SECRET" "$JUDGE_SECRET"; do
   fi
 done
 
-# Compose can apply non-root uid/gid/mode to environment-sourced secrets. It
-# cannot remap file-sourced secrets because those are host bind mounts.
-OPENAI_API_KEY=$(sed -n '1p' "$OPENAI_SECRET")
-JUDGE_ACCESS_TOKEN=$(sed -n '1p' "$JUDGE_SECRET")
-if [ -z "$OPENAI_API_KEY" ] || [ -z "$JUDGE_ACCESS_TOKEN" ]; then
+if [ -z "$(sed -n '1p' "$OPENAI_SECRET")" ] || [ -z "$(sed -n '1p' "$JUDGE_SECRET")" ]; then
   echo "Secret files must contain a non-empty value on the first line." >&2
   exit 1
 fi
-export OPENAI_API_KEY JUDGE_ACCESS_TOKEN
+
+# Compose on the target host implements file secrets as bind mounts and cannot
+# remap uid/gid. Node runs as uid 1000 in the container, so make only that uid
+# able to read the two mounted files. The root-only parent directory still
+# prevents traversal by unprivileged host users.
+chown 1000:1000 "$OPENAI_SECRET" "$JUDGE_SECRET"
+chmod 0400 "$OPENAI_SECRET" "$JUDGE_SECRET"
 
 docker compose \
   --env-file "$ENV_FILE" \
