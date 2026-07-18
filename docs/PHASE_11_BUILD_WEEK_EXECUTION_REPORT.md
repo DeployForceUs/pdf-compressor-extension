@@ -124,6 +124,16 @@ API contract references checked on 2026-07-17:
 
 ## Current blockers and next actions
 
+The shared-server deployment now includes an authenticated, loopback-only
+Planner Gateway runtime. It bundles the existing strict Smart Planner contract,
+reads the OpenAI key and judge token from Docker secret files, limits requests
+to 32 KB and 10 per minute, applies a 30-second upstream timeout, and logs only
+random request ID, route, method, status, and duration. A content-free fixture
+and smoke command are included for the first real GPT-5.6 roundtrip. Local
+runtime tests prove health, authentication, sanitized fallback, and absence of
+secret values in logs. The real roundtrip remains pending server-side secret
+entry by the owner.
+
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
 2. Implement and benchmark the bounded Balanced processing slice, then complete its AGPL artifact package. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
 3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.

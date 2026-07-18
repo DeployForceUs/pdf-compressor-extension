@@ -14,6 +14,8 @@
     "dev": "wxt",
     "engine:start": "node engine/server.mjs",
     "engine:test": "node --test tests/phase11_office_engine_*.test.mjs",
+    "gateway:test": "npm --prefix gateway ci && node --test tests/phase11_planner_gateway_runtime.test.mjs",
+    "gateway:smoke": "node scripts/smoke-planner-gateway.mjs",
     "license:issue": "node scripts/issue-pro-license.mjs",
     "typecheck": "tsc --noEmit"
   },

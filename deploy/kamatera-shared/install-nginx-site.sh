@@ -25,6 +25,7 @@ fi
 
 DEMO_DOMAIN=$(sed -n 's/^DEMO_DOMAIN=//p' "$ENV_FILE" | tail -n 1)
 OFFICE_ENGINE_PORT=$(sed -n 's/^OFFICE_ENGINE_PORT=//p' "$ENV_FILE" | tail -n 1)
+PLANNER_GATEWAY_PORT=$(sed -n 's/^PLANNER_GATEWAY_PORT=//p' "$ENV_FILE" | tail -n 1)
 
 case "$DEMO_DOMAIN" in
   ""|*[!A-Za-z0-9.-]*)
@@ -40,9 +41,17 @@ case "$OFFICE_ENGINE_PORT" in
     ;;
 esac
 
+case "$PLANNER_GATEWAY_PORT" in
+  ""|*[!0-9]*)
+    echo "PLANNER_GATEWAY_PORT must be an integer." >&2
+    exit 1
+    ;;
+esac
+
 sed \
   -e "s/__DEMO_DOMAIN__/$DEMO_DOMAIN/g" \
   -e "s/__OFFICE_ENGINE_PORT__/$OFFICE_ENGINE_PORT/g" \
+  -e "s/__PLANNER_GATEWAY_PORT__/$PLANNER_GATEWAY_PORT/g" \
   "$SCRIPT_DIR/nginx-site.conf.template" > "$TEMP_PATH"
 
 install -m 0644 "$TEMP_PATH" "$AVAILABLE_PATH"

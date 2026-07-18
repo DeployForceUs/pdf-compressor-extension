@@ -1,0 +1,42 @@
+services:
+  planner-gateway:
+    build:
+      context: ../..
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "127.0.0.1:${PLANNER_GATEWAY_PORT:-8790}:8790"
+    environment:
+      NODE_ENV: production
+      PORT: "8790"
+      PLANNER_MAX_REQUEST_BYTES: "32768"
+      PLANNER_TIMEOUT_MS: "30000"
+      PLANNER_RATE_LIMIT_REQUESTS: "10"
+      PLANNER_RATE_LIMIT_WINDOW_SECONDS: "60"
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      JUDGE_ACCESS_TOKEN_FILE: /run/secrets/judge_access_token
+    secrets:
+      - source: openai_api_key
+        target: openai_api_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: judge_access_token
+        target: judge_access_token
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+secrets:
+  openai_api_key:
+    environment: OPENAI_API_KEY
+  judge_access_token:
+    environment: JUDGE_ACCESS_TOKEN
