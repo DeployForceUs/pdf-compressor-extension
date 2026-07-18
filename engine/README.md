@@ -43,3 +43,10 @@ npm run engine:test
 
 The final deployment acceptance also requires a Docker build and a real public
 fixture roundtrip on the target Linux host.
+
+On the shared contest host, run the committed Canon fixture through the full
+create/status/download lifecycle with:
+
+```bash
+./scripts/smoke-office-engine.sh
+```
