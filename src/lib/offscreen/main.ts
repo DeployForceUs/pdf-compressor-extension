@@ -51,6 +51,7 @@ import { tracePdfSplit } from "../pdf-split-trace";
 import { createOfficeEngineClient } from "../office/office-engine-client";
 import { createOfficeEngineSettingsStorage } from "../office/office-engine-settings";
 import { runOfficeProcessingJob } from "../office/office-processing-runtime";
+import { isOffscreenRequest } from "../message-routing";
 
 const COMPRESSION_TIMEOUT_MS = 30_000;
 const SPLIT_TIMEOUT_MS = 30_000;
@@ -831,8 +832,14 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
   }
 }
 
-browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  void handle(message as OffscreenRequest)
+const offscreenMessageListener = (
+  message: unknown,
+  _sender: unknown,
+  sendResponse: (response: unknown) => void,
+) => {
+  if (!isOffscreenRequest(message)) return false;
+
+  void handle(message)
     .then((response) => {
       if (response) {
         sendResponse(response);
@@ -846,4 +853,10 @@ browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) 
       });
     });
   return true;
-});
+};
+
+// Chromium uses false for messages this context does not own. The
+// webextension-polyfill callback type omits that valid runtime return value.
+browser.runtime.onMessage.addListener(
+  offscreenMessageListener as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0],
+);

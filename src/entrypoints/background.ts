@@ -19,6 +19,7 @@ import type {
   SplitResultReadRequest,
 } from "../lib/messaging";
 import { normalizeSplitOutputMode } from "../lib/messaging";
+import { isBackgroundRequest } from "../lib/message-routing";
 import { tracePdfSplit } from "../lib/pdf-split-trace";
 import { createUsageLimitService } from "../lib/monetization/limits";
 import { STAGE_7_MVP_POLICY } from "../lib/monetization/policy";
@@ -335,14 +336,26 @@ export default defineBackground(() => {
     }
   }
 
-  browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-    void handle(message as BackgroundRequest).then((response) => {
+  const backgroundMessageListener = (
+    message: unknown,
+    _sender: unknown,
+    sendResponse: (response: unknown) => void,
+  ) => {
+    if (!isBackgroundRequest(message)) return false;
+
+    void handle(message).then((response) => {
       if (response) {
         sendResponse(response);
       }
     });
     return true;
-  });
+  };
+
+  // Chromium uses false for messages this context does not own. The
+  // webextension-polyfill callback type omits that valid runtime return value.
+  browser.runtime.onMessage.addListener(
+    backgroundMessageListener as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0],
+  );
 
   browser.runtime.onInstalled.addListener(() => {
     logger.info("Extension installed");
