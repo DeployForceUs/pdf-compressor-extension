@@ -4,6 +4,42 @@ Status: **in progress**
 Branch: `feature/phase11-office-engine-buildweek-spike`  
 Scope authority: `BUILD_WEEK_GPT56_OFFICE_ENGINE_ADDENDUM.md`
 
+## Completed slice: authenticated Extension-to-Office connection
+
+Implemented:
+
+- an authenticated Gateway proxy for Office health, create, status, result, and
+  cancellation routes;
+- exact method/path allowlisting and removal of the browser Authorization header
+  before requests reach the unauthenticated private Engine;
+- streaming PDF upload and result download without buffering the PDF in Nginx or
+  the Gateway;
+- a 1024 MB Nginx upload bound, private Docker service discovery, and a
+  310-second proxy timeout matching the bounded Engine lifecycle;
+- an Extension Office client that requires HTTPS outside explicit loopback
+  development and rejects malformed health, job, error, and result responses;
+- device-local connection settings, optional per-origin browser permission, a
+  connection test, password-masked access token field, and disconnect flow;
+- explicit per-document upload confirmation; no Office upload occurs merely by
+  connecting the Engine;
+- an offscreen/background processing lifecycle that survives popup closure,
+  polls progress, supports cancellation, downloads the result, revalidates PDF
+  signature and page count locally, and persists the result in the existing
+  retention-controlled compression store;
+- a content-blind Smart Planner API client that validates the request before
+  network access and locally revalidates every executable plan returned by the
+  Gateway;
+- English and Spanish disclosures that distinguish Local, Office, and Smart
+  Plan data boundaries and remove the obsolete claim that every mode is offline.
+
+The Smart Planner client is intentionally not exposed as an executable popup
+action yet. The approved addendum still does not define deterministic MuPDF
+rules for page classification, DPI estimation, or per-page byte estimation.
+The Extension therefore does not fabricate zeros or synthetic metrics for real
+documents. Recording those rules and implementing the observation adapter
+remains the release-blocking step before the visible `Generate Smart Plan`
+action can truthfully use a selected PDF.
+
 ## Completed slice: Smart Planner contract and API boundary
 
 Implemented:
@@ -123,6 +159,25 @@ rg "api.openai.com|server-secret-test-key" .output  # no matches
 git diff --check
 ```
 
+The authenticated connection slice additionally passed:
+
+```text
+npm run check
+npm run build
+npm run engine:test
+node --test tests/phase11_planner_gateway_runtime.test.mjs
+phase11_office_engine_client.test.ts (esbuild bundle + node --test)
+phase11_office_processing_runtime.test.ts (esbuild bundle + node --test)
+phase11_smart_planner_api_client.test.ts (esbuild bundle + node --test)
+npm run check:worker-boundary
+rg "api.openai.com|OPENAI_API_KEY|test-openai-key-not-real" .output/chrome-mv3
+git diff --check
+```
+
+The build contains no OpenAI endpoint or API-key marker. A graphical Chrome
+acceptance pass and a live TLS roundtrip remain required because this execution
+environment does not include a Chrome/Chromium binary.
+
 The first Worker-boundary attempt was run before a build and correctly failed because `.output` did not exist. It passed after `npm run build` generated the production bundle.
 
 Docker CLI is not installed in the current execution environment, so
@@ -172,3 +227,6 @@ post-model policy enforcement without claiming that processing is approved.
 - Office Engine health/capabilities: **Fully matches the approved Build Week slice** locally; target-container verification remains pending.
 - Office Engine execution: **Fully matches the approved bounded Build Week slice** locally; authenticated hosted fixture acceptance remains pending.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.
+- Authenticated Gateway Office proxy: **Fully matches the approved Build Week slice**; live TLS deployment remains pending.
+- Extension Office connection, confirmation, progress, cancellation, validation, and result persistence: **Partially matches specification** pending graphical Chrome and live TLS acceptance.
+- Extension Smart Planner API client: **Partially matches specification**; the content-blind MuPDF observation adapter and visible plan action remain intentionally blocked by the missing deterministic profiling rules.

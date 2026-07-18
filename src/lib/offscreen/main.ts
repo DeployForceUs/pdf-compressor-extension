@@ -48,9 +48,13 @@ import { runSplitJob } from "./split-runtime";
 import type { CompressionWorkerApi } from "./worker";
 import { normalizeSplitOutputMode } from "../messaging";
 import { tracePdfSplit } from "../pdf-split-trace";
+import { createOfficeEngineClient } from "../office/office-engine-client";
+import { createOfficeEngineSettingsStorage } from "../office/office-engine-settings";
+import { runOfficeProcessingJob } from "../office/office-processing-runtime";
 
 const COMPRESSION_TIMEOUT_MS = 30_000;
 const SPLIT_TIMEOUT_MS = 30_000;
+const OFFICE_PROCESSING_TIMEOUT_MS = 315_000;
 const MUPDF_RUNTIME_PATH = "vendor/mupdf/mupdf.js";
 const RECORD_STORE = "binary-records";
 const DB_NAME = "pdf-compressor-phase1";
@@ -73,10 +77,19 @@ type SplitRunState = {
   recordId: string;
 };
 
+type OfficeRunState = {
+  abortController: AbortController;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  jobId: string | null;
+  client: ReturnType<typeof createOfficeEngineClient>;
+};
+
 let workerInstance: Worker | null = null;
 let workerApi: CompressionWorkerApi | null = null;
 let activeCompression: CompressionRunState | null = null;
 let activeSplit: SplitRunState | null = null;
+let activeOffice: OfficeRunState | null = null;
+const officeSettingsStorage = createOfficeEngineSettingsStorage(browser.storage.local);
 
 type DatabaseHandle = {
   db: IDBDatabase;
@@ -683,6 +696,71 @@ async function startCompression(
   }
 }
 
+function resetOfficeState() {
+  if (activeOffice?.timeoutId) clearTimeout(activeOffice.timeoutId);
+  activeOffice = null;
+}
+
+async function cancelOfficeProcessing() {
+  if (!activeOffice) {
+    return { ok: true as const, cancelled: false, details: "No Office Engine job is active" };
+  }
+  const { client, jobId, abortController } = activeOffice;
+  abortController.abort();
+  if (jobId) await client.cancelJob(jobId).catch(() => undefined);
+  return { ok: true as const, cancelled: true, details: "Office Engine cancellation requested" };
+}
+
+async function startOfficeProcessing() {
+  if (activeOffice || activeCompression || activeSplit) {
+    return { ok: false as const, error: "Another PDF operation is already in progress" };
+  }
+  const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
+  if (!selected) return { ok: false as const, error: "No selected PDF record is available" };
+  const settings = await officeSettingsStorage.read();
+  if (!settings) return { ok: false as const, error: "Office Engine is not connected" };
+
+  const client = createOfficeEngineClient(settings);
+  const abortController = new AbortController();
+  activeOffice = { abortController, timeoutId: null, jobId: null, client };
+  activeOffice.timeoutId = setTimeout(() => abortController.abort(), OFFICE_PROCESSING_TIMEOUT_MS);
+
+  try {
+    const outcome = await runOfficeProcessingJob(selected, {
+      client,
+      signal: abortController.signal,
+      persistResult: writeCompressionResult,
+      onJobCreated: (jobId) => {
+        if (activeOffice) activeOffice.jobId = jobId;
+      },
+      onProgress: broadcast,
+    });
+    const result = compressionMetadata(outcome.record);
+    broadcast({ type: "office:result", result, resultKind: outcome.resultKind });
+    return {
+      ok: true as const,
+      recordId: outcome.record.id,
+      result,
+      resultKind: outcome.resultKind,
+    };
+  } catch (error) {
+    const cancelled = abortController.signal.aborted;
+    const jobId = activeOffice?.jobId;
+    if (jobId) await client.cancelJob(jobId).catch(() => undefined);
+    const message = cancelled
+      ? "Office processing was cancelled"
+      : error instanceof Error ? error.message : "Office processing failed";
+    broadcast({
+      type: "office:error",
+      code: cancelled ? "CANCELLED" : "OFFICE_PROCESSING_FAILED",
+      message,
+    });
+    return { ok: false as const, error: message };
+  } finally {
+    resetOfficeState();
+  }
+}
+
 async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { ok: false; error: string } | null> {
   switch (message.type) {
     case "offscreen:health":
@@ -744,6 +822,10 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
       return readSplitState(message.recordId);
     case "offscreen:split-result-delete":
       return deleteSplitState(message.recordId);
+    case "offscreen:office-processing-start":
+      return startOfficeProcessing();
+    case "offscreen:office-processing-cancel":
+      return cancelOfficeProcessing();
     default:
       return null;
   }

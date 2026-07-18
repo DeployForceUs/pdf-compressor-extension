@@ -84,7 +84,9 @@ export type OffscreenRequest =
   | OffscreenSplitRequest
   | OffscreenSplitCancelRequest
   | OffscreenSplitResultReadRequest
-  | OffscreenSplitResultDeleteRequest;
+  | OffscreenSplitResultDeleteRequest
+  | OffscreenOfficeProcessingStartRequest
+  | OffscreenOfficeProcessingCancelRequest;
 
 export type OffscreenHealthResponse = {
   ok: true;
@@ -500,6 +502,64 @@ export type CompressionResultEvent = {
   result: CompressionResultMetadata;
 };
 
+export type OfficeProcessingStage =
+  | "connecting"
+  | "uploading"
+  | "queued"
+  | "processing"
+  | "downloading"
+  | "validating"
+  | "persisting"
+  | "complete";
+
+export type OfficeProcessingStartRequest = {
+  type: "background:office-processing-start";
+};
+
+export type OfficeProcessingCancelRequest = {
+  type: "background:office-processing-cancel";
+};
+
+export type OffscreenOfficeProcessingStartRequest = {
+  type: "offscreen:office-processing-start";
+};
+
+export type OffscreenOfficeProcessingCancelRequest = {
+  type: "offscreen:office-processing-cancel";
+};
+
+export type OfficeProcessingProgressEvent = {
+  type: "office:progress";
+  stage: OfficeProcessingStage;
+  progress: number;
+  message: string;
+};
+
+export type OfficeProcessingResultEvent = {
+  type: "office:result";
+  result: CompressionResultMetadata;
+  resultKind: "compressed" | "original";
+};
+
+export type OfficeProcessingErrorEvent = {
+  type: "office:error";
+  code: string;
+  message: string;
+};
+
+export type OfficeProcessingStartResponse = {
+  ok: true;
+  recordId: string;
+  result: CompressionResultMetadata;
+  resultKind: "compressed" | "original";
+};
+
+export type OfficeProcessingCancelResponse = {
+  ok: true;
+  cancelled: boolean;
+  details: string;
+};
+
 export type CompressionErrorEvent = {
   type: "compression:error";
   recordId: string | null;
@@ -556,7 +616,9 @@ export type OffscreenResponse =
   | SplitStartResponse
   | SplitCancelResponse
   | SplitResultReadResponse
-  | SplitResultDeleteResponse;
+  | SplitResultDeleteResponse
+  | OfficeProcessingStartResponse
+  | OfficeProcessingCancelResponse;
 
 export type BackgroundHealthRequest = {
   type: "health:check";
@@ -618,7 +680,9 @@ export type BackgroundRequest =
   | SplitLocalRequest
   | SplitCancelRequest
   | SplitResultReadRequest
-  | SplitResultDeleteRequest;
+  | SplitResultDeleteRequest
+  | OfficeProcessingStartRequest
+  | OfficeProcessingCancelRequest;
 
 export type BackgroundHealthResponse = {
   ok: true;
@@ -656,6 +720,8 @@ export type BackgroundResponse =
   | SplitResultDeleteResponse
   | MonetizationStateResponse
   | LicenseStateResponse
+  | OfficeProcessingStartResponse
+  | OfficeProcessingCancelResponse
   | BackgroundErrorResponse;
 
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {

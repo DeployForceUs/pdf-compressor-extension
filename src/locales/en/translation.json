@@ -2,7 +2,7 @@
   "app": {
     "eyebrow": "Phase 1 foundation",
     "title": "PDF Compressor",
-    "subtitle": "Local Processing • Private • Offline",
+    "subtitle": "Local by default • Office when you choose",
     "documentTitle": "PDF Compressor"
   },
   "license": {
@@ -118,6 +118,36 @@
     "pages": "pages",
     "invalidPdf": "Invalid PDF",
     "unsupportedFile": "Unsupported file"
+  },
+  "office": {
+    "eyebrow": "Build Week · Controlled server",
+    "title": "Office Engine",
+    "disclosure": "Connect to your controlled processing server. The PDF is sent to that server only after you confirm processing; it is never sent to OpenAI.",
+    "serverUrl": "Server URL",
+    "accessToken": "Access token",
+    "accessTokenPlaceholder": "Paste the server access token",
+    "connect": "Connect Office Engine",
+    "recheck": "Recheck connection",
+    "disconnect": "Disconnect",
+    "connecting": "Connecting…",
+    "connected": "Connected",
+    "disconnected": "Not connected",
+    "ready": "Office Engine is ready",
+    "processor": "Ghostscript {{version}}",
+    "limit": "Maximum file size: {{size}} MB",
+    "connectionRequired": "Enter the server URL and access token.",
+    "permissionDenied": "Browser permission for this server was not granted.",
+    "notReady": "Office Engine is connected but not ready to process files.",
+    "connectionFailed": "Could not connect to Office Engine."
+    ,"confirmUpload": "I confirm that this PDF may be uploaded to my connected Office Engine for deterministic processing.",
+    "readyToProcess": "Ready for your confirmation",
+    "process": "Process with Office Engine",
+    "cancel": "Cancel",
+    "download": "Download result",
+    "starting": "Starting Office Engine processing…",
+    "cancelling": "Cancelling Office Engine processing…",
+    "processingComplete": "Office Engine processing complete",
+    "processingFailed": "Office Engine processing failed"
   },
   "split": {
     "title": "Split PDF",
@@ -235,6 +265,6 @@
     "storage": "Unknown storage error"
   },
   "footnote": {
-    "localOnly": "100% local. Your files never leave your device."
+    "localOnly": "Local mode stays on this device. Office mode uploads only after your explicit confirmation. Smart Plan never sends the PDF to OpenAI."
   }
 }

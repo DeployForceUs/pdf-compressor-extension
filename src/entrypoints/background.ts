@@ -256,6 +256,16 @@ export default defineBackground(() => {
           await ensureOffscreenDocument();
           return forwardToOffscreen({ type: "offscreen:compression-result-delete" });
         }
+        case "background:office-processing-start": {
+          const authorization = await authorizeOperation("compression");
+          if (!authorization.allowed) return deniedOperationResponse(authorization);
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:office-processing-start" });
+        }
+        case "background:office-processing-cancel": {
+          await ensureOffscreenDocument();
+          return forwardToOffscreen({ type: "offscreen:office-processing-cancel" });
+        }
         case "split:local": {
           const authorization = await authorizeOperation("split", { proRequired: message.compressAfter === true });
           if (!authorization.allowed) {

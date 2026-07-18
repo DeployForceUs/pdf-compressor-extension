@@ -1,6 +1,11 @@
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  request as createUpstreamRequest,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { performance } from "node:perf_hooks";
 
 import { handleSmartPlannerGatewayRequest } from "../src/lib/ai/smart-planner-gateway";
@@ -12,6 +17,9 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_RATE_LIMIT_REQUESTS = 10;
 const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60;
 const DEFAULT_OPENAI_MODEL = "gpt-5.6";
+const DEFAULT_OFFICE_ENGINE_URL = "http://office-engine:8787";
+const DEFAULT_OFFICE_PROXY_TIMEOUT_MS = 310_000;
+const OFFICE_ROUTE = /^\/api\/v1\/office\/(health|compress|jobs\/([0-9a-f-]+)(?:\/(result|cancel))?)$/i;
 
 function readPositiveInteger(name: string, fallback: number) {
   const raw = process.env[name];
@@ -44,6 +52,13 @@ function secureEqual(left: string, right: string) {
   const leftBytes = Buffer.from(left);
   const rightBytes = Buffer.from(right);
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+}
+
+function hasJudgeAuthorization(request: IncomingMessage, token: string) {
+  const authorization = request.headers.authorization ?? "";
+  const prefix = "Bearer ";
+  return authorization.startsWith(prefix) &&
+    secureEqual(authorization.slice(prefix.length), token);
 }
 
 function createFixedWindowRateLimiter(limit: number, windowMs: number) {
@@ -109,6 +124,86 @@ async function forwardWebResponse(
   target.end(body);
 }
 
+function classifyOfficeProxyRequest(pathname: string, method: string | undefined) {
+  const match = OFFICE_ROUTE.exec(pathname);
+  if (!match) return null;
+
+  const resource = match[1].toLowerCase();
+  if (resource === "health") {
+    return method === "GET" || method === "HEAD"
+      ? { route: "office_health", upstreamPath: "/api/v1/health" }
+      : { route: "office_health", allowed: "GET, HEAD" };
+  }
+  if (resource === "compress") {
+    return method === "POST"
+      ? { route: "office_compress", upstreamPath: "/api/v1/compress" }
+      : { route: "office_compress", allowed: "POST" };
+  }
+
+  const jobId = match[2];
+  const action = match[3]?.toLowerCase();
+  if (action === "cancel") {
+    return method === "POST"
+      ? { route: "office_job_cancel", upstreamPath: `/api/v1/jobs/${jobId}/cancel` }
+      : { route: "office_job_cancel", allowed: "POST" };
+  }
+  const suffix = action === "result" ? "/result" : "";
+  return method === "GET" || method === "HEAD"
+    ? {
+        route: action === "result" ? "office_job_result" : "office_job_status",
+        upstreamPath: `/api/v1/jobs/${jobId}${suffix}`,
+      }
+    : {
+        route: action === "result" ? "office_job_result" : "office_job_status",
+        allowed: "GET, HEAD",
+      };
+}
+
+function proxyOfficeRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  upstreamBaseUrl: URL,
+  upstreamPath: string,
+  timeout: number,
+  requestId: string,
+) {
+  return new Promise<number>((resolve, reject) => {
+    const headers: Record<string, string> = {};
+    if (typeof request.headers["content-type"] === "string") {
+      headers["content-type"] = request.headers["content-type"];
+    }
+    if (typeof request.headers["content-length"] === "string") {
+      headers["content-length"] = request.headers["content-length"];
+    }
+
+    const upstream = createUpstreamRequest(new URL(upstreamPath, upstreamBaseUrl), {
+      method: request.method,
+      headers,
+      timeout,
+    }, (upstreamResponse) => {
+      const responseHeaders: Record<string, string> = {
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-request-id": requestId,
+      };
+      for (const name of ["content-type", "content-length", "content-disposition", "x-result-kind"]) {
+        const value = upstreamResponse.headers[name];
+        if (typeof value === "string") responseHeaders[name] = value;
+      }
+      const status = upstreamResponse.statusCode ?? 502;
+      response.writeHead(status, responseHeaders);
+      upstreamResponse.on("error", reject);
+      upstreamResponse.on("end", () => resolve(status));
+      upstreamResponse.pipe(response);
+    });
+
+    upstream.on("timeout", () => upstream.destroy(new Error("office_engine_timeout")));
+    upstream.on("error", reject);
+    request.on("aborted", () => upstream.destroy(new Error("client_aborted")));
+    request.pipe(upstream);
+  });
+}
+
 const port = readPositiveInteger("PORT", DEFAULT_PORT);
 const maxRequestBytes = readPositiveInteger(
   "PLANNER_MAX_REQUEST_BYTES",
@@ -127,6 +222,14 @@ const apiKey = readSecretFile("OPENAI_API_KEY_FILE");
 const judgeAccessToken = readSecretFile("JUDGE_ACCESS_TOKEN_FILE");
 const openAiModel = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
 const officeEngineEnabled = readBoolean("OFFICE_ENGINE_ENABLED", false);
+const officeEngineUrl = new URL(process.env.OFFICE_ENGINE_URL?.trim() || DEFAULT_OFFICE_ENGINE_URL);
+if (officeEngineUrl.protocol !== "http:") {
+  throw new Error("OFFICE_ENGINE_URL must use http inside the private Docker network");
+}
+const officeProxyTimeoutMs = readPositiveInteger(
+  "OFFICE_PROXY_TIMEOUT_MS",
+  DEFAULT_OFFICE_PROXY_TIMEOUT_MS,
+);
 const consumeRateLimit = createFixedWindowRateLimiter(
   rateLimitRequests,
   rateLimitWindowSeconds * 1000,
@@ -157,6 +260,57 @@ const server = createServer(async (request, response) => {
         model: openAiModel,
         officeEngineEnabled,
       });
+      return;
+    }
+
+    const officeRequest = classifyOfficeProxyRequest(url.pathname, request.method);
+    if (officeRequest) {
+      route = officeRequest.route;
+      if (!hasJudgeAuthorization(request, judgeAccessToken)) {
+        request.resume();
+        statusCode = 401;
+        writeJson(response, statusCode, { error: "unauthorized" });
+        return;
+      }
+      if (!officeEngineEnabled) {
+        request.resume();
+        statusCode = 503;
+        writeJson(response, statusCode, { error: "office_engine_unavailable" });
+        return;
+      }
+      if (!("upstreamPath" in officeRequest)) {
+        request.resume();
+        statusCode = 405;
+        response.setHeader("allow", officeRequest.allowed);
+        writeJson(response, statusCode, { error: "method_not_allowed" });
+        return;
+      }
+      if (
+        officeRequest.route === "office_compress" &&
+        request.headers["content-type"]?.split(";", 1)[0].trim().toLowerCase() !== "application/pdf"
+      ) {
+        request.resume();
+        statusCode = 415;
+        writeJson(response, statusCode, { error: "unsupported_media_type" });
+        return;
+      }
+      try {
+        statusCode = await proxyOfficeRequest(
+          request,
+          response,
+          officeEngineUrl,
+          officeRequest.upstreamPath,
+          officeProxyTimeoutMs,
+          requestId,
+        );
+      } catch {
+        statusCode = 502;
+        if (!response.headersSent) {
+          writeJson(response, statusCode, { error: "office_engine_unavailable" });
+        } else {
+          response.destroy();
+        }
+      }
       return;
     }
 
@@ -208,8 +362,7 @@ const server = createServer(async (request, response) => {
       authorize: (candidate) => {
         const authorization = candidate.headers.get("authorization") ?? "";
         const prefix = "Bearer ";
-        return authorization.startsWith(prefix) &&
-          secureEqual(authorization.slice(prefix.length), judgeAccessToken);
+        return authorization.startsWith(prefix) && secureEqual(authorization.slice(prefix.length), judgeAccessToken);
       },
       consumeRateLimit,
     });

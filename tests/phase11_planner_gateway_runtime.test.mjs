@@ -4,6 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import test from "node:test";
 
 import { build } from "../gateway/node_modules/esbuild/lib/main.js";
@@ -32,6 +33,7 @@ async function startGateway() {
       JUDGE_ACCESS_TOKEN_FILE: judgeSecret,
       OPENAI_MODEL: "gpt-5-mini",
       OFFICE_ENGINE_ENABLED: "true",
+      OFFICE_ENGINE_URL: "http://127.0.0.1:18787",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -61,7 +63,63 @@ async function startGateway() {
   };
 }
 
+async function startFakeOfficeEngine() {
+  const requests = [];
+  const jobId = "123e4567-e89b-42d3-a456-426614174000";
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    requests.push({
+      method: request.method,
+      url: request.url,
+      authorization: request.headers.authorization,
+      body: Buffer.concat(chunks),
+    });
+    if (request.url === "/api/v1/health") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ status: "healthy", readiness: "ready" }));
+      return;
+    }
+    if (request.url === "/api/v1/compress") {
+      response.writeHead(202, { "content-type": "application/json" });
+      response.end(JSON.stringify({ jobId, status: "queued", progress: 0 }));
+      return;
+    }
+    if (request.url === `/api/v1/jobs/${jobId}`) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ jobId, status: "completed", progress: 100 }));
+      return;
+    }
+    if (request.url === `/api/v1/jobs/${jobId}/result`) {
+      const pdf = Buffer.from("%PDF-test-result");
+      response.writeHead(200, {
+        "content-type": "application/pdf",
+        "content-length": String(pdf.byteLength),
+        "x-result-kind": "compressed",
+      });
+      response.end(pdf);
+      return;
+    }
+    if (request.url === `/api/v1/jobs/${jobId}/cancel`) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ jobId, status: "cancelled", progress: 0 }));
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  server.listen(18787, "127.0.0.1");
+  await once(server, "listening");
+  return {
+    requests,
+    stop: async () => {
+      server.close();
+      await once(server, "close");
+    },
+  };
+}
+
 test("bundled Planner Gateway starts, protects plans, and logs no secrets", async () => {
+  const office = await startFakeOfficeEngine();
   const gateway = await startGateway();
   try {
     const health = await fetch("http://127.0.0.1:18790/api/v1/health");
@@ -96,10 +154,53 @@ test("bundled Planner Gateway starts, protects plans, and logs no secrets", asyn
       reason: "invalid_request",
     });
 
+    const unauthorizedOffice = await fetch("http://127.0.0.1:18790/api/v1/office/health");
+    assert.equal(unauthorizedOffice.status, 401);
+
+    const authorization = { authorization: "Bearer test-judge-token-1234567890" };
+    const officeHealth = await fetch("http://127.0.0.1:18790/api/v1/office/health", {
+      headers: authorization,
+    });
+    assert.equal(officeHealth.status, 200);
+    assert.deepEqual(await officeHealth.json(), { status: "healthy", readiness: "ready" });
+
+    const input = Buffer.from("%PDF-test-input");
+    const createJob = await fetch("http://127.0.0.1:18790/api/v1/office/compress", {
+      method: "POST",
+      headers: { ...authorization, "content-type": "application/pdf" },
+      body: input,
+    });
+    assert.equal(createJob.status, 202);
+    const { jobId } = await createJob.json();
+
+    const status = await fetch(`http://127.0.0.1:18790/api/v1/office/jobs/${jobId}`, {
+      headers: authorization,
+    });
+    assert.equal(status.status, 200);
+    assert.equal((await status.json()).status, "completed");
+
+    const result = await fetch(`http://127.0.0.1:18790/api/v1/office/jobs/${jobId}/result`, {
+      headers: authorization,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.headers.get("x-result-kind"), "compressed");
+    assert.equal(Buffer.from(await result.arrayBuffer()).toString(), "%PDF-test-result");
+
+    const cancel = await fetch(`http://127.0.0.1:18790/api/v1/office/jobs/${jobId}/cancel`, {
+      method: "POST",
+      headers: authorization,
+    });
+    assert.equal(cancel.status, 200);
+    assert.equal((await cancel.json()).status, "cancelled");
+
+    assert.equal(office.requests.some((entry) => entry.authorization !== undefined), false);
+    assert.equal(office.requests.find((entry) => entry.url === "/api/v1/compress").body.equals(input), true);
+
     const logs = gateway.output();
     assert.equal(logs.includes("test-openai-key-not-real"), false);
     assert.equal(logs.includes("test-judge-token-1234567890"), false);
   } finally {
     await gateway.stop();
+    await office.stop();
   }
 });

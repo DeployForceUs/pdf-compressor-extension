@@ -6,15 +6,18 @@ It does not bind container ports 80/443 and does not start Caddy.
 Current safety state:
 
 - Engine binds only to `127.0.0.1:8787` by default;
-- only `/api/v1/health` is exposed by the Nginx template;
-- every unfinished route returns `503`;
+- `/api/v1/health` remains the public Engine readiness check;
+- `/api/v1/plans` and `/api/v1/office/*` are routed through the authenticated Gateway;
+- every other unfinished route returns `503`;
 - proxy access logging is disabled;
-- the current upload limit is 1 MB because upload processing is not enabled;
+- Office uploads are streamed without Nginx request buffering and bounded to 1024 MB;
 - no OpenAI key or judge-access token is stored in Git.
 - the optional Planner Gateway binds only to `127.0.0.1:8790`, reads secrets
   from uid-1000, mode-0400 Docker secret mounts (not container environment variables), and
   applies a 32 KB body limit, 30-second upstream timeout, and global
   10-request/minute contest limit.
+- the Gateway removes the browser Authorization header before proxying to the
+  private Engine and streams results back without buffering the PDF in Node.
 
 ## Prepare
 

@@ -421,6 +421,7 @@ button {
 
 .input-card,
 .metadata-card,
+.office-card,
 .split-card,
 .compression-card,
 .diagnostics {
@@ -439,6 +440,7 @@ button {
 
 .input-card__header,
 .metadata-card__header,
+.office-card__header,
 .split-card__header,
 .compression-card__header {
   display: flex;
@@ -460,6 +462,113 @@ button {
   font-weight: 700;
   letter-spacing: 0.01em;
   color: #f3f7ff;
+}
+
+.office-card {
+  gap: 9px;
+}
+
+.office-card--ready {
+  border-color: rgba(83, 232, 177, 0.32);
+  background: linear-gradient(145deg, rgba(25, 119, 100, 0.18), rgba(75, 68, 171, 0.14));
+}
+
+.office-card__header {
+  align-items: flex-start;
+}
+
+.office-card__header h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+}
+
+.office-card__disclosure,
+.office-card__error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.office-card__disclosure {
+  color: rgba(225, 234, 255, 0.76);
+}
+
+.office-card__error {
+  color: #ffc0ca;
+}
+
+.office-card__field {
+  display: grid;
+  gap: 5px;
+  color: rgba(160, 177, 255, 0.88);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.office-card__field input {
+  width: 100%;
+  border: 1px solid rgba(185, 198, 255, 0.14);
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #f1f5ff;
+  background: rgba(8, 13, 28, 0.62);
+}
+
+.office-card__summary {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  color: rgba(225, 255, 242, 0.82);
+  background: rgba(35, 137, 108, 0.18);
+  font-size: 10px;
+}
+
+.office-card__summary strong {
+  color: #bfffe6;
+  font-size: 11px;
+}
+
+.office-card__actions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.office-card__confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: rgba(236, 241, 255, 0.88);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.office-card__confirmation input {
+  margin-top: 2px;
+}
+
+.office-card__progress {
+  display: grid;
+  gap: 5px;
+  color: rgba(225, 234, 255, 0.74);
+  font-size: 10px;
+}
+
+.office-card__progress-track {
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(185, 198, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.office-card__progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #3cb2ff 0%, #7c5dff 55%, #30d58d 100%);
 }
 
 .dropzone {

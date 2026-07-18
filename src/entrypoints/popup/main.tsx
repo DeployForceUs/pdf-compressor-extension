@@ -48,6 +48,11 @@ import type {
   LicenseStateResponse,
   BackgroundErrorResponse,
   MonetizationStateResponse,
+  OfficeProcessingCancelResponse,
+  OfficeProcessingErrorEvent,
+  OfficeProcessingProgressEvent,
+  OfficeProcessingResultEvent,
+  OfficeProcessingStartResponse,
 } from "../../lib/messaging";
 import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
@@ -73,9 +78,15 @@ import {
   type SplitFormState,
 } from "./split-ui";
 import { SELECTED_PDF_RECORD_ID, normalizeSplitSnapshot, usePopupStore, type SplitSnapshot } from "./store";
+import { createOfficeEngineClient, type OfficeEngineHealth } from "../../lib/office/office-engine-client";
+import {
+  createOfficeEngineSettingsStorage,
+  DEFAULT_OFFICE_ENGINE_URL,
+} from "../../lib/office/office-engine-settings";
 import "../../styles/popup.css";
 
 const compressionQualityStorage = createCompressionQualityStorage(browser.storage.local);
+const officeEngineSettingsStorage = createOfficeEngineSettingsStorage(browser.storage.local);
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
   if (left.byteLength !== right.byteLength) {
@@ -340,6 +351,18 @@ function Popup() {
   const [monetizationCheckedAt, setMonetizationCheckedAt] = useState(0);
   const [cooldownNow, setCooldownNow] = useState(() => Date.now());
   const [compressionQuality, setCompressionQuality] = useState(DEFAULT_COMPRESSION_QUALITY);
+  const [officeUrl, setOfficeUrl] = useState(DEFAULT_OFFICE_ENGINE_URL);
+  const [officeToken, setOfficeToken] = useState("");
+  const [officeHealth, setOfficeHealth] = useState<OfficeEngineHealth | null>(null);
+  const [officeBusy, setOfficeBusy] = useState(false);
+  const [officeError, setOfficeError] = useState("");
+  const [officeConfirmed, setOfficeConfirmed] = useState(false);
+  const [officeProcessing, setOfficeProcessing] = useState({
+    status: "idle" as "idle" | "running" | "cancelling" | "complete" | "error" | "cancelled",
+    progress: 0,
+    message: "",
+    resultKind: null as "compressed" | "original" | null,
+  });
 
   const locale = normalizeLocale(i18n?.resolvedLanguage ?? i18n?.language);
   const pdf = usePopupStore((state) => state.pdf);
@@ -372,6 +395,11 @@ function Popup() {
     void checkLicense();
     void refreshMonetization();
     void compressionQualityStorage.read().then(setCompressionQuality).catch(() => undefined);
+    void officeEngineSettingsStorage.read().then((settings) => {
+      if (!settings) return;
+      setOfficeUrl(settings.baseUrl);
+      setOfficeToken(settings.accessToken);
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -464,6 +492,40 @@ function Popup() {
         return;
       }
 
+      if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:progress") {
+        const event = message as OfficeProcessingProgressEvent;
+        setOfficeProcessing((current) => ({
+          ...current,
+          status: "running",
+          progress: event.progress,
+          message: event.message,
+        }));
+        return;
+      }
+
+      if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:result") {
+        const event = message as OfficeProcessingResultEvent;
+        applyCompressionResult(event.result);
+        setOfficeProcessing({
+          status: "complete",
+          progress: 100,
+          message: t("office.processingComplete"),
+          resultKind: event.resultKind,
+        });
+        return;
+      }
+
+      if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:error") {
+        const event = message as OfficeProcessingErrorEvent;
+        setOfficeProcessing({
+          status: event.code === "CANCELLED" ? "cancelled" : "error",
+          progress: 0,
+          message: event.message,
+          resultKind: null,
+        });
+        return;
+      }
+
       if (isCompressionResultEvent(message)) {
         applyCompressionResult(message.result);
         return;
@@ -538,6 +600,79 @@ function Popup() {
       // The current popup state is a safe fallback; operation authorization remains authoritative.
     }
     return getMaxPdfBytes(tier, getDeviceMemoryGb());
+  }
+
+  async function connectOfficeEngine() {
+    const baseUrl = officeUrl.trim();
+    const accessToken = officeToken.trim();
+    if (!baseUrl || !accessToken) {
+      setOfficeError(t("office.connectionRequired"));
+      return;
+    }
+
+    setOfficeBusy(true);
+    setOfficeError("");
+    try {
+      const originPattern = `${new URL(baseUrl).origin}/*`;
+      const permissions = browser.permissions as typeof browser.permissions | undefined;
+      if (permissions?.request) {
+        const granted = await permissions.request({ origins: [originPattern] });
+        if (!granted) throw new Error(t("office.permissionDenied"));
+      }
+      const client = createOfficeEngineClient({ baseUrl, accessToken });
+      const health = await client.health();
+      if (health.readiness !== "ready" || !health.capabilities.jobCreation) {
+        throw new Error(t("office.notReady"));
+      }
+      await officeEngineSettingsStorage.write({ baseUrl, accessToken });
+      setOfficeHealth(health);
+    } catch (error) {
+      setOfficeHealth(null);
+      setOfficeError(errorMessage(error, t("office.connectionFailed")));
+    } finally {
+      setOfficeBusy(false);
+    }
+  }
+
+  async function disconnectOfficeEngine() {
+    await officeEngineSettingsStorage.clear().catch(() => undefined);
+    setOfficeHealth(null);
+    setOfficeToken("");
+    setOfficeError("");
+    setOfficeConfirmed(false);
+  }
+
+  async function startOfficeProcessing() {
+    if (!pdf.selected || !officeHealth || !officeConfirmed) return;
+    setOfficeProcessing({ status: "running", progress: 0, message: t("office.starting"), resultKind: null });
+    setOfficeError("");
+    try {
+      const response = await sendMessage<OfficeProcessingStartResponse | BackgroundErrorResponse>({
+        type: "background:office-processing-start",
+      });
+      if (!response.ok) throw new Error(monetizationErrorMessage(t, response));
+      applyCompressionResult(response.result);
+      setOfficeProcessing({
+        status: "complete",
+        progress: 100,
+        message: t("office.processingComplete"),
+        resultKind: response.resultKind,
+      });
+    } catch (error) {
+      setOfficeProcessing({
+        status: "error",
+        progress: 0,
+        message: errorMessage(error, t("office.processingFailed")),
+        resultKind: null,
+      });
+    } finally {
+      await refreshMonetization();
+    }
+  }
+
+  async function cancelOfficeProcessing() {
+    setOfficeProcessing((current) => ({ ...current, status: "cancelling", message: t("office.cancelling") }));
+    await sendMessage<OfficeProcessingCancelResponse>({ type: "background:office-processing-cancel" }).catch(() => undefined);
   }
 
   async function activateLicense() {
@@ -1448,7 +1583,8 @@ function Popup() {
   const compressionBusy = compression.status === "loading-engine" || compression.status === "compressing" || compression.status === "cancelling";
   const compressionHasResult = compression.status === "complete" && compression.resultAvailable;
   const splitBusy = split.status === "loading" || split.status === "running" || split.status === "cancelling";
-  const sharedBusy = compressionBusy || splitBusy;
+  const officeProcessingBusy = officeProcessing.status === "running" || officeProcessing.status === "cancelling";
+  const sharedBusy = compressionBusy || splitBusy || officeProcessingBusy;
   const compressionCanStart = pdf.selected && pdf.status === "ready" && !sharedBusy && compression.engineStatus === "ready";
   const compressionDownloadName = compression.fileName
     ? compression.fileName.replace(/\.pdf$/i, "-compressed.pdf")
@@ -1709,6 +1845,111 @@ function Popup() {
                 </div>
               ) : null}
             </div>
+
+            <article className={officeHealth ? "office-card office-card--ready" : "office-card"}>
+              <div className="office-card__header">
+                <div>
+                  <p className="eyebrow">{t("office.eyebrow")}</p>
+                  <h2>{t("office.title")}</h2>
+                </div>
+                <span className="status-badge">
+                  {officeBusy ? t("office.connecting") : officeHealth ? t("office.connected") : t("office.disconnected")}
+                </span>
+              </div>
+              <p className="office-card__disclosure">{t("office.disclosure")}</p>
+              <label className="office-card__field">
+                <span>{t("office.serverUrl")}</span>
+                <input
+                  type="url"
+                  value={officeUrl}
+                  onChange={(event) => {
+                    setOfficeUrl(event.currentTarget.value);
+                    setOfficeHealth(null);
+                    setOfficeError("");
+                  }}
+                  disabled={officeBusy}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label className="office-card__field">
+                <span>{t("office.accessToken")}</span>
+                <input
+                  type="password"
+                  value={officeToken}
+                  placeholder={t("office.accessTokenPlaceholder")}
+                  onChange={(event) => {
+                    setOfficeToken(event.currentTarget.value);
+                    setOfficeHealth(null);
+                    setOfficeError("");
+                  }}
+                  disabled={officeBusy}
+                  autoComplete="off"
+                />
+              </label>
+              {officeHealth ? (
+                <div className="office-card__summary" role="status" aria-live="polite">
+                  <strong>{t("office.ready")}</strong>
+                  <span>{t("office.processor", { version: officeHealth.engine.processorVersion ?? "—" })}</span>
+                  <span>{t("office.limit", { size: officeHealth.limits.maxFileSizeMb })}</span>
+                </div>
+              ) : null}
+              {officeHealth && pdf.selected ? (
+                <>
+                  <label className="office-card__confirmation">
+                    <input
+                      type="checkbox"
+                      checked={officeConfirmed}
+                      onChange={(event) => setOfficeConfirmed(event.currentTarget.checked)}
+                      disabled={sharedBusy}
+                    />
+                    <span>{t("office.confirmUpload")}</span>
+                  </label>
+                  <div className="office-card__progress" role="progressbar" aria-valuenow={officeProcessing.progress} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="office-card__progress-track">
+                      <div className="office-card__progress-fill" style={{ width: `${officeProcessing.progress}%` }} />
+                    </div>
+                    <span role="status" aria-live="polite">{officeProcessing.message || t("office.readyToProcess")}</span>
+                  </div>
+                  <div className="office-card__actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void startOfficeProcessing()}
+                      disabled={!officeConfirmed || sharedBusy}
+                    >
+                      {t("office.process")}
+                    </button>
+                    {officeProcessingBusy ? (
+                      <button type="button" className="secondary" onClick={() => void cancelOfficeProcessing()}>
+                        {t("office.cancel")}
+                      </button>
+                    ) : officeProcessing.status === "complete" ? (
+                      <button type="button" className="secondary" onClick={() => void downloadCompressedPdf()}>
+                        {t("office.download")}
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+              <div className="office-card__actions">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void connectOfficeEngine()}
+                  disabled={officeBusy || !officeUrl.trim() || !officeToken.trim()}
+                >
+                  {officeHealth ? t("office.recheck") : t("office.connect")}
+                </button>
+                {officeHealth ? (
+                  <button type="button" className="secondary" onClick={() => void disconnectOfficeEngine()} disabled={officeBusy}>
+                    {t("office.disconnect")}
+                  </button>
+                ) : null}
+              </div>
+              {officeError ? <p className="office-card__error" role="alert">{officeError}</p> : null}
+            </article>
 
             <article className="split-card">
               <div className="split-card__header">

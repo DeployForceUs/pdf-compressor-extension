@@ -2,7 +2,7 @@
   "app": {
     "eyebrow": "Fundamento de la fase 1",
     "title": "Compresor de PDF",
-    "subtitle": "Procesamiento local • Privado • Sin conexión",
+    "subtitle": "Local por defecto • Office cuando tú elijas",
     "documentTitle": "Compresor de PDF"
   },
   "license": {
@@ -118,6 +118,36 @@
     "pages": "páginas",
     "invalidPdf": "PDF inválido",
     "unsupportedFile": "Archivo no compatible"
+  },
+  "office": {
+    "eyebrow": "Build Week · Servidor controlado",
+    "title": "Office Engine",
+    "disclosure": "Conecta tu servidor de procesamiento controlado. El PDF se envía solo a ese servidor después de confirmar; nunca se envía a OpenAI.",
+    "serverUrl": "URL del servidor",
+    "accessToken": "Token de acceso",
+    "accessTokenPlaceholder": "Pega el token de acceso del servidor",
+    "connect": "Conectar Office Engine",
+    "recheck": "Volver a comprobar",
+    "disconnect": "Desconectar",
+    "connecting": "Conectando…",
+    "connected": "Conectado",
+    "disconnected": "Sin conexión",
+    "ready": "Office Engine está listo",
+    "processor": "Ghostscript {{version}}",
+    "limit": "Tamaño máximo: {{size}} MB",
+    "connectionRequired": "Introduce la URL del servidor y el token de acceso.",
+    "permissionDenied": "No se concedió permiso del navegador para este servidor.",
+    "notReady": "Office Engine está conectado, pero no está listo para procesar archivos.",
+    "connectionFailed": "No se pudo conectar a Office Engine."
+    ,"confirmUpload": "Confirmo que este PDF puede enviarse a mi Office Engine conectado para su procesamiento determinista.",
+    "readyToProcess": "Listo para tu confirmación",
+    "process": "Procesar con Office Engine",
+    "cancel": "Cancelar",
+    "download": "Descargar resultado",
+    "starting": "Iniciando el procesamiento de Office Engine…",
+    "cancelling": "Cancelando el procesamiento de Office Engine…",
+    "processingComplete": "Procesamiento de Office Engine completado",
+    "processingFailed": "Falló el procesamiento de Office Engine"
   },
   "split": {
     "title": "Dividir PDF",
@@ -235,6 +265,6 @@
     "storage": "Error desconocido de almacenamiento"
   },
   "footnote": {
-    "localOnly": "100% local. Tus archivos nunca salen de tu dispositivo."
+    "localOnly": "El modo local permanece en este dispositivo. Office solo envía el PDF tras tu confirmación. Smart Plan nunca envía el PDF a OpenAI."
   }
 }

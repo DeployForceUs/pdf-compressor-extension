@@ -18,6 +18,7 @@ export default defineConfig({
     default_locale: "en",
     version: "0.1.0",
     permissions: ["storage", "offscreen", "alarms"],
+    optional_host_permissions: ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
     action: {
       default_popup: "popup.html",
     },
