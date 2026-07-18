@@ -1,6 +1,6 @@
 # Stage 11 Balanced Benchmark Calibration
 
-Status: **calibration complete; production policy not approved**
+Status: **calibration complete; single-tuple policy approved 2026-07-18**
 
 ## Reproducible harness
 
@@ -121,6 +121,6 @@ Balanced execution tuple: `quality=65`, `dpi=144`, with the existing
 require a valid, page-count-preserving, strictly smaller result; otherwise the
 original remains authoritative.
 
-This tuple remains a recommendation until explicitly approved by the product
-owner. Higher candidates remain preview-only because they consistently save
-less space and can enlarge already-optimized documents.
+The product owner explicitly approved this tuple on 2026-07-18. Higher
+candidates remain disallowed because they consistently save less space and can
+enlarge already-optimized documents.

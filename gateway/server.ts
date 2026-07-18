@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { performance } from "node:perf_hooks";
 
 import { handleSmartPlannerGatewayRequest } from "../src/lib/ai/smart-planner-gateway";
+import { APPROVED_BALANCED_NUMERIC_POLICY } from "../src/lib/ai/smart-planner-contract";
 
 const DEFAULT_PORT = 8790;
 const DEFAULT_MAX_REQUEST_BYTES = 32_768;
@@ -190,6 +191,7 @@ const server = createServer(async (request, response) => {
         officeAvailable: false,
         splitAllowed: true,
         officeEntitled: false,
+        numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
       },
       maxRequestBytes,
       timeoutMs,

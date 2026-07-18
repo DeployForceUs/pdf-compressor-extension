@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  APPROVED_BALANCED_NUMERIC_POLICY,
   createProcessingPlanSchema,
   createSmartPlannerRequestSchema,
   validateProcessingPlan,
@@ -116,8 +117,8 @@ assert.deepEqual(
   ["local", "office"],
 );
 const planProperties = planSchema.properties as Record<string, Record<string, unknown>>;
-assert.deepEqual(planProperties.quality.enum, [65, 72, 78, 85]);
-assert.deepEqual(planProperties.dpi.enum, [144, 180, 220]);
+assert.deepEqual(planProperties.quality.enum, [65]);
+assert.deepEqual(planProperties.dpi.enum, [144]);
 assert.deepEqual(
   ((planProperties.split.properties as Record<string, Record<string, unknown>>)
     .targetPartSizeMb).enum,
@@ -149,6 +150,36 @@ const acceptedPlan = validateProcessingPlan(plan, {
 });
 assert.equal(acceptedPlan.ok, true);
 assert.equal(acceptedPlan.executionAllowed, true);
+
+const approvedTuple = validateProcessingPlan(
+  {
+    ...plan,
+    quality: 65,
+    dpi: 144,
+    split: { ...plan.split, targetPartSizeMb: 20 },
+  },
+  {
+    allowedPresets: ["balanced"],
+    localAvailable: true,
+    officeAvailable: true,
+    splitAllowed: true,
+    officeEntitled: true,
+    numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
+  },
+);
+assert.equal(approvedTuple.ok, true);
+assert.equal(approvedTuple.executionAllowed, true);
+
+const unapprovedTuple = validateProcessingPlan(plan, {
+  allowedPresets: ["balanced"],
+  localAvailable: true,
+  officeAvailable: true,
+  splitAllowed: true,
+  officeEntitled: true,
+  numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
+});
+assert.equal(unapprovedTuple.ok, false);
+assert.equal(unapprovedTuple.executionAllowed, false);
 
 const forbiddenOfficePlan = validateProcessingPlan(plan, {
   allowedPresets: ["balanced"],

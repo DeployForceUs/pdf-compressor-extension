@@ -14,7 +14,7 @@ Implemented:
 - free-text instruction disabled by default and bounded to 200 printable characters when explicitly enabled;
 - safe projection of validated requests into a new exact DTO before serialization;
 - dynamic strict `ProcessingPlan` JSON Schema using only active allowlisted presets;
-- provisional numeric candidate enums derived from the recorded calibration matrix, preventing the model from inventing processing values without treating those candidates as approved execution policy;
+- strict numeric enums limited to the product-owner-approved Balanced tuple (`quality=65`, `dpi=144`, `targetPartSizeMb=20`);
 - canonical existing Split strategy `by-max-size` rather than the incompatible draft value `max-size`;
 - structural plan validation plus local capability, entitlement, Split, retry, and numeric policy validation;
 - mandatory execution block while the approved numeric policy is absent;
@@ -157,7 +157,7 @@ post-model policy enforcement without claiming that processing is approved.
 - Smart Planner request privacy boundary: **Extends specification** under the approved Build Week addendum.
 - Strict `ProcessingPlan` and Responses API client: **Extends specification** under the approved Build Week addendum.
 - Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
-- AI-generated numeric execution: **Requires future specification update** after exact benchmarked ranges are approved; execution is currently blocked.
+- AI-generated numeric planning: **Extends specification** under the approved addendum; only the exact approved Balanced tuple can pass the deterministic policy.
 - Office Engine health/capabilities: **Partially matches Stage 11**; the service shell is implemented while processing is explicitly blocked.
 - Office Engine execution: **Requires future specification update** and remains unimplemented. The repository-level AGPL path is owner-approved; numeric policy and artifact-specific compliance remain release gates.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.

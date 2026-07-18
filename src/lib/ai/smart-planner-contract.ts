@@ -98,12 +98,17 @@ export type ProcessingPlanValidationResult = ContractValidationResult<Processing
   executionAllowed: boolean;
 };
 
-// These values are calibrated candidates, not an approved execution policy.
-// Keeping model output on this finite set prevents invented processing numbers
-// while the benchmark matrix and visual review are still incomplete.
-export const PROVISIONAL_PLANNER_NUMERIC_CANDIDATES = {
-  quality: [65, 72, 78, 85],
-  dpi: [144, 180, 220],
+// Product-owner approved after the recorded fixture matrix and visual review.
+// A single tuple is intentional: the evidence does not support a numeric range.
+export const APPROVED_BALANCED_NUMERIC_POLICY = {
+  quality: { min: 65, max: 65 },
+  dpi: { min: 144, max: 144 },
+  targetPartSizeMb: { min: 20, max: 20 },
+} as const satisfies ApprovedNumericPolicy;
+
+export const APPROVED_BALANCED_NUMERIC_CANDIDATES = {
+  quality: [65],
+  dpi: [144],
   targetPartSizeMb: [20],
 } as const;
 
@@ -398,14 +403,14 @@ export function createProcessingPlanSchema(allowedPresets: readonly string[]): J
     schemaVersion: { type: "integer", const: SMART_PLANNER_SCHEMA_VERSION },
     engine: { type: "string", enum: ["local", "office"] },
     preset: { type: "string", enum: [...allowedPresets] },
-    quality: { type: "integer", enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.quality] },
-    dpi: { type: "integer", enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.dpi] },
+    quality: { type: "integer", enum: [...APPROVED_BALANCED_NUMERIC_CANDIDATES.quality] },
+    dpi: { type: "integer", enum: [...APPROVED_BALANCED_NUMERIC_CANDIDATES.dpi] },
     split: objectSchema({
       enabled: { type: "boolean" },
       strategy: { type: "string", enum: ["by-max-size"] },
       targetPartSizeMb: {
         type: "integer",
-        enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.targetPartSizeMb],
+        enum: [...APPROVED_BALANCED_NUMERIC_CANDIDATES.targetPartSizeMb],
       },
     }),
     retryPolicy: objectSchema({
