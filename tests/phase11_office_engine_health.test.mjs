@@ -4,9 +4,13 @@ import test from "node:test";
 
 import { createOfficeEngineServer } from "../engine/server.mjs";
 
-async function withServer(run) {
+async function withServer(run, options = {}) {
   const logs = [];
-  const server = createOfficeEngineServer({ logger: (record) => logs.push(record) });
+  const server = createOfficeEngineServer({
+    logger: (record) => logs.push(record),
+    processorVersion: "10.0-test",
+    ...options,
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
 
@@ -20,7 +24,7 @@ async function withServer(run) {
   }
 }
 
-test("health exposes explicit blocked capabilities without secret state", async () => {
+test("health exposes ready bounded capabilities without secret state", async () => {
   await withServer(async (baseUrl, logs) => {
     const response = await fetch(`${baseUrl}/api/v1/health`);
     assert.equal(response.status, 200);
@@ -29,27 +33,27 @@ test("health exposes explicit blocked capabilities without secret state", async 
 
     assert.deepEqual(await response.json(), {
       status: "healthy",
-      readiness: "blocked",
+      readiness: "ready",
       apiVersion: "1.0",
-      serviceVersion: "0.1.0",
+      serviceVersion: "0.2.0",
       engine: {
         kind: "office",
-        processor: null,
-        processorVersion: null,
-        processingAvailable: false,
-        disabledReason: "numeric_policy_unapproved",
+        processor: "ghostscript",
+        processorVersion: "10.0-test",
+        processingAvailable: true,
       },
       capabilities: {
-        allowedPresets: [],
-        jobCreation: false,
-        jobStatus: false,
-        resultDownload: false,
-        cancellation: false,
+        allowedPresets: ["balanced"],
+        jobCreation: true,
+        jobStatus: true,
+        resultDownload: true,
+        cancellation: true,
       },
       limits: {
-        maxFileSizeMb: null,
-        processingTimeoutSeconds: null,
-        retentionMinutes: null,
+        maxFileSizeMb: 1024,
+        processingTimeoutSeconds: 300,
+        retentionMinutes: 15,
+        maxConcurrentJobs: 1,
       },
     });
 
@@ -60,7 +64,13 @@ test("health exposes explicit blocked capabilities without secret state", async 
   });
 });
 
-test("compression remains closed until numeric policy is approved", async () => {
+test("compression creates an asynchronous bounded job", async () => {
+  const manager = {
+    async createJob(_stream, options) {
+      assert.equal(options.contentType, "application/pdf");
+      return { jobId: "00000000-0000-4000-8000-000000000001", status: "queued" };
+    },
+  };
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/v1/compress`, {
       method: "POST",
@@ -68,12 +78,12 @@ test("compression remains closed until numeric policy is approved", async () => 
       body: "%PDF-1.7 synthetic fixture",
     });
 
-    assert.equal(response.status, 503);
+    assert.equal(response.status, 202);
     assert.deepEqual(await response.json(), {
-      error: "processing_unavailable",
-      reason: "numeric_policy_unapproved",
+      jobId: "00000000-0000-4000-8000-000000000001",
+      status: "queued",
     });
-  });
+  }, { manager });
 });
 
 test("logs classify unknown routes without recording URL content", async () => {

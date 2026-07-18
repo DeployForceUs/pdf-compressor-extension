@@ -40,23 +40,28 @@ Implemented:
 
 The approved addendum defines the allowed aggregate metrics but does not define the deterministic MuPDF rules that classify a page as `scanned`, `vector`, or `text`, estimate per-page byte size, or estimate DPI without rendering or extracting content. Those rules were not guessed. The new builder accepts only already classified structural observations; the MuPDF observation adapter remains a separate pending slice that requires the classification rules to be recorded first.
 
-## Completed slice: Docker Office Engine health and capabilities
+## Completed slice: bounded Balanced Office Engine runtime
 
 Implemented:
 
 - dependency-free Node HTTP service and Docker/Compose packaging;
-- `GET /api/v1/health` with explicit API/service versions, readiness, capabilities, and unresolved limits;
-- healthy service status separated from blocked processing readiness;
-- no advertised preset, processor, upload limit, timeout, or retention value while their release policies remain unapproved;
-- closed `POST /api/v1/compress` gate returning `503 processing_unavailable` until the numeric policy is approved;
+- `GET /api/v1/health` with explicit versions, limits, readiness, and capabilities;
+- the complete create/status/result/cancel one-file API lifecycle;
+- the owner-approved 1 GiB input, five-minute timeout, 15-minute retention, and one-concurrent-job limits;
+- Ghostscript Balanced processing plus Poppler page-count/open validation;
+- upload-time and processing-output size enforcement;
+- startup, cancellation, shutdown, and retention cleanup;
+- strict acceptance only for valid, page-preserving, smaller output;
+- original-PDF fallback after processing failure, timeout, invalid output, page-count mismatch, or size regression;
 - loopback-only default Compose binding for placement behind the future authenticated TLS proxy;
-- non-root, read-only container, dropped Linux capabilities, `no-new-privileges`, bounded `/tmp`, and container health check;
+- non-root, read-only container, dropped Linux capabilities, `no-new-privileges`, bounded resources, and container health check;
 - structured request logs that classify routes without recording raw URLs, query strings, filenames, request bodies, or secret state;
-- contract tests for health, closed processing, and content-blind logging.
+- contract tests for health, content-blind logging, limits, compression acceptance, fallback, timeout, and cancellation.
 
-Ghostscript is intentionally absent from this slice. Its exact version, source,
-notice, reproducible build, Balanced command, and numeric policy remain release
-gates for the processing slice.
+The service remains loopback-only until the authenticated judge proxy is
+enabled and a real server fixture roundtrip passes. The target Docker build must
+also record its exact Debian Ghostscript/Poppler package versions before the
+contest artifact is tagged.
 
 ## Completed slice: Balanced calibration harness
 
@@ -142,9 +147,9 @@ required numeric policy. This validates billing, secret loading, authorization,
 the Responses API boundary, Structured Output parsing, and deterministic
 post-model policy enforcement without claiming that processing is approved.
 
-1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
-2. Implement and benchmark the bounded Balanced processing slice, then complete its AGPL artifact package. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
-3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
+1. Build the Engine container on the target server, record exact Debian package versions, and run a real fixture through the complete API lifecycle.
+2. Add the authenticated TLS judge proxy without exposing the loopback Engine port directly.
+3. Connect the Extension consent/disclosure UI and Office Engine client to the verified hosted contract.
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store according to `OPENAI_API_KEY_HANDLING.md`; never in Extension code, GitHub source, logs, or request payloads.
 5. Obtain contest-project access to `gpt-5.6`, then repeat the same content-free fixture as a final compatibility check. Development smoke tests use the deployment-selected lower-cost model.
 6. Connect the Extension consent/disclosure UI now that the server boundary, real roundtrip, and fallback tests pass.
@@ -158,6 +163,6 @@ post-model policy enforcement without claiming that processing is approved.
 - Strict `ProcessingPlan` and Responses API client: **Extends specification** under the approved Build Week addendum.
 - Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
 - AI-generated numeric planning: **Extends specification** under the approved addendum; only the exact approved Balanced tuple can pass the deterministic policy.
-- Office Engine health/capabilities: **Partially matches Stage 11**; the service shell is implemented while processing is explicitly blocked.
-- Office Engine execution: **Requires future specification update** and remains unimplemented. The repository-level AGPL path is owner-approved; numeric policy and artifact-specific compliance remain release gates.
+- Office Engine health/capabilities: **Fully matches the approved Build Week slice** locally; target-container verification remains pending.
+- Office Engine execution: **Fully matches the approved bounded Build Week slice** locally; authenticated hosted fixture acceptance remains pending.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.

@@ -18,10 +18,23 @@ Public License text is included in `LICENSE`.
 
 ## Ghostscript
 
-Ghostscript is not yet included in this repository or its current Extension
-build. If the Office Engine adds Ghostscript, the exact version, copyright,
-license, source location, build instructions, and corresponding-source offer
-must be added here before publishing a Docker image or hosted service.
+The optional Office Engine container installs the Debian 12 `ghostscript`
+package and reports its exact runtime version from `/api/v1/health`. Ghostscript
+is Copyright Artifex Software, Inc. and contributors and is licensed under
+`AGPL-3.0-or-later`. Debian package metadata and corresponding source are
+available from https://packages.debian.org/bookworm/ghostscript and
+https://sources.debian.org/src/ghostscript/. The complete GNU Affero General
+Public License text is included in `LICENSE`.
+
+## Poppler
+
+The optional Office Engine container installs Debian 12 `poppler-utils` to
+validate PDF page counts before accepting an output artifact. Poppler is
+Copyright the Poppler contributors and is primarily licensed under
+`GPL-2.0-or-later`; component-specific notices remain in the Debian package.
+Package metadata and corresponding source are available from
+https://packages.debian.org/bookworm/poppler-utils and
+https://sources.debian.org/src/poppler/.
 
 ## Other packages
 

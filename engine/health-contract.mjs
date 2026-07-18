@@ -1,30 +1,34 @@
 export const API_VERSION = "1.0";
-export const SERVICE_VERSION = "0.1.0";
+export const SERVICE_VERSION = "0.2.0";
 
-export function createHealthResponse() {
+import { ENGINE_LIMITS } from "./processing-config.mjs";
+
+export function createHealthResponse({ processorVersion = null } = {}) {
+  const processingAvailable = Boolean(processorVersion);
   return {
     status: "healthy",
-    readiness: "blocked",
+    readiness: processingAvailable ? "ready" : "blocked",
     apiVersion: API_VERSION,
     serviceVersion: SERVICE_VERSION,
     engine: {
       kind: "office",
-      processor: null,
-      processorVersion: null,
-      processingAvailable: false,
-      disabledReason: "numeric_policy_unapproved",
+      processor: "ghostscript",
+      processorVersion,
+      processingAvailable,
+      ...(processingAvailable ? {} : { disabledReason: "processor_unavailable" }),
     },
     capabilities: {
-      allowedPresets: [],
-      jobCreation: false,
-      jobStatus: false,
-      resultDownload: false,
-      cancellation: false,
+      allowedPresets: processingAvailable ? ["balanced"] : [],
+      jobCreation: processingAvailable,
+      jobStatus: true,
+      resultDownload: processingAvailable,
+      cancellation: processingAvailable,
     },
     limits: {
-      maxFileSizeMb: null,
-      processingTimeoutSeconds: null,
-      retentionMinutes: null,
+      maxFileSizeMb: ENGINE_LIMITS.maxFileSizeMb,
+      processingTimeoutSeconds: ENGINE_LIMITS.processingTimeoutSeconds,
+      retentionMinutes: ENGINE_LIMITS.retentionMinutes,
+      maxConcurrentJobs: ENGINE_LIMITS.maxConcurrentJobs,
     },
   };
 }

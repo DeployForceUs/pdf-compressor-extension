@@ -10,7 +10,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8787"
+      ENGINE_WORK_ROOT: /var/lib/pdf-office-engine/jobs
+    volumes:
+      - ${ENGINE_JOBS_PATH:-/var/lib/pdf-office-engine/jobs}:/var/lib/pdf-office-engine/jobs
     init: true
+    mem_limit: 5g
+    cpus: 3.0
+    pids_limit: 256
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777,noexec,nosuid,nodev

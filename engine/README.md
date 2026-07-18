@@ -1,8 +1,28 @@
-# Office Engine — Health/Capabilities Slice
+# Office Engine — Balanced Processing Slice
 
-This is the first Build Week Docker Office Engine slice. It exposes service
-health and explicit capabilities while PDF processing remains closed until the
-Balanced command and numeric policy are approved through benchmarks.
+The Build Week Office Engine accepts one PDF at a time and executes the
+approved deterministic Balanced Ghostscript path. It never sends PDF content
+to OpenAI; the Smart Planner and processing service are separate containers.
+
+## Bounded contract
+
+- raw `application/pdf` request body, maximum 1 GiB;
+- one active job per Engine instance;
+- five-minute processing timeout;
+- 15-minute result retention;
+- page-count and PDF-open validation with Poppler;
+- compressed output accepted only when it is valid, page-preserving, and
+  smaller than the input;
+- original PDF returned after processing failure, timeout, invalid output, or
+  size regression.
+
+```http
+GET  /api/v1/health
+POST /api/v1/compress
+GET  /api/v1/jobs/{jobId}
+GET  /api/v1/jobs/{jobId}/result
+POST /api/v1/jobs/{jobId}/cancel
+```
 
 ## Start
 
@@ -11,22 +31,15 @@ docker compose up --build -d
 curl http://127.0.0.1:8787/api/v1/health
 ```
 
-The default Compose binding is loopback-only. The Contabo judge deployment must
-place an authenticated TLS reverse proxy in front of it; changing the binding
-to a public interface without that control is prohibited.
+The Compose binding is loopback-only. A hosted judge path requires an
+authenticated TLS reverse proxy; never bind the Engine directly to a public
+interface. The Engine itself does not receive an OpenAI API key.
 
-Expected readiness is currently `blocked` and `processingAvailable` is `false`.
-`POST /api/v1/compress` returns `503 processing_unavailable`. This is an
-intentional release gate, not a processing implementation.
-
-The Engine container does not need `OPENAI_API_KEY`. The later AI Gateway reads
-that value only from the server secret store.
-
-## Local contract test
+## Verify
 
 ```bash
 npm run engine:test
 ```
 
-The Docker smoke test must run in an environment with Docker before this slice
-is accepted for deployment.
+The final deployment acceptance also requires a Docker build and a real public
+fixture roundtrip on the target Linux host.

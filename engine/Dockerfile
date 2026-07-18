@@ -1,7 +1,13 @@
 FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production \
-    PORT=8787
+    PORT=8787 \
+    ENGINE_WORK_ROOT=/var/lib/pdf-office-engine/jobs
+
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends ghostscript poppler-utils \
+ && rm -rf /var/lib/apt/lists/* \
+ && install -d -o node -g node -m 700 /var/lib/pdf-office-engine/jobs
 
 WORKDIR /app
 
