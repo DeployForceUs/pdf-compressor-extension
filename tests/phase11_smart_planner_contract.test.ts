@@ -115,6 +115,14 @@ assert.deepEqual(
   ((planSchema.properties as Record<string, unknown>).engine as Record<string, unknown>).enum,
   ["local", "office"],
 );
+const planProperties = planSchema.properties as Record<string, Record<string, unknown>>;
+assert.deepEqual(planProperties.quality.enum, [65, 72, 78, 85]);
+assert.deepEqual(planProperties.dpi.enum, [144, 180, 220]);
+assert.deepEqual(
+  ((planProperties.split.properties as Record<string, Record<string, unknown>>)
+    .targetPartSizeMb).enum,
+  [20],
+);
 
 const blockedPlan = validateProcessingPlan(plan, {
   allowedPresets: ["balanced"],

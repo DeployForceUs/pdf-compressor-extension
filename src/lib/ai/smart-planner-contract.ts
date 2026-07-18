@@ -98,6 +98,15 @@ export type ProcessingPlanValidationResult = ContractValidationResult<Processing
   executionAllowed: boolean;
 };
 
+// These values are calibrated candidates, not an approved execution policy.
+// Keeping model output on this finite set prevents invented processing numbers
+// while the benchmark matrix and visual review are still incomplete.
+export const PROVISIONAL_PLANNER_NUMERIC_CANDIDATES = {
+  quality: [65, 72, 78, 85],
+  dpi: [144, 180, 220],
+  targetPartSizeMb: [20],
+} as const;
+
 type JsonSchema = Record<string, unknown>;
 
 const REQUEST_KEYS = [
@@ -389,12 +398,15 @@ export function createProcessingPlanSchema(allowedPresets: readonly string[]): J
     schemaVersion: { type: "integer", const: SMART_PLANNER_SCHEMA_VERSION },
     engine: { type: "string", enum: ["local", "office"] },
     preset: { type: "string", enum: [...allowedPresets] },
-    quality: { type: "integer" },
-    dpi: { type: "integer" },
+    quality: { type: "integer", enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.quality] },
+    dpi: { type: "integer", enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.dpi] },
     split: objectSchema({
       enabled: { type: "boolean" },
       strategy: { type: "string", enum: ["by-max-size"] },
-      targetPartSizeMb: { type: "integer" },
+      targetPartSizeMb: {
+        type: "integer",
+        enum: [...PROVISIONAL_PLANNER_NUMERIC_CANDIDATES.targetPartSizeMb],
+      },
     }),
     retryPolicy: objectSchema({
       allowed: { type: "boolean" },

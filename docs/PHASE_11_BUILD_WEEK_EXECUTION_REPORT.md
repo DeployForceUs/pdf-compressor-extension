@@ -14,6 +14,7 @@ Implemented:
 - free-text instruction disabled by default and bounded to 200 printable characters when explicitly enabled;
 - safe projection of validated requests into a new exact DTO before serialization;
 - dynamic strict `ProcessingPlan` JSON Schema using only active allowlisted presets;
+- provisional numeric candidate enums derived from the recorded calibration matrix, preventing the model from inventing processing values without treating those candidates as approved execution policy;
 - canonical existing Split strategy `by-max-size` rather than the incompatible draft value `max-size`;
 - structural plan validation plus local capability, entitlement, Split, retry, and numeric policy validation;
 - mandatory execution block while the approved numeric policy is absent;
