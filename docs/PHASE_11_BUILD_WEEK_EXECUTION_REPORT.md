@@ -17,7 +17,7 @@ Implemented:
 - canonical existing Split strategy `by-max-size` rather than the incompatible draft value `max-size`;
 - structural plan validation plus local capability, entitlement, Split, retry, and numeric policy validation;
 - mandatory execution block while the approved numeric policy is absent;
-- server-side Responses API client fixed to `gpt-5.6`, `store: false`, low reasoning effort, no tools, and strict Structured Output;
+- server-side Responses API client defaulting to `gpt-5.6`, configurable at deployment through `OPENAI_MODEL`, with `store: false`, low reasoning effort, no tools, and strict Structured Output;
 - response handling for HTTP failures, rate limits, network errors, incomplete responses, refusals, invalid JSON, and invalid plans;
 - deterministic fallback signal that keeps the existing Local Engine settings and never executes model-generated parameters;
 - framework-neutral `/api/v1/plans` gateway handler with required injected authorization and rate-limit policies, JSON-only input, byte limits, timeout cancellation, no-store responses, and redacted fallback errors;
@@ -129,17 +129,24 @@ Planner Gateway runtime. It bundles the existing strict Smart Planner contract,
 reads the OpenAI key and judge token from Docker secret files, limits requests
 to 32 KB and 10 per minute, applies a 30-second upstream timeout, and logs only
 random request ID, route, method, status, and duration. A content-free fixture
-and smoke command are included for the first real GPT-5.6 roundtrip. Local
-runtime tests prove health, authentication, sanitized fallback, and absence of
-secret values in logs. The real roundtrip remains pending server-side secret
-entry by the owner.
+and smoke command are included. Local runtime tests prove health,
+authentication, sanitized fallback, and absence of secret values in logs.
+
+The first real content-free roundtrip completed on 2026-07-18 through the
+loopback-only Kamatera Gateway using deployment-selected `gpt-5-mini`. It
+returned HTTP 200 and a strict `ProcessingPlan`; no document content or secret
+was included in the request or retained in this report. Execution was correctly
+blocked because the returned numeric values have not passed the separately
+required numeric policy. This validates billing, secret loading, authorization,
+the Responses API boundary, Structured Output parsing, and deterministic
+post-model policy enforcement without claiming that processing is approved.
 
 1. Approve exact `quality`, `dpi`, and target-part-size ranges through Engine benchmarks. Until then, GPT output can be inspected but cannot be executed.
 2. Implement and benchmark the bounded Balanced processing slice, then complete its AGPL artifact package. Before publishing an Engine image, add its exact Ghostscript version, notice, source location, corresponding source, and reproducible build instructions.
 3. Bind the gateway handler to the selected Contabo/Worker runtime and choose concrete authorization, rate-limit, request-size, timeout, and correlation policies. The handler intentionally requires these deployment policies to be injected rather than inventing them.
 4. Configure `OPENAI_API_KEY` only in the server/deployment secret store according to `OPENAI_API_KEY_HANDLING.md`; never in Extension code, GitHub source, logs, or request payloads.
-5. Run the first real content-free GPT-5.6 fixture roundtrip and retain only redacted timing/status evidence.
-6. Connect the Extension consent/disclosure UI only after the server boundary and fallback tests pass.
+5. Obtain contest-project access to `gpt-5.6`, then repeat the same content-free fixture as a final compatibility check. Development smoke tests use the deployment-selected lower-cost model.
+6. Connect the Extension consent/disclosure UI now that the server boundary, real roundtrip, and fallback tests pass.
 7. Record deterministic MuPDF page-classification, DPI-estimation, and page-size-estimation rules, then implement the structural observation adapter without text extraction or page rendering.
 
 ## Specification compliance
