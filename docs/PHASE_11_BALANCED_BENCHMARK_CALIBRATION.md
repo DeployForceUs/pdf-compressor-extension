@@ -58,3 +58,69 @@ regression rule: an Engine result that is not smaller must not replace the
 original valid file, and the planner should prefer Local/no-op behavior for a
 profile of this kind. Scanned and image-heavy fixtures are still required to
 approve Balanced parameters.
+
+## Public fixture matrix — 2026-07-18
+
+The remaining matrix used public downloads only in temporary storage; the
+source PDFs and generated outputs are not committed to the repository.
+
+| Class | Public source | SHA-256 | Pages | Input bytes |
+| --- | --- | --- | ---: | ---: |
+| scanned book | [Internet Archive scan](https://archive.org/details/blackbeauty00sewell) ([public-domain record](https://commons.wikimedia.org/wiki/File:Black_Beauty_(IA_blackbeauty00sewell).pdf)) | `4ff60801b4e2452c23746b1df77cf0a270a0b236b7e2458f3a4cf645f1888287` | 254 | 7,913,286 |
+| image/map poster | [USGS What Do Maps Show?](https://www.usgs.gov/media/files/what-do-maps-show-poster) (public domain) | `fbb8b0944ee6a3755a2ad092f5e27c9059acc7a66a941a4e89de06ab5d1dd069` | 1 | 366,693 |
+| mixed text/vector/image | [NASA ASAP 2024 Annual Report](https://www.nasa.gov/asap-reports/) | `88cdb6c9dae2b6afb708bf3b1aa7464459070b82d2c93a57a6de56c8d695f191` | 56 | 5,828,127 |
+
+The benchmark ran with Ghostscript `10.02.1` and the same fixed candidate
+matrix used for the synthetic and Canon fixtures. Every output opened and
+preserved page count.
+
+### Scanned book
+
+| Candidate | Duration | Output bytes | Output/input |
+| --- | ---: | ---: | ---: |
+| balanced-144-q65 | 34,540 ms | 21,148,882 | 2.6726 |
+| balanced-180-q72 | 34,232 ms | 28,156,846 | 3.5582 |
+| balanced-180-q78 | 35,780 ms | 31,013,943 | 3.9192 |
+| balanced-220-q85 | 35,787 ms | 43,960,192 | 5.5552 |
+
+This scan was already efficiently encoded. All candidates are rejected by the
+strictly-smaller output policy.
+
+### USGS image/map poster
+
+| Candidate | Duration | Output bytes | Output/input |
+| --- | ---: | ---: | ---: |
+| balanced-144-q65 | 156 ms | 411,642 | 1.1226 |
+| balanced-180-q72 | 169 ms | 458,385 | 1.2501 |
+| balanced-180-q78 | 147 ms | 513,117 | 1.3993 |
+| balanced-220-q85 | 148 ms | 589,853 | 1.6086 |
+
+This poster was also already optimized. All candidates are rejected by the
+strictly-smaller output policy.
+
+### NASA mixed report
+
+| Candidate | Duration | Output bytes | Output/input |
+| --- | ---: | ---: | ---: |
+| balanced-144-q65 | 2,319 ms | 2,277,782 | 0.3908 |
+| balanced-180-q72 | 2,116 ms | 3,783,992 | 0.6493 |
+| balanced-180-q78 | 2,119 ms | 3,932,584 | 0.6748 |
+| balanced-220-q85 | 2,120 ms | 4,150,518 | 0.7122 |
+
+The lowest candidate saved the most space. A visual comparison rendered source
+and `balanced-144-q65` pages 1, 20, and 45 at 120 DPI. No clipping, overlap,
+missing glyphs, or unreadable text was observed; photographs showed mild
+softening consistent with the lower-resolution candidate. This is a sampled
+review, not a universal readability guarantee.
+
+## Approval recommendation
+
+The matrix does **not** support a numeric range. It supports at most one bounded
+Balanced execution tuple: `quality=65`, `dpi=144`, with the existing
+`targetPartSizeMb=20` delivery target and at most one retry. Execution must also
+require a valid, page-count-preserving, strictly smaller result; otherwise the
+original remains authoritative.
+
+This tuple remains a recommendation until explicitly approved by the product
+owner. Higher candidates remain preview-only because they consistently save
+less space and can enlarge already-optimized documents.
