@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "requestId": "buildweek-office-available-smoke-0001",
+  "userGoal": {
+    "deliveryTarget": "email_20mb",
+    "qualityIntent": "print",
+    "speedPreference": "balanced",
+    "splitAllowed": true
+  },
+  "documentProfile": {
+    "fileSizeBytes": 838860800,
+    "pageCount": 620,
+    "imageObjectCount": 1310,
+    "scannedPageRatio": 0.94,
+    "vectorPageRatio": 0.02,
+    "textPageRatio": 0.04,
+    "estimatedDpiBuckets": {
+      "under150": 0.02,
+      "150to300": 0.21,
+      "over300": 0.77
+    },
+    "codecCounts": {
+      "jpeg": 1280,
+      "jpx": 30,
+      "other": 0
+    },
+    "pageSizeDistributionBytes": {
+      "p50": 1100000,
+      "p90": 2100000,
+      "max": 7400000
+    }
+  },
+  "engineCapabilities": {
+    "localAvailable": true,
+    "officeAvailable": true,
+    "officeCpuCount": 4,
+    "officeMemoryGb": 8,
+    "allowedPresets": ["balanced"],
+    "maxFileSizeMb": 1024
+  }
+}

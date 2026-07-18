@@ -24,6 +24,14 @@ function readPositiveInteger(name: string, fallback: number) {
   return parsed;
 }
 
+function readBoolean(name: string, fallback: boolean) {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be true or false`);
+}
+
 function readSecretFile(name: string) {
   const path = process.env[name];
   if (!path) throw new Error(`${name} is required`);
@@ -118,6 +126,7 @@ const rateLimitWindowSeconds = readPositiveInteger(
 const apiKey = readSecretFile("OPENAI_API_KEY_FILE");
 const judgeAccessToken = readSecretFile("JUDGE_ACCESS_TOKEN_FILE");
 const openAiModel = process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+const officeEngineEnabled = readBoolean("OFFICE_ENGINE_ENABLED", false);
 const consumeRateLimit = createFixedWindowRateLimiter(
   rateLimitRequests,
   rateLimitWindowSeconds * 1000,
@@ -146,6 +155,7 @@ const server = createServer(async (request, response) => {
         readiness: "ready",
         service: "smart-planner-gateway",
         model: openAiModel,
+        officeEngineEnabled,
       });
       return;
     }
@@ -188,9 +198,9 @@ const server = createServer(async (request, response) => {
       planPolicy: {
         allowedPresets: ["balanced"],
         localAvailable: true,
-        officeAvailable: false,
+        officeAvailable: officeEngineEnabled,
         splitAllowed: true,
-        officeEntitled: false,
+        officeEntitled: officeEngineEnabled,
         numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
       },
       maxRequestBytes,

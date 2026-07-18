@@ -131,6 +131,8 @@ export function createSmartPlannerResponseBody(
 export async function requestSmartPlannerPlan(
   options: SmartPlannerApiOptions,
 ): Promise<SmartPlannerApiResult> {
+  const validatedRequest = validateSmartPlannerRequest(options.request, options.requestPolicy);
+  if (!validatedRequest.ok) return fallback("invalid_request", validatedRequest.errors);
   const body = createSmartPlannerResponseBody(options.request, options.requestPolicy);
   if (!body.ok) return fallback("invalid_request", body.errors);
   if (!options.apiKey.trim()) return fallback("upstream_error", ["OpenAI API key is not configured"]);
@@ -186,10 +188,20 @@ export async function requestSmartPlannerPlan(
     return fallback("invalid_model_output", ["Structured output was not valid JSON"]);
   }
 
-  const structure = validateProcessingPlanStructure(candidate, options.planPolicy.allowedPresets);
+  const requestCapabilities = validatedRequest.value.engineCapabilities;
+  const effectivePolicy: ProcessingPlanPolicy = {
+    ...options.planPolicy,
+    allowedPresets: options.planPolicy.allowedPresets.filter((preset) =>
+      requestCapabilities.allowedPresets.includes(preset),
+    ),
+    localAvailable: options.planPolicy.localAvailable && requestCapabilities.localAvailable,
+    officeAvailable: options.planPolicy.officeAvailable && requestCapabilities.officeAvailable,
+    splitAllowed: options.planPolicy.splitAllowed && validatedRequest.value.userGoal.splitAllowed,
+  };
+  const structure = validateProcessingPlanStructure(candidate, effectivePolicy.allowedPresets);
   if (!structure.ok) return fallback("invalid_model_output", structure.errors);
 
-  const policy = validateProcessingPlan(structure.value, options.planPolicy);
+  const policy = validateProcessingPlan(structure.value, effectivePolicy);
   return {
     kind: "plan",
     plan: structure.value,

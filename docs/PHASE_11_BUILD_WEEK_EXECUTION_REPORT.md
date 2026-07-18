@@ -63,6 +63,12 @@ enabled and a real server fixture roundtrip passes. The target Docker build must
 also record its exact Debian Ghostscript/Poppler package versions before the
 contest artifact is tagged.
 
+Target-host acceptance on 2026-07-18 processed the 6,398,446-byte, 220-page
+Canon fixture through the create/status/download API. Ghostscript `10.00.0`
+produced a validated 4,303,869-byte result with all 220 pages, saving 2,094,577
+bytes (32.7%). Independent visual comparison remains required before treating
+this server-specific result as a quality acceptance artifact.
+
 ## Completed slice: Balanced calibration harness
 
 Implemented a reproducible synthetic scanned fixture generator and a fixed

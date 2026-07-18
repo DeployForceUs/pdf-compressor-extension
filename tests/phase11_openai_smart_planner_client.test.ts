@@ -4,7 +4,10 @@ import {
   requestSmartPlannerPlan,
   SMART_PLANNER_MODEL,
 } from "../src/lib/ai/openai-smart-planner-client";
-import type { SmartPlannerRequest } from "../src/lib/ai/smart-planner-contract";
+import {
+  APPROVED_BALANCED_NUMERIC_POLICY,
+  type SmartPlannerRequest,
+} from "../src/lib/ai/smart-planner-contract";
 
 const requestPolicy = {
   deliveryTargets: ["email_20mb"],
@@ -151,6 +154,41 @@ assert.equal(malformedOutputResult.kind, "fallback");
 if (malformedOutputResult.kind === "fallback") {
   assert.equal(malformedOutputResult.reason, "invalid_model_output");
   assert.equal(malformedOutputResult.action, "use_existing_local_settings");
+}
+
+const validOfficePlan = {
+  ...modelPlan,
+  quality: 65,
+  dpi: 144,
+};
+const unavailableOfficeResult = await requestSmartPlannerPlan({
+  apiKey: "server-secret-test-key",
+  request: {
+    ...request,
+    engineCapabilities: { ...request.engineCapabilities, officeAvailable: false },
+  },
+  requestPolicy,
+  planPolicy: {
+    allowedPresets: ["balanced"],
+    localAvailable: true,
+    officeAvailable: true,
+    splitAllowed: true,
+    officeEntitled: true,
+    numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
+  },
+  fetchImpl: async () =>
+    new Response(
+      JSON.stringify({
+        status: "completed",
+        output: [{ content: [{ type: "output_text", text: JSON.stringify(validOfficePlan) }] }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ),
+});
+assert.equal(unavailableOfficeResult.kind, "plan");
+if (unavailableOfficeResult.kind === "plan") {
+  assert.equal(unavailableOfficeResult.executionAllowed, false);
+  assert.match(unavailableOfficeResult.policyErrors.join("\n"), /Office Engine is unavailable/);
 }
 
 console.info("phase11 OpenAI Smart Planner request and fallback assertions passed");

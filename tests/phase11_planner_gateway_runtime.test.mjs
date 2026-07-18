@@ -31,6 +31,7 @@ async function startGateway() {
       OPENAI_API_KEY_FILE: openAiSecret,
       JUDGE_ACCESS_TOKEN_FILE: judgeSecret,
       OPENAI_MODEL: "gpt-5-mini",
+      OFFICE_ENGINE_ENABLED: "true",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -70,6 +71,7 @@ test("bundled Planner Gateway starts, protects plans, and logs no secrets", asyn
       readiness: "ready",
       service: "smart-planner-gateway",
       model: "gpt-5-mini",
+      officeEngineEnabled: true,
     });
 
     const unauthorized = await fetch("http://127.0.0.1:18790/api/v1/plans", {
