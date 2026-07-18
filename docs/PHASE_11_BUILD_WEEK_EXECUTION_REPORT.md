@@ -87,6 +87,11 @@ route, and closed-by-default handling for every unfinished endpoint. The pack
 contains no API key or access token. Deployment remains health-only until the
 Gateway and bounded processing routes pass their respective gates.
 
+The inspected target VM already hosts Nginx, Python, PostgreSQL, and an Amnezia
+Docker container. A separate shared-server profile therefore binds the Engine
+to loopback, reuses Nginx, leaves the existing site untouched, disables proxy
+access logs, and exposes only health while all unfinished routes remain closed.
+
 ## Validation
 
 Passed locally against the clean contest worktree:

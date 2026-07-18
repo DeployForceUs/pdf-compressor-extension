@@ -4,6 +4,7 @@
 .wxt
 node_modules
 public/vendor
+fixtures
 reports
 *.log
 .env
