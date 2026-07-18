@@ -79,6 +79,14 @@ only an open, page-count-preserving, strictly smaller output may replace the
 original. Invalid, mismatched, equal-size, or larger output retains the original
 valid file.
 
+## Completed slice: Kamatera deployment pack
+
+Implemented a Git-driven contest deployment pack with a hardened internal
+Engine container, private backend network, Caddy automatic HTTPS, public health
+route, and closed-by-default handling for every unfinished endpoint. The pack
+contains no API key or access token. Deployment remains health-only until the
+Gateway and bounded processing routes pass their respective gates.
+
 ## Validation
 
 Passed locally against the clean contest worktree:

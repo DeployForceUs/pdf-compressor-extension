@@ -1,0 +1,27 @@
+{$DEMO_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		-Server
+		Cache-Control "no-store"
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Referrer-Policy "no-referrer"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
+	@health {
+		method GET HEAD
+		path /api/v1/health
+	}
+
+	handle @health {
+		reverse_proxy office-engine:8787
+	}
+
+	handle {
+		respond "Contest service setup in progress" 503
+	}
+}
