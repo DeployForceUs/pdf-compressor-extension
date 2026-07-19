@@ -278,6 +278,21 @@ button {
   gap: 2px;
 }
 
+.hero__tools {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.hero__build {
+  color: rgba(213, 224, 255, 0.68);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .eyebrow {
   margin: 0;
   font-size: 10px;

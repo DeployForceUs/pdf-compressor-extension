@@ -134,6 +134,13 @@ logs for that attempt contained only authenticated `office_health`; there was
 no `office_compress` request and no job. Status of the second graphical attempt:
 **FAIL**.
 
+A third graphical attempt with the channel-independent popup build reached the
+new 15-second watchdog and displayed `Office Engine did not confirm that
+processing started`. Chrome still emitted the underlying listener/channel
+warning. This proves the new bundle was loaded and narrows the remaining fault
+to the receiving listeners rather than the popup UI or Engine performance.
+Status of that attempt: **FAIL**.
+
 Root causes and final correction:
 
 - the popup start request was forwarded through the background service worker
@@ -146,6 +153,10 @@ Root causes and final correction:
   and runs the lifecycle independently;
 - the popup now dispatches the start request without awaiting the ephemeral
   runtime response channel and deliberately ignores closure of that channel;
+- both background and offscreen listeners now use the Promise-returning
+  `webextension-polyfill` contract exclusively; the previous implementation
+  mixed `return true` with delayed `sendResponse`, which is the exact contract
+  behind Chromium's channel-closed warning;
 - progress, completion, and error continue to use the existing independent
   `office:progress`, `office:result`, and `office:error` events;
 - an explicit 15-second start watchdog reports that the Engine did not confirm
@@ -153,6 +164,9 @@ Root causes and final correction:
   failure cannot leave the interface indefinitely busy;
 - an explicit authorization rejection is still shown immediately whenever the
   background response is delivered successfully;
+- the popup header now carries an explicit user-visible build identifier;
+  formal numbering starts at `2026.07.19.1` and must be incremented for every
+  subsequent test bundle so screenshots and reports identify the loaded code;
 - active state is claimed before the first asynchronous preflight read so a
   second start cannot enter during initialization, and cancellation tolerates
   the short interval before the Office client exists.
@@ -328,13 +342,14 @@ npm run engine:test                                      # 17/17 passed
 NPM_CONFIG_CACHE=/tmp/npm-gateway-validate npm run gateway:test
 npm run build
 npm run check:worker-boundary
-phase11 TypeScript suites (esbuild bundles + node --test) # 24/24 passed
+phase11 TypeScript suites (esbuild bundles + node --test) # 25/25 passed
 ```
 
 The four dispatch tests prove that the offscreen acknowledgement is returned
 before the Office task completes, an unexpected detached rejection is reported
 without retroactively rejecting the accepted start request, popup dispatch does
 not wait for its background response, and response-channel closure is ignored.
+The additional test enforces the formal user-visible build-number format.
 
 Independent live Engine evidence on the resized Kamatera host is **PASS** for
 the tested fixture and configuration only:

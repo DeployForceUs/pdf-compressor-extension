@@ -338,21 +338,14 @@ export default defineBackground(() => {
 
   const backgroundMessageListener = (
     message: unknown,
-    _sender: unknown,
-    sendResponse: (response: unknown) => void,
   ) => {
-    if (!isBackgroundRequest(message)) return false;
-
-    void handle(message).then((response) => {
-      if (response) {
-        sendResponse(response);
-      }
-    });
-    return true;
+    if (!isBackgroundRequest(message)) return undefined;
+    return handle(message);
   };
 
-  // Chromium uses false for messages this context does not own. The
-  // webextension-polyfill callback type omits that valid runtime return value.
+  // webextension-polyfill owns the callback bridge. Returning the Promise is
+  // the only response mechanism; mixing `return true` with sendResponse can
+  // leave Chromium waiting on a channel whose extension context has closed.
   browser.runtime.onMessage.addListener(
     backgroundMessageListener as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0],
   );

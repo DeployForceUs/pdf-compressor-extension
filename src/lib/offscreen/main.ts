@@ -852,29 +852,21 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
 
 const offscreenMessageListener = (
   message: unknown,
-  _sender: unknown,
-  sendResponse: (response: unknown) => void,
 ) => {
-  if (!isOffscreenRequest(message)) return false;
+  if (!isOffscreenRequest(message)) return undefined;
 
-  void handle(message)
-    .then((response) => {
-      if (response) {
-        sendResponse(response);
-      }
-    })
+  return handle(message)
     .catch((error) => {
       logger.error("Captured exception in offscreen", error);
-      sendResponse({
+      return {
         ok: false,
         error: error instanceof Error ? error.message : "Unknown offscreen error",
-      });
+      };
     });
-  return true;
 };
 
-// Chromium uses false for messages this context does not own. The
-// webextension-polyfill callback type omits that valid runtime return value.
+// Return a Promise and let webextension-polyfill bridge it to Chromium's
+// response callback. Do not combine its wrapper with manual sendResponse.
 browser.runtime.onMessage.addListener(
   offscreenMessageListener as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0],
 );

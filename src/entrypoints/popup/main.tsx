@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
+import { EXTENSION_BUILD } from "../../lib/build-info";
 import { formatBytes, formatDuration, formatPercent, normalizeLocale } from "../../lib/i18n/helpers";
 import { MAX_PDF_BYTES, validatePdfFile } from "../../lib/pdf-validation";
 import {
@@ -1686,7 +1687,10 @@ function Popup() {
               <p className="subtitle">{t("app.subtitle")}</p>
             </div>
           </div>
-          <LanguageSwitcher />
+          <div className="hero__tools">
+            <span className="hero__build">Build {EXTENSION_BUILD}</span>
+            <LanguageSwitcher />
+          </div>
         </header>
 
         <div className="body">
