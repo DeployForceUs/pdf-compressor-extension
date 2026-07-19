@@ -40,6 +40,75 @@ documents. Recording those rules and implementing the observation adapter
 remains the release-blocking step before the visible `Generate Smart Plan`
 action can truthfully use a selected PDF.
 
+## Completed slice: trusted runtime capacity disclosure without invented ETA
+
+Product decision approved by the owner on 2026-07-19:
+
+- show Office Engine capacity to every user after a successful connection;
+- use the same trusted capacity in Smart Planner requests;
+- do not show processing minutes, relative speed, `pages per minute`, or a
+  `Basic`/`Fast` performance class before empirical benchmark calibration.
+
+Implemented behavior:
+
+- Engine health service version `0.3.0` adds a `runtime` object containing
+  conservative `effectiveCpuCount`, `effectiveMemoryMb`, the measurement class
+  `effective_runtime_limits`, and explicit
+  `performanceCalibration: not_calibrated`;
+- Linux runtime detection reads cgroup v2 limits, falls back to cgroup v1, and
+  takes the lower value between Container limit and host-visible capacity;
+- CPU is deliberately reported as a conservative whole-vCPU integer because
+  the approved Planner contract accepts an integer CPU count; memory is
+  retained to one MiB and converted to GiB only for display/Planner DTO use;
+- the Extension validates the optional runtime block before use and displays
+  effective vCPU, RAM, maximum concurrency, maximum file size, and the explicit
+  uncalibrated state in English and Spanish;
+- an older deployed Engine without the additive runtime block remains
+  connectable, but the UI reports capacity unavailable and the Planner mapping
+  marks Office selection unavailable rather than guessing zeros as real
+  capacity;
+- the Gateway resolves Office health through the private Docker network for
+  every Planner request and replaces client-supplied Engine capabilities with
+  trusted live values before the OpenAI call;
+- if Office health is disabled, unavailable, malformed, or lacks runtime
+  capacity, trusted Gateway capabilities fail closed with
+  `officeAvailable=false`; client-provided CPU/RAM cannot restore Office
+  eligibility;
+- shared and dedicated Kamatera Compose profiles now use explicit configurable
+  CPU/RAM limits. Conservative defaults are `1 vCPU / 1536 MB` so a 2 GB shared
+  host retains capacity for the Gateway, Nginx, Docker, VPN, and other services;
+- the Extension default judge URL now points to the currently verified
+  `https://pdf-66-55-75-239.sslip.io` endpoint instead of the stale
+  `pdf.aianswerline.live` hostname.
+
+Why this slice is necessary:
+
+- the previous shared Compose file declared `3 CPU / 5 GB` even when the
+  Kamatera VM was resized below those values;
+- the existing content-free Planner fixtures contained static `4 CPU / 8 GB`
+  example values;
+- without a trusted live override, the model could receive stale capacity and
+  recommend Office Engine on a false performance premise;
+- file byte size alone is not a performance proxy: the Canon fixture is only
+  about 5.5–6.4 MB but contains 220 pages and remains CPU-sensitive.
+
+Deliberate limitations and claims boundary:
+
+- this is capacity disclosure, not benchmark calibration;
+- the UI does not produce an ETA or state that Office Engine is faster than the
+  user's computer;
+- one observed Canon run is acceptance evidence, not a universal benchmark;
+- current Queue disclosure is the configured concurrency limit, not live queue
+  depth or host load;
+- Local-vs-Office comparison and time estimation remain blocked until the
+  required representative fixture matrix identifies both hardware profiles;
+- the visible `Generate Smart Plan` action remains separately blocked by the
+  missing deterministic MuPDF observation adapter; this slice does not invent
+  document-profile values to expose that action prematurely;
+- target status is **BLOCKED** until Engine/Gateway Images are rebuilt on the
+  resized Kamatera VM and authenticated health confirms the expected effective
+  capacity. Local contract status is **PASS** after the validation listed below.
+
 ## Completed slice: Smart Planner contract and API boundary
 
 Implemented:
@@ -174,6 +243,29 @@ rg "api.openai.com|OPENAI_API_KEY|test-openai-key-not-real" .output/chrome-mv3
 git diff --check
 ```
 
+The trusted runtime-capacity slice additionally passed on 2026-07-19:
+
+```text
+npm run check
+npm run engine:test                                      # 17/17 passed
+NPM_CONFIG_CACHE=/tmp/npm-gateway-validate npm run gateway:test
+npm run build
+npm run check:worker-boundary
+phase11 TypeScript suites (esbuild bundles + node --test) # 20/20 passed
+JSON.parse for both locale files
+rg "api.openai.com|OPENAI_API_KEY|test-openai-key-not-real" .output/chrome-mv3
+git diff --check
+```
+
+The new tests cover cgroup limits lower than host capacity, host capacity lower
+than cgroup limits, host-only fallback, strict health parsing, legacy-Engine
+fail-closed behavior, trusted capability replacement, and Gateway resolver
+failure. No secret marker was found in the production extension bundle.
+
+Target Docker rebuild, live health verification, and graphical Chrome
+acceptance remain **BLOCKED** until this commit is deployed; no target result is
+claimed by the local validation above.
+
 The build contains no OpenAI endpoint or API-key marker. A graphical Chrome
 acceptance pass and a live TLS roundtrip remain required because this execution
 environment does not include a Chrome/Chromium binary.
@@ -208,13 +300,19 @@ required numeric policy. This validates billing, secret loading, authorization,
 the Responses API boundary, Structured Output parsing, and deterministic
 post-model policy enforcement without claiming that processing is approved.
 
-1. Build the Engine container on the target server, record exact Debian package versions, and run a real fixture through the complete API lifecycle.
-2. Add the authenticated TLS judge proxy without exposing the loopback Engine port directly.
-3. Connect the Extension consent/disclosure UI and Office Engine client to the verified hosted contract.
-4. Configure `OPENAI_API_KEY` only in the server/deployment secret store according to `OPENAI_API_KEY_HANDLING.md`; never in Extension code, GitHub source, logs, or request payloads.
-5. Obtain contest-project access to `gpt-5.6`, then repeat the same content-free fixture as a final compatibility check. Development smoke tests use the deployment-selected lower-cost model.
-6. Connect the Extension consent/disclosure UI now that the server boundary, real roundtrip, and fallback tests pass.
-7. Record deterministic MuPDF page-classification, DPI-estimation, and page-size-estimation rules, then implement the structural observation adapter without text extraction or page rendering.
+1. Rebuild Engine and Gateway Images on the target VM, confirm authenticated
+   health reports the intended effective capacity, and record `PASS` or `FAIL`.
+2. On the temporary test configuration, set explicit Container limits that
+   leave host reserve, then repeat the 220-page roundtrip and record duration as
+   an observed configuration-specific result, not a universal benchmark.
+3. Complete the required representative benchmark matrix before adding any ETA,
+   speedup, or Local-vs-Office comparison claim.
+4. Obtain contest-project access to `gpt-5.6`, then repeat the content-free
+   Planner fixture as a final compatibility check. Development smoke tests use
+   the deployment-selected lower-cost model.
+5. Record deterministic MuPDF page-classification, DPI-estimation, and
+   page-size-estimation rules, then implement the structural observation
+   adapter without text extraction or page rendering.
 
 ## Specification compliance
 
@@ -225,6 +323,12 @@ post-model policy enforcement without claiming that processing is approved.
 - Content-blind aggregate profile builder: **Extends specification** under the approved Build Week addendum; the MuPDF observation adapter is intentionally incomplete until its deterministic classification rules are approved.
 - AI-generated numeric planning: **Extends specification** under the approved addendum; only the exact approved Balanced tuple can pass the deterministic policy.
 - Office Engine health/capabilities: **Fully matches the approved Build Week slice** locally; target-container verification remains pending.
+- Effective runtime capacity disclosure: **Extends specification** using the
+  already approved Planner capability fields; it adds trusted health sourcing
+  and user-visible disclosure without adding a performance claim.
+- Empirical ETA and Local-vs-Office performance comparison: **Partially matches
+  specification** because they remain intentionally disabled until the required
+  benchmark matrix exists.
 - Office Engine execution: **Fully matches the approved bounded Build Week slice** locally; authenticated hosted fixture acceptance remains pending.
 - Optional Visual Quality Check: **Requires future specification update** and remains outside the critical path.
 - Authenticated Gateway Office proxy: **Fully matches the approved Build Week slice**; live TLS deployment remains pending.

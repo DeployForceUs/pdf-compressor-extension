@@ -1,3 +1,5 @@
+import type { SmartPlannerEngineCapabilities } from "../ai/smart-planner-contract";
+
 export type OfficeEngineHealth = {
   status: "healthy";
   readiness: "ready" | "blocked";
@@ -22,6 +24,12 @@ export type OfficeEngineHealth = {
     processingTimeoutSeconds: number;
     retentionMinutes: number;
     maxConcurrentJobs: number;
+  };
+  runtime?: {
+    effectiveCpuCount: number;
+    effectiveMemoryMb: number;
+    measurement: "effective_runtime_limits";
+    performanceCalibration: "not_calibrated";
   };
 };
 
@@ -75,6 +83,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
 async function errorCode(response: Response) {
   try {
     const body = await response.json();
@@ -84,13 +96,14 @@ async function errorCode(response: Response) {
   }
 }
 
-function validateHealth(value: unknown): OfficeEngineHealth {
+export function parseOfficeEngineHealth(value: unknown): OfficeEngineHealth {
   if (!isRecord(value) || value.status !== "healthy" || (value.readiness !== "ready" && value.readiness !== "blocked")) {
     throw new OfficeEngineClientError("invalid_health_response");
   }
   const engine = value.engine;
   const capabilities = value.capabilities;
   const limits = value.limits;
+  const runtime = value.runtime;
   if (
     !isRecord(engine) || engine.kind !== "office" || typeof engine.processingAvailable !== "boolean" ||
     !isRecord(capabilities) || !Array.isArray(capabilities.allowedPresets) ||
@@ -98,7 +111,49 @@ function validateHealth(value: unknown): OfficeEngineHealth {
   ) {
     throw new OfficeEngineClientError("invalid_health_response");
   }
+  if (
+    runtime !== undefined &&
+    (
+      !isRecord(runtime) ||
+      !isPositiveNumber(runtime.effectiveCpuCount) ||
+      !isPositiveNumber(runtime.effectiveMemoryMb) ||
+      !Number.isSafeInteger(runtime.effectiveMemoryMb) ||
+      runtime.measurement !== "effective_runtime_limits" ||
+      runtime.performanceCalibration !== "not_calibrated"
+    )
+  ) {
+    throw new OfficeEngineClientError("invalid_health_response");
+  }
   return value as OfficeEngineHealth;
+}
+
+export function createPlannerCapabilitiesFromOfficeHealth(
+  health: OfficeEngineHealth,
+  localAvailable = true,
+): SmartPlannerEngineCapabilities {
+  const runtimeAvailable = health.runtime !== undefined;
+  const officeCpuCount = runtimeAvailable
+    ? Math.floor(health.runtime!.effectiveCpuCount)
+    : 0;
+  const officeAvailable =
+    runtimeAvailable &&
+    officeCpuCount > 0 &&
+    health.readiness === "ready" &&
+    health.engine.processingAvailable &&
+    health.capabilities.jobCreation;
+
+  return {
+    localAvailable,
+    officeAvailable,
+    officeCpuCount,
+    officeMemoryGb: runtimeAvailable
+      ? Number((health.runtime!.effectiveMemoryMb / 1024).toFixed(3))
+      : 0,
+    allowedPresets: health.capabilities.allowedPresets.length > 0
+      ? [...health.capabilities.allowedPresets]
+      : ["balanced"],
+    maxFileSizeMb: health.limits.maxFileSizeMb,
+  };
 }
 
 function validateJob(value: unknown): OfficeJob {
@@ -142,7 +197,7 @@ export function createOfficeEngineClient(options: OfficeEngineClientOptions) {
   return {
     async health() {
       const response = await request("/api/v1/office/health");
-      return validateHealth(await response.json());
+      return parseOfficeEngineHealth(await response.json());
     },
     async createJob(pdf: Blob, signal?: AbortSignal) {
       if (pdf.type && pdf.type !== "application/pdf") {

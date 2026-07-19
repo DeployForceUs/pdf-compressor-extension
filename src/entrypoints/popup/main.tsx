@@ -1583,6 +1583,14 @@ function Popup() {
   const compressionHasResult = compression.status === "complete" && compression.resultAvailable;
   const splitBusy = split.status === "loading" || split.status === "running" || split.status === "cancelling";
   const officeProcessingBusy = officeProcessing.status === "running" || officeProcessing.status === "cancelling";
+  const officeCapacity = officeHealth?.runtime
+    ? {
+        cpu: officeHealth.runtime.effectiveCpuCount,
+        memoryGb: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
+          officeHealth.runtime.effectiveMemoryMb / 1024,
+        ),
+      }
+    : null;
   const sharedBusy = compressionBusy || splitBusy || officeProcessingBusy;
   const compressionCanStart = pdf.selected && pdf.status === "ready" && !sharedBusy && compression.engineStatus === "ready";
   const compressionDownloadName = compression.fileName
@@ -1891,7 +1899,15 @@ function Popup() {
                 <div className="office-card__summary" role="status" aria-live="polite">
                   <strong>{t("office.ready")}</strong>
                   <span>{t("office.processor", { version: officeHealth.engine.processorVersion ?? "—" })}</span>
+                  <span>
+                    {officeCapacity
+                      ? t("office.capacity", officeCapacity)
+                      : t("office.capacityUnavailable")}
+                  </span>
+                  <span>{t("office.queue", { count: officeHealth.limits.maxConcurrentJobs })}</span>
                   <span>{t("office.limit", { size: officeHealth.limits.maxFileSizeMb })}</span>
+                  <span>{t("office.performanceNotCalibrated")}</span>
+                  <span className="office-card__summary-note">{t("office.performanceCalibrationNote")}</span>
                 </div>
               ) : null}
               {officeHealth && pdf.selected ? (

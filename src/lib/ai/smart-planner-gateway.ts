@@ -5,6 +5,7 @@ import {
 } from "./openai-smart-planner-client";
 import type {
   ProcessingPlanPolicy,
+  SmartPlannerEngineCapabilities,
   SmartPlannerRequestPolicy,
 } from "./smart-planner-contract";
 
@@ -17,6 +18,9 @@ export type SmartPlannerGatewayConfig = {
   timeoutMs: number;
   authorize: (request: Request) => boolean | Promise<boolean>;
   consumeRateLimit: (request: Request) => boolean | Promise<boolean>;
+  resolveEngineCapabilities?: (
+    request: Request,
+  ) => SmartPlannerEngineCapabilities | Promise<SmartPlannerEngineCapabilities>;
   requestPlan?: (options: SmartPlannerApiOptions) => Promise<SmartPlannerApiResult>;
 };
 
@@ -76,6 +80,18 @@ export async function handleSmartPlannerGatewayRequest(
     requestBody = JSON.parse(rawBody);
   } catch {
     return jsonResponse(400, { error: "invalid_json" });
+  }
+
+  if (config.resolveEngineCapabilities) {
+    let engineCapabilities: SmartPlannerEngineCapabilities;
+    try {
+      engineCapabilities = await config.resolveEngineCapabilities(request);
+    } catch {
+      return jsonResponse(503, { error: "engine_capabilities_unavailable" });
+    }
+    if (typeof requestBody === "object" && requestBody !== null && !Array.isArray(requestBody)) {
+      requestBody = { ...requestBody, engineCapabilities };
+    }
   }
 
   const timeout = new AbortController();

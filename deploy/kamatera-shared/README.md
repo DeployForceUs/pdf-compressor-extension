@@ -18,6 +18,11 @@ Current safety state:
   10-request/minute contest limit.
 - the Gateway removes the browser Authorization header before proxying to the
   private Engine and streams results back without buffering the PDF in Node.
+- Engine CPU/RAM limits are explicit deployment inputs. The health response
+  reports the conservative effective capacity (the lower of host capacity and
+  Container limits), not unbounded host hardware.
+- performance remains `not_calibrated`; CPU/RAM disclosure is not an ETA or a
+  speedup claim.
 
 ## Prepare
 
@@ -32,6 +37,8 @@ Existing `.env` files created before the Planner Gateway was added also need:
 
 ```dotenv
 PLANNER_GATEWAY_PORT=8790
+OFFICE_ENGINE_CPU_LIMIT=1.0
+OFFICE_ENGINE_MEMORY_LIMIT=1536m
 OPENAI_API_KEY_SECRET_PATH=/etc/pdf-office-engine/secrets/openai_api_key
 JUDGE_ACCESS_TOKEN_SECRET_PATH=/etc/pdf-office-engine/secrets/judge_access_token
 ```
@@ -43,8 +50,23 @@ JUDGE_ACCESS_TOKEN_SECRET_PATH=/etc/pdf-office-engine/secrets/judge_access_token
 curl http://127.0.0.1:8787/api/v1/health
 ```
 
-Do not run this step on the current 1-vCPU/1-GB VM. Resize it first to at least
-4 vCPU, 8 GB RAM, and 60 GB disk.
+The conservative shared-host defaults reserve `1 vCPU / 1536 MB` for the
+Engine and leave the rest of a 2 GB host for Nginx, Docker, the Gateway, and
+existing services. This small profile is suitable only for Build Week smoke
+testing until the required benchmark matrix is complete. Increase the two
+limits only after resizing the host and recording the deployed values with any
+benchmark result.
+
+For the temporary `4 vCPU / 8 GB` test configuration, the intended starting
+point is:
+
+```dotenv
+OFFICE_ENGINE_CPU_LIMIT=3.0
+OFFICE_ENGINE_MEMORY_LIMIT=5g
+```
+
+This leaves approximately 1 vCPU and 3 GB for the host and its other services.
+It is an isolation budget, not a speed or completion-time guarantee.
 
 ## Start the authenticated GPT-5.6 Planner Gateway
 

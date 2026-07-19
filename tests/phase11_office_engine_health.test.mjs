@@ -9,6 +9,12 @@ async function withServer(run, options = {}) {
   const server = createOfficeEngineServer({
     logger: (record) => logs.push(record),
     processorVersion: "10.0-test",
+    runtimeCapabilities: {
+      effectiveCpuCount: 1,
+      effectiveMemoryMb: 1536,
+      measurement: "effective_runtime_limits",
+      performanceCalibration: "not_calibrated",
+    },
     ...options,
   });
   server.listen(0, "127.0.0.1");
@@ -35,7 +41,7 @@ test("health exposes ready bounded capabilities without secret state", async () 
       status: "healthy",
       readiness: "ready",
       apiVersion: "1.0",
-      serviceVersion: "0.2.0",
+      serviceVersion: "0.3.0",
       engine: {
         kind: "office",
         processor: "ghostscript",
@@ -54,6 +60,12 @@ test("health exposes ready bounded capabilities without secret state", async () 
         processingTimeoutSeconds: 300,
         retentionMinutes: 15,
         maxConcurrentJobs: 1,
+      },
+      runtime: {
+        effectiveCpuCount: 1,
+        effectiveMemoryMb: 1536,
+        measurement: "effective_runtime_limits",
+        performanceCalibration: "not_calibrated",
       },
     });
 

@@ -9,7 +9,14 @@ import {
 import { performance } from "node:perf_hooks";
 
 import { handleSmartPlannerGatewayRequest } from "../src/lib/ai/smart-planner-gateway";
-import { APPROVED_BALANCED_NUMERIC_POLICY } from "../src/lib/ai/smart-planner-contract";
+import {
+  APPROVED_BALANCED_NUMERIC_POLICY,
+  type SmartPlannerEngineCapabilities,
+} from "../src/lib/ai/smart-planner-contract";
+import {
+  createPlannerCapabilitiesFromOfficeHealth,
+  parseOfficeEngineHealth,
+} from "../src/lib/office/office-engine-client";
 
 const DEFAULT_PORT = 8790;
 const DEFAULT_MAX_REQUEST_BYTES = 32_768;
@@ -19,6 +26,7 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60;
 const DEFAULT_OPENAI_MODEL = "gpt-5.6";
 const DEFAULT_OFFICE_ENGINE_URL = "http://office-engine:8787";
 const DEFAULT_OFFICE_PROXY_TIMEOUT_MS = 310_000;
+const DEFAULT_OFFICE_HEALTH_TIMEOUT_MS = 3_000;
 const OFFICE_ROUTE = /^\/api\/v1\/office\/(health|compress|jobs\/([0-9a-f-]+)(?:\/(result|cancel))?)$/i;
 
 function readPositiveInteger(name: string, fallback: number) {
@@ -230,6 +238,32 @@ const officeProxyTimeoutMs = readPositiveInteger(
   "OFFICE_PROXY_TIMEOUT_MS",
   DEFAULT_OFFICE_PROXY_TIMEOUT_MS,
 );
+
+const unavailableOfficeCapabilities: SmartPlannerEngineCapabilities = {
+  localAvailable: true,
+  officeAvailable: false,
+  officeCpuCount: 0,
+  officeMemoryGb: 0,
+  allowedPresets: ["balanced"],
+  maxFileSizeMb: 1024,
+};
+
+async function resolveTrustedEngineCapabilities() {
+  if (!officeEngineEnabled) return unavailableOfficeCapabilities;
+
+  const timeout = AbortSignal.timeout(DEFAULT_OFFICE_HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(new URL("/api/v1/health", officeEngineUrl), {
+      cache: "no-store",
+      signal: timeout,
+    });
+    if (!response.ok) return unavailableOfficeCapabilities;
+    const health = parseOfficeEngineHealth(await response.json());
+    return createPlannerCapabilitiesFromOfficeHealth(health);
+  } catch {
+    return unavailableOfficeCapabilities;
+  }
+}
 const consumeRateLimit = createFixedWindowRateLimiter(
   rateLimitRequests,
   rateLimitWindowSeconds * 1000,
@@ -365,6 +399,7 @@ const server = createServer(async (request, response) => {
         return authorization.startsWith(prefix) && secureEqual(authorization.slice(prefix.length), judgeAccessToken);
       },
       consumeRateLimit,
+      resolveEngineCapabilities: resolveTrustedEngineCapabilities,
     });
     statusCode = webResponse.status;
     await forwardWebResponse(webResponse, response, requestId);

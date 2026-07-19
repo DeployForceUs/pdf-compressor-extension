@@ -26,7 +26,9 @@ nano deploy/kamatera/.env
 ./deploy/kamatera/deploy.sh
 ```
 
-Set only the real `DEMO_DOMAIN` in `.env`. The file is ignored by Git.
+Set the real `DEMO_DOMAIN` and explicit Engine CPU/RAM limits in `.env`. The
+file is ignored by Git. The defaults are conservative smoke-test limits, not a
+performance recommendation.
 
 ## Update
 

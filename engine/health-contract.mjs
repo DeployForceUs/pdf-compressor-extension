@@ -1,9 +1,13 @@
 export const API_VERSION = "1.0";
-export const SERVICE_VERSION = "0.2.0";
+export const SERVICE_VERSION = "0.3.0";
 
 import { ENGINE_LIMITS } from "./processing-config.mjs";
+import { detectRuntimeCapabilities } from "./runtime-capabilities.mjs";
 
-export function createHealthResponse({ processorVersion = null } = {}) {
+export function createHealthResponse({
+  processorVersion = null,
+  runtimeCapabilities = detectRuntimeCapabilities(),
+} = {}) {
   const processingAvailable = Boolean(processorVersion);
   return {
     status: "healthy",
@@ -30,5 +34,6 @@ export function createHealthResponse({ processorVersion = null } = {}) {
       retentionMinutes: ENGINE_LIMITS.retentionMinutes,
       maxConcurrentJobs: ENGINE_LIMITS.maxConcurrentJobs,
     },
+    runtime: runtimeCapabilities,
   };
 }

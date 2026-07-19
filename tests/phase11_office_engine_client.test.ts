@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createOfficeEngineClient, OfficeEngineClientError } from "../src/lib/office/office-engine-client";
+import {
+  createOfficeEngineClient,
+  createPlannerCapabilitiesFromOfficeHealth,
+  OfficeEngineClientError,
+} from "../src/lib/office/office-engine-client";
 
 const health = {
   status: "healthy",
   readiness: "ready",
   apiVersion: "1.0",
-  serviceVersion: "0.2.0",
+  serviceVersion: "0.3.0",
   engine: { kind: "office", processor: "ghostscript", processorVersion: "10", processingAvailable: true },
   capabilities: {
     allowedPresets: ["balanced"],
@@ -17,7 +21,40 @@ const health = {
     cancellation: true,
   },
   limits: { maxFileSizeMb: 1024, processingTimeoutSeconds: 300, retentionMinutes: 15, maxConcurrentJobs: 1 },
+  runtime: {
+    effectiveCpuCount: 1,
+    effectiveMemoryMb: 1536,
+    measurement: "effective_runtime_limits",
+    performanceCalibration: "not_calibrated",
+  },
 };
+
+test("maps trusted live health into content-blind Planner capabilities", () => {
+  assert.deepEqual(createPlannerCapabilitiesFromOfficeHealth(health), {
+    localAvailable: true,
+    officeAvailable: true,
+    officeCpuCount: 1,
+    officeMemoryGb: 1.5,
+    allowedPresets: ["balanced"],
+    maxFileSizeMb: 1024,
+  });
+
+  const legacyHealth = { ...health, runtime: undefined };
+  assert.equal(createPlannerCapabilitiesFromOfficeHealth(legacyHealth).officeAvailable, false);
+
+  const fractionalCpuHealth = {
+    ...health,
+    runtime: { ...health.runtime, effectiveCpuCount: 0.5 },
+  };
+  assert.deepEqual(createPlannerCapabilitiesFromOfficeHealth(fractionalCpuHealth), {
+    localAvailable: true,
+    officeAvailable: false,
+    officeCpuCount: 0,
+    officeMemoryGb: 1.5,
+    allowedPresets: ["balanced"],
+    maxFileSizeMb: 1024,
+  });
+});
 
 test("uses only the authenticated Gateway Office surface", async () => {
   const seen: Request[] = [];
@@ -74,5 +111,20 @@ test("does not expose upstream response bodies in errors", async () => {
   await assert.rejects(
     client.health(),
     (error: unknown) => error instanceof OfficeEngineClientError && error.code === "unauthorized" && !error.message.includes("must-not-surface"),
+  );
+});
+
+test("rejects malformed runtime capacity instead of showing or planning with it", async () => {
+  const client = createOfficeEngineClient({
+    baseUrl: "https://pdf.example.test",
+    accessToken: "token",
+    fetchImpl: async () => Response.json({
+      ...health,
+      runtime: { ...health.runtime, effectiveCpuCount: 0 },
+    }),
+  });
+  await assert.rejects(
+    client.health(),
+    (error: unknown) => error instanceof OfficeEngineClientError && error.code === "invalid_health_response",
   );
 });

@@ -1,4 +1,4 @@
-export const DEFAULT_OFFICE_ENGINE_URL = "https://pdf.aianswerline.live";
+export const DEFAULT_OFFICE_ENGINE_URL = "https://pdf-66-55-75-239.sslip.io";
 const STORAGE_KEY = "office-engine-connection-v1";
 
 export type OfficeEngineSettings = {

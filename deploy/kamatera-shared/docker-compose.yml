@@ -14,8 +14,8 @@ services:
     volumes:
       - ${ENGINE_JOBS_PATH:-/var/lib/pdf-office-engine/jobs}:/var/lib/pdf-office-engine/jobs
     init: true
-    mem_limit: 5g
-    cpus: 3.0
+    mem_limit: ${OFFICE_ENGINE_MEMORY_LIMIT:-1536m}
+    cpus: ${OFFICE_ENGINE_CPU_LIMIT:-1.0}
     pids_limit: 256
     read_only: true
     tmpfs:

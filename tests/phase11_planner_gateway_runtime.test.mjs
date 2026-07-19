@@ -77,7 +77,37 @@ async function startFakeOfficeEngine() {
     });
     if (request.url === "/api/v1/health") {
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ status: "healthy", readiness: "ready" }));
+      response.end(JSON.stringify({
+        status: "healthy",
+        readiness: "ready",
+        apiVersion: "1.0",
+        serviceVersion: "0.3.0",
+        engine: {
+          kind: "office",
+          processor: "ghostscript",
+          processorVersion: "10-test",
+          processingAvailable: true,
+        },
+        capabilities: {
+          allowedPresets: ["balanced"],
+          jobCreation: true,
+          jobStatus: true,
+          resultDownload: true,
+          cancellation: true,
+        },
+        limits: {
+          maxFileSizeMb: 1024,
+          processingTimeoutSeconds: 300,
+          retentionMinutes: 15,
+          maxConcurrentJobs: 1,
+        },
+        runtime: {
+          effectiveCpuCount: 1,
+          effectiveMemoryMb: 1536,
+          measurement: "effective_runtime_limits",
+          performanceCalibration: "not_calibrated",
+        },
+      }));
       return;
     }
     if (request.url === "/api/v1/compress") {
@@ -162,7 +192,11 @@ test("bundled Planner Gateway starts, protects plans, and logs no secrets", asyn
       headers: authorization,
     });
     assert.equal(officeHealth.status, 200);
-    assert.deepEqual(await officeHealth.json(), { status: "healthy", readiness: "ready" });
+    const officeHealthBody = await officeHealth.json();
+    assert.equal(officeHealthBody.status, "healthy");
+    assert.equal(officeHealthBody.runtime.effectiveCpuCount, 1);
+    assert.equal(officeHealthBody.runtime.effectiveMemoryMb, 1536);
+    assert.equal(officeHealthBody.runtime.performanceCalibration, "not_calibrated");
 
     const input = Buffer.from("%PDF-test-input");
     const createJob = await fetch("http://127.0.0.1:18790/api/v1/office/compress", {

@@ -531,6 +531,12 @@ button {
   font-size: 11px;
 }
 
+.office-card__summary-note {
+  color: rgba(225, 255, 242, 0.62);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .office-card__actions {
   display: grid;
   gap: 7px;

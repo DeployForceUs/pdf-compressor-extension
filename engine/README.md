@@ -15,6 +15,11 @@ to OpenAI; the Smart Planner and processing service are separate containers.
   smaller than the input;
 - original PDF returned after processing failure, timeout, invalid output, or
   size regression.
+- health reports conservative effective CPU/RAM capacity: the lower of host
+  capacity and Container cgroup limits;
+- health reports `performanceCalibration: not_calibrated` until the required
+  empirical fixture matrix exists. CPU/RAM disclosure is not an ETA or a
+  speedup claim.
 
 ```http
 GET  /api/v1/health
@@ -34,6 +39,11 @@ curl http://127.0.0.1:8787/api/v1/health
 The Compose binding is loopback-only. A hosted judge path requires an
 authenticated TLS reverse proxy; never bind the Engine directly to a public
 interface. The Engine itself does not receive an OpenAI API key.
+
+The deployed CPU and memory limits must be explicit Compose inputs. On a
+shared 2 GB smoke-test host, the committed conservative defaults are `1 vCPU`
+and `1536 MB`; larger hosts should set higher limits deliberately while leaving
+capacity for the Gateway, reverse proxy, Docker, and unrelated services.
 
 ## Verify
 

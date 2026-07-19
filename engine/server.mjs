@@ -49,6 +49,7 @@ export function createOfficeEngineServer({
   logger = defaultLogger,
   manager = new OfficeEngineJobManager(),
   processorVersion = detectGhostscriptVersion(),
+  runtimeCapabilities,
 } = {}) {
   return createNodeServer(async (request, response) => {
     const startedAt = performance.now();
@@ -81,7 +82,12 @@ export function createOfficeEngineServer({
           return;
         }
         statusCode = 200;
-        writeJson(response, statusCode, createHealthResponse({ processorVersion }), request.method !== "HEAD");
+        writeJson(
+          response,
+          statusCode,
+          createHealthResponse({ processorVersion, runtimeCapabilities }),
+          request.method !== "HEAD",
+        );
         return;
       }
 

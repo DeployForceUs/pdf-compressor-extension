@@ -107,4 +107,51 @@ assert.deepEqual(fallbackBody, {
 assert.equal(JSON.stringify(fallbackBody).includes("internal detail"), false);
 assert.equal(JSON.stringify(fallbackBody).includes("gateway-only-secret"), false);
 
+let trustedRequest: SmartPlannerRequest | undefined;
+const trustedCapabilities = {
+  localAvailable: true,
+  officeAvailable: true,
+  officeCpuCount: 1,
+  officeMemoryGb: 1.5,
+  allowedPresets: ["balanced"],
+  maxFileSizeMb: 1024,
+};
+await handleSmartPlannerGatewayRequest(
+  new Request("https://gateway.test/api/v1/plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  }),
+  {
+    ...baseConfig,
+    resolveEngineCapabilities: () => trustedCapabilities,
+    requestPlan: async (options) => {
+      trustedRequest = options.request as SmartPlannerRequest;
+      return {
+        kind: "fallback",
+        action: "use_existing_local_settings",
+        reason: "network_error",
+        errors: [],
+      };
+    },
+  },
+);
+assert.deepEqual(trustedRequest?.engineCapabilities, trustedCapabilities);
+
+const missingCapabilities = await handleSmartPlannerGatewayRequest(
+  new Request("https://gateway.test/api/v1/plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  }),
+  {
+    ...baseConfig,
+    resolveEngineCapabilities: () => {
+      throw new Error("health unavailable");
+    },
+  },
+);
+assert.equal(missingCapabilities.status, 503);
+assert.deepEqual(await missingCapabilities.json(), { error: "engine_capabilities_unavailable" });
+
 console.info("phase11 Smart Planner gateway security assertions passed");
