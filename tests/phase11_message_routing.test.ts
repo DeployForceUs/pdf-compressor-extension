@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isBackgroundRequest, isOffscreenRequest } from "../src/lib/message-routing";
 import { EXTENSION_BUILD } from "../src/lib/build-info";
+import { requireRuntimeMessageResponse } from "../src/lib/runtime-message-response";
 
 test("routes PDF persistence exclusively to the offscreen document", () => {
   const message = { type: "pdf:store", record: {} };
@@ -26,4 +27,12 @@ test("does not claim progress broadcasts or unknown messages", () => {
 
 test("uses an explicit user-visible build identifier", () => {
   assert.match(EXTENSION_BUILD, /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
+});
+
+test("rejects missing runtime responses before UI state reads response fields", () => {
+  assert.throws(
+    () => requireRuntimeMessageResponse("background:compression-health", null),
+    /No runtime response for background:compression-health/,
+  );
+  assert.deepEqual(requireRuntimeMessageResponse("health:check", { ok: true }), { ok: true });
 });
