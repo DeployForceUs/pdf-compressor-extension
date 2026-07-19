@@ -549,9 +549,8 @@ export type OfficeProcessingErrorEvent = {
 
 export type OfficeProcessingStartResponse = {
   ok: true;
-  recordId: string;
-  result: CompressionResultMetadata;
-  resultKind: "compressed" | "original";
+  accepted: true;
+  details: string;
 };
 
 export type OfficeProcessingCancelResponse = {

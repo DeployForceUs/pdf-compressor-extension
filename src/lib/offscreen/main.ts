@@ -51,6 +51,7 @@ import { tracePdfSplit } from "../pdf-split-trace";
 import { createOfficeEngineClient } from "../office/office-engine-client";
 import { createOfficeEngineSettingsStorage } from "../office/office-engine-settings";
 import { runOfficeProcessingJob } from "../office/office-processing-runtime";
+import { dispatchOfficeProcessing } from "../office/office-processing-dispatch";
 import { isOffscreenRequest } from "../message-routing";
 
 const COMPRESSION_TIMEOUT_MS = 30_000;
@@ -82,7 +83,7 @@ type OfficeRunState = {
   abortController: AbortController;
   timeoutId: ReturnType<typeof setTimeout> | null;
   jobId: string | null;
-  client: ReturnType<typeof createOfficeEngineClient>;
+  client: ReturnType<typeof createOfficeEngineClient> | null;
 };
 
 let workerInstance: Worker | null = null;
@@ -708,7 +709,7 @@ async function cancelOfficeProcessing() {
   }
   const { client, jobId, abortController } = activeOffice;
   abortController.abort();
-  if (jobId) await client.cancelJob(jobId).catch(() => undefined);
+  if (client && jobId) await client.cancelJob(jobId).catch(() => undefined);
   return { ok: true as const, cancelled: true, details: "Office Engine cancellation requested" };
 }
 
@@ -716,17 +717,19 @@ async function startOfficeProcessing() {
   if (activeOffice || activeCompression || activeSplit) {
     return { ok: false as const, error: "Another PDF operation is already in progress" };
   }
-  const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
-  if (!selected) return { ok: false as const, error: "No selected PDF record is available" };
-  const settings = await officeSettingsStorage.read();
-  if (!settings) return { ok: false as const, error: "Office Engine is not connected" };
-
-  const client = createOfficeEngineClient(settings);
   const abortController = new AbortController();
-  activeOffice = { abortController, timeoutId: null, jobId: null, client };
+  let client: ReturnType<typeof createOfficeEngineClient> | null = null;
+  activeOffice = { abortController, timeoutId: null, jobId: null, client: null };
   activeOffice.timeoutId = setTimeout(() => abortController.abort(), OFFICE_PROCESSING_TIMEOUT_MS);
 
   try {
+    const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
+    if (!selected) throw new Error("No selected PDF record is available");
+    const settings = await officeSettingsStorage.read();
+    if (!settings) throw new Error("Office Engine is not connected");
+
+    client = createOfficeEngineClient(settings);
+    if (activeOffice) activeOffice.client = client;
     const outcome = await runOfficeProcessingJob(selected, {
       client,
       signal: abortController.signal,
@@ -747,7 +750,7 @@ async function startOfficeProcessing() {
   } catch (error) {
     const cancelled = abortController.signal.aborted;
     const jobId = activeOffice?.jobId;
-    if (jobId) await client.cancelJob(jobId).catch(() => undefined);
+    if (client && jobId) await client.cancelJob(jobId).catch(() => undefined);
     const message = cancelled
       ? "Office processing was cancelled"
       : error instanceof Error ? error.message : "Office processing failed";
@@ -760,6 +763,21 @@ async function startOfficeProcessing() {
   } finally {
     resetOfficeState();
   }
+}
+
+function acceptOfficeProcessing() {
+  if (activeOffice || activeCompression || activeSplit) {
+    return { ok: false as const, error: "Another PDF operation is already in progress" };
+  }
+  return dispatchOfficeProcessing(
+    startOfficeProcessing,
+    (error) => {
+      const message = error instanceof Error ? error.message : "Office processing failed";
+      broadcast({ type: "office:error", code: "OFFICE_PROCESSING_FAILED", message });
+      logger.error("Unexpected detached Office processing failure", { message });
+      resetOfficeState();
+    },
+  );
 }
 
 async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { ok: false; error: string } | null> {
@@ -824,7 +842,7 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
     case "offscreen:split-result-delete":
       return deleteSplitState(message.recordId);
     case "offscreen:office-processing-start":
-      return startOfficeProcessing();
+      return acceptOfficeProcessing();
     case "offscreen:office-processing-cancel":
       return cancelOfficeProcessing();
     default:

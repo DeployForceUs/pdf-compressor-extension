@@ -109,6 +109,47 @@ Deliberate limitations and claims boundary:
   resized Kamatera VM and authenticated health confirms the expected effective
   capacity. Local contract status is **PASS** after the validation listed below.
 
+## Completed slice: detached Office processing start acknowledgement
+
+A graphical Chrome test on 2026-07-19 exposed a separate lifecycle regression.
+The selected 5.5 MB, 220-page PDF reached Office Engine processing and the
+server-side operation appeared to finish quickly, but the popup did not accept
+a final result. Instead, Chrome reported:
+
+```text
+A listener indicated an asynchronous response by returning true, but the
+message channel closed before a response was received
+```
+
+Status of that live acceptance attempt: **FAIL**. Disappearance of the Cancel
+button is not accepted as proof that the result was downloaded, validated, and
+persisted.
+
+Root cause and correction:
+
+- the popup start request was forwarded through the background service worker
+  to the offscreen document and its runtime-message response was kept open for
+  the entire upload, processing, polling, download, and validation lifecycle;
+- popup and service-worker message channels are not a durable transport for a
+  multi-minute operation and can close even though the persistent offscreen
+  operation continues;
+- the offscreen document now returns an immediate `accepted` acknowledgement
+  and runs the lifecycle independently;
+- progress, completion, and error continue to use the existing independent
+  `office:progress`, `office:result`, and `office:error` events;
+- active state is claimed before the first asynchronous preflight read so a
+  second start cannot enter during initialization, and cancellation tolerates
+  the short interval before the Office client exists.
+
+This changes message transport only. It does not change PDF privacy, processing
+parameters, retention, result validation, authentication, or the explicit
+upload-confirmation boundary. Local correction status is **PASS** after the
+validation listed below. Graphical Chrome re-test is **BLOCKED** until the new
+extension bundle is pulled, rebuilt, and reloaded. The live capacity disclosure
+remains separately **BLOCKED** because the screenshot still reports
+`Capacity: unavailable from this Engine version`, proving that the target Engine
+Image has not yet been rebuilt with the additive runtime-health contract.
+
 ## Completed slice: Smart Planner contract and API boundary
 
 Implemented:
@@ -262,6 +303,21 @@ than cgroup limits, host-only fallback, strict health parsing, legacy-Engine
 fail-closed behavior, trusted capability replacement, and Gateway resolver
 failure. No secret marker was found in the production extension bundle.
 
+The detached Office start-channel correction additionally passed on 2026-07-19:
+
+```text
+npm run check
+npm run engine:test                                      # 17/17 passed
+NPM_CONFIG_CACHE=/tmp/npm-gateway-validate npm run gateway:test
+npm run build
+npm run check:worker-boundary
+phase11 TypeScript suites (esbuild bundles + node --test) # 22/22 passed
+```
+
+The two additional tests prove that the start acknowledgement is returned
+before the Office task completes and that an unexpected detached rejection is
+reported without retroactively rejecting the accepted start request.
+
 Target Docker rebuild, live health verification, and graphical Chrome
 acceptance remain **BLOCKED** until this commit is deployed; no target result is
 claimed by the local validation above.
@@ -300,17 +356,21 @@ required numeric policy. This validates billing, secret loading, authorization,
 the Responses API boundary, Structured Output parsing, and deterministic
 post-model policy enforcement without claiming that processing is approved.
 
-1. Rebuild Engine and Gateway Images on the target VM, confirm authenticated
+1. Pull and rebuild the production Extension, reload the unpacked MV3 bundle,
+   repeat the confirmed 220-page Office run, and verify progress, result
+   download, local validation, persistence, and the absence of a runtime-message
+   channel error.
+2. Rebuild Engine and Gateway Images on the target VM, confirm authenticated
    health reports the intended effective capacity, and record `PASS` or `FAIL`.
-2. On the temporary test configuration, set explicit Container limits that
+3. On the temporary test configuration, set explicit Container limits that
    leave host reserve, then repeat the 220-page roundtrip and record duration as
    an observed configuration-specific result, not a universal benchmark.
-3. Complete the required representative benchmark matrix before adding any ETA,
+4. Complete the required representative benchmark matrix before adding any ETA,
    speedup, or Local-vs-Office comparison claim.
-4. Obtain contest-project access to `gpt-5.6`, then repeat the content-free
+5. Obtain contest-project access to `gpt-5.6`, then repeat the content-free
    Planner fixture as a final compatibility check. Development smoke tests use
    the deployment-selected lower-cost model.
-5. Record deterministic MuPDF page-classification, DPI-estimation, and
+6. Record deterministic MuPDF page-classification, DPI-estimation, and
    page-size-estimation rules, then implement the structural observation
    adapter without text extraction or page rendering.
 

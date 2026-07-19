@@ -649,13 +649,9 @@ function Popup() {
         type: "background:office-processing-start",
       });
       if (!response.ok) throw new Error(monetizationErrorMessage(t, response));
-      applyCompressionResult(response.result);
-      setOfficeProcessing({
-        status: "complete",
-        progress: 100,
-        message: t("office.processingComplete"),
-        resultKind: response.resultKind,
-      });
+      // Completion arrives as a separate office:result event from the
+      // persistent offscreen document. Do not hold a popup runtime-message
+      // channel open for the full server processing lifecycle.
     } catch (error) {
       setOfficeProcessing({
         status: "error",
