@@ -39,9 +39,6 @@ import type {
   SplitProgressEvent,
   SplitResultMetadata,
   SplitStartResponse,
-  PdfDeleteResponse,
-  PdfReadResponse,
-  PdfStoreResponse,
   StorageCompareResponse,
   StorageReadResponse,
   StorageWriteResponse,
@@ -58,6 +55,7 @@ import { sendMessage } from "../../lib/messaging";
 import { tracePdfSplit } from "../../lib/pdf-split-trace";
 import { COMPRESSED_PDF_RECORD_ID } from "../../lib/pdf-records";
 import { readCompressionResult } from "../../lib/storage/pdf-compression-db";
+import { deletePdfRecord, readPdfRecord, writePdfRecord } from "../../lib/storage/pdf-records-db";
 import {
   buildSplitResultMetadataFromBundle,
   buildSplitResultMetadataFromLegacyRecord,
@@ -210,7 +208,7 @@ function isCompressionHealthResponse(message: unknown): message is CompressionHe
   return typeof message === "object" && message !== null && (message as CompressionHealthResponse).engine === "mupdf";
 }
 
-function formatPdfStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string, error: string) {
+function formatPdfStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string) {
   if (status === "idle") {
     return t("pdfInput.idle");
   }
@@ -223,7 +221,7 @@ function formatPdfStatus(t: (key: string, options?: Record<string, unknown>) => 
     return t("pdfInput.ready");
   }
 
-  return error || t("pdfInput.invalidPdf");
+  return t("pdfInput.invalidPdf");
 }
 
 function formatCompressionStatus(
@@ -1218,8 +1216,6 @@ function Popup() {
     const recordId = SELECTED_PDF_RECORD_ID;
 
     try {
-      await ensureOffscreenDocument();
-
       const { storeResponse, readBack } = await persistSelectedPdfRecord(
         {
           id: recordId,
@@ -1231,16 +1227,23 @@ function Popup() {
           data: byteArray,
         },
         {
-          store: (record) =>
-            sendMessage<PdfStoreResponse | { ok: false; error: string }>({
-              type: "pdf:store",
-              record,
-            }),
-          read: (recordId) =>
-            sendMessage<PdfReadResponse>({
-              type: "pdf:read",
+          store: async (record) => {
+            const stored = await writePdfRecord(record);
+            return {
+              ok: true,
+              recordId: stored.id,
+              byteLength: stored.data.length,
+            };
+          },
+          read: async (recordId) => {
+            const record = await readPdfRecord(recordId);
+            return {
+              ok: true,
               recordId,
-            }),
+              record,
+              byteLength: record?.data.length ?? 0,
+            };
+          },
         },
       );
 
@@ -1298,10 +1301,7 @@ function Popup() {
       });
     } catch (error) {
       try {
-        await sendMessage<PdfDeleteResponse>({
-          type: "pdf:delete",
-          recordId,
-        });
+        await deletePdfRecord(recordId);
       } catch {
         // Best effort cleanup only.
       }
@@ -1319,11 +1319,13 @@ function Popup() {
 
   async function restoreSelectedPdf() {
     try {
-      await ensureOffscreenDocument();
-      const readBack = await sendMessage<PdfReadResponse>({
-        type: "pdf:read",
+      const restoredRecord = await readPdfRecord(SELECTED_PDF_RECORD_ID);
+      const readBack = {
+        ok: true as const,
         recordId: SELECTED_PDF_RECORD_ID,
-      });
+        record: restoredRecord,
+        byteLength: restoredRecord?.data.length ?? 0,
+      };
 
       console.info("[pdf-compressor] PDF restore debug", {
         requestedRecordId: SELECTED_PDF_RECORD_ID,
@@ -1383,10 +1385,7 @@ function Popup() {
     const recordId = pdf.recordId ?? SELECTED_PDF_RECORD_ID;
 
     try {
-      await sendMessage<PdfDeleteResponse>({
-        type: "pdf:delete",
-        recordId,
-      });
+      await deletePdfRecord(recordId);
     } catch {
       // Best effort cleanup only.
     }
@@ -1565,7 +1564,7 @@ function Popup() {
       ? `${formatBytes(storage.summary.savedBytes, locale)} / ${formatBytes(storage.summary.readBytes, locale)}`
       : "";
 
-  const pdfStatusLabel = formatPdfStatus(t, pdf.status, pdf.error);
+  const pdfStatusLabel = formatPdfStatus(t, pdf.status);
   const pdfDisplay = buildSelectedPdfDisplay(pdf, locale, t);
   const pdfHasFile = pdf.fileName !== null;
   const compressionStatusLabel = formatCompressionStatus(t, compression.status, compression.error);
