@@ -109,7 +109,7 @@ Deliberate limitations and claims boundary:
   resized Kamatera VM and authenticated health confirms the expected effective
   capacity. Local contract status is **PASS** after the validation listed below.
 
-## Completed slice: detached Office processing start acknowledgement
+## Completed slice: channel-independent Office processing start
 
 A graphical Chrome test on 2026-07-19 exposed a separate lifecycle regression.
 The selected 5.5 MB, 220-page PDF reached Office Engine processing and the
@@ -125,7 +125,16 @@ Status of that live acceptance attempt: **FAIL**. Disappearance of the Cancel
 button is not accepted as proof that the result was downloaded, validated, and
 persisted.
 
-Root cause and correction:
+The first correction detached the long-running task inside the offscreen
+document, but a second graphical attempt showed that this was not sufficient.
+The popup still awaited the outer popup-to-background response promise. That
+promise rejected with the same Chrome channel-closed error, and the popup
+incorrectly presented the transport failure as a processing failure. Server
+logs for that attempt contained only authenticated `office_health`; there was
+no `office_compress` request and no job. Status of the second graphical attempt:
+**FAIL**.
+
+Root causes and final correction:
 
 - the popup start request was forwarded through the background service worker
   to the offscreen document and its runtime-message response was kept open for
@@ -135,8 +144,15 @@ Root cause and correction:
   operation continues;
 - the offscreen document now returns an immediate `accepted` acknowledgement
   and runs the lifecycle independently;
+- the popup now dispatches the start request without awaiting the ephemeral
+  runtime response channel and deliberately ignores closure of that channel;
 - progress, completion, and error continue to use the existing independent
   `office:progress`, `office:result`, and `office:error` events;
+- an explicit 15-second start watchdog reports that the Engine did not confirm
+  startup if none of those lifecycle events arrives, so a genuine routing
+  failure cannot leave the interface indefinitely busy;
+- an explicit authorization rejection is still shown immediately whenever the
+  background response is delivered successfully;
 - active state is claimed before the first asynchronous preflight read so a
   second start cannot enter during initialization, and cancellation tolerates
   the short interval before the Office client exists.
@@ -144,10 +160,11 @@ Root cause and correction:
 This changes message transport only. It does not change PDF privacy, processing
 parameters, retention, result validation, authentication, or the explicit
 upload-confirmation boundary. Local correction status is **PASS** after the
-validation listed below. Graphical Chrome re-test is **BLOCKED** until the new
-extension bundle is pulled, rebuilt, and reloaded. The live capacity disclosure
-remains separately **BLOCKED** because the screenshot still reports
-`Capacity: unavailable from this Engine version`, proving that the target Engine
+validation listed below. Graphical Chrome re-test of the final correction is
+**BLOCKED** until the new extension bundle is pulled, rebuilt, and reloaded.
+The live capacity disclosure remains separately **BLOCKED** because the
+screenshot still reports `Capacity: unavailable from this Engine version`,
+proving that the target Engine
 Image has not yet been rebuilt with the additive runtime-health contract.
 
 ## Completed slice: Smart Planner contract and API boundary
@@ -311,12 +328,27 @@ npm run engine:test                                      # 17/17 passed
 NPM_CONFIG_CACHE=/tmp/npm-gateway-validate npm run gateway:test
 npm run build
 npm run check:worker-boundary
-phase11 TypeScript suites (esbuild bundles + node --test) # 22/22 passed
+phase11 TypeScript suites (esbuild bundles + node --test) # 24/24 passed
 ```
 
-The two additional tests prove that the start acknowledgement is returned
-before the Office task completes and that an unexpected detached rejection is
-reported without retroactively rejecting the accepted start request.
+The four dispatch tests prove that the offscreen acknowledgement is returned
+before the Office task completes, an unexpected detached rejection is reported
+without retroactively rejecting the accepted start request, popup dispatch does
+not wait for its background response, and response-channel closure is ignored.
+
+Independent live Engine evidence on the resized Kamatera host is **PASS** for
+the tested fixture and configuration only:
+
+```text
+Input:  6,398,446 bytes, 220 pages
+Output: 4,303,869 bytes, 220 pages
+Result: compressed (validated_smaller_output)
+Time:   22.546 seconds end to end
+```
+
+This proves the Engine can process, validate, and return the selected fixture;
+it is not a calibrated performance claim and does not convert the graphical
+extension acceptance status to PASS.
 
 Target Docker rebuild, live health verification, and graphical Chrome
 acceptance remain **BLOCKED** until this commit is deployed; no target result is

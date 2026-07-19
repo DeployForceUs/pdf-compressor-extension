@@ -81,10 +81,12 @@ import {
   createOfficeEngineSettingsStorage,
   DEFAULT_OFFICE_ENGINE_URL,
 } from "../../lib/office/office-engine-settings";
+import { dispatchOfficeStartRequest } from "../../lib/office/office-processing-dispatch";
 import "../../styles/popup.css";
 
 const compressionQualityStorage = createCompressionQualityStorage(browser.storage.local);
 const officeEngineSettingsStorage = createOfficeEngineSettingsStorage(browser.storage.local);
+const OFFICE_START_WATCHDOG_MS = 15_000;
 
 function bytesEqual(left: ArrayBuffer, right: ArrayBuffer) {
   if (left.byteLength !== right.byteLength) {
@@ -341,6 +343,7 @@ function Popup() {
   const splitStartRef = useRef<HTMLButtonElement>(null);
   const compressionFocusAfterCancelRef = useRef(false);
   const splitFocusAfterCancelRef = useRef(false);
+  const officeStartWatchdogRef = useRef<number | null>(null);
   const [licenseToken, setLicenseToken] = useState("");
   const [licenseState, setLicenseState] = useState<LicenseStateResponse | null>(null);
   const [licenseBusy, setLicenseBusy] = useState(false);
@@ -425,6 +428,8 @@ function Popup() {
     void restoreSplitResult();
   }, []);
 
+  useEffect(() => () => clearOfficeStartWatchdog(), []);
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
@@ -491,6 +496,7 @@ function Popup() {
       }
 
       if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:progress") {
+        clearOfficeStartWatchdog();
         const event = message as OfficeProcessingProgressEvent;
         setOfficeProcessing((current) => ({
           ...current,
@@ -502,6 +508,7 @@ function Popup() {
       }
 
       if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:result") {
+        clearOfficeStartWatchdog();
         const event = message as OfficeProcessingResultEvent;
         applyCompressionResult(event.result);
         setOfficeProcessing({
@@ -514,6 +521,7 @@ function Popup() {
       }
 
       if (typeof message === "object" && message !== null && (message as { type?: string }).type === "office:error") {
+        clearOfficeStartWatchdog();
         const event = message as OfficeProcessingErrorEvent;
         setOfficeProcessing({
           status: event.code === "CANCELLED" ? "cancelled" : "error",
@@ -633,6 +641,7 @@ function Popup() {
   }
 
   async function disconnectOfficeEngine() {
+    clearOfficeStartWatchdog();
     await officeEngineSettingsStorage.clear().catch(() => undefined);
     setOfficeHealth(null);
     setOfficeToken("");
@@ -640,31 +649,48 @@ function Popup() {
     setOfficeConfirmed(false);
   }
 
-  async function startOfficeProcessing() {
-    if (!pdf.selected || !officeHealth || !officeConfirmed) return;
-    setOfficeProcessing({ status: "running", progress: 0, message: t("office.starting"), resultKind: null });
-    setOfficeError("");
-    try {
-      const response = await sendMessage<OfficeProcessingStartResponse | BackgroundErrorResponse>({
-        type: "background:office-processing-start",
-      });
-      if (!response.ok) throw new Error(monetizationErrorMessage(t, response));
-      // Completion arrives as a separate office:result event from the
-      // persistent offscreen document. Do not hold a popup runtime-message
-      // channel open for the full server processing lifecycle.
-    } catch (error) {
-      setOfficeProcessing({
-        status: "error",
-        progress: 0,
-        message: errorMessage(error, t("office.processingFailed")),
-        resultKind: null,
-      });
-    } finally {
-      await refreshMonetization();
+  function clearOfficeStartWatchdog() {
+    if (officeStartWatchdogRef.current !== null) {
+      window.clearTimeout(officeStartWatchdogRef.current);
+      officeStartWatchdogRef.current = null;
     }
   }
 
+  function startOfficeProcessing() {
+    if (!pdf.selected || !officeHealth || !officeConfirmed) return;
+    clearOfficeStartWatchdog();
+    setOfficeProcessing({ status: "running", progress: 0, message: t("office.starting"), resultKind: null });
+    setOfficeError("");
+    officeStartWatchdogRef.current = window.setTimeout(() => {
+      officeStartWatchdogRef.current = null;
+      setOfficeProcessing({
+        status: "error",
+        progress: 0,
+        message: t("office.startNotConfirmed"),
+        resultKind: null,
+      });
+    }, OFFICE_START_WATCHDOG_MS);
+
+    dispatchOfficeStartRequest(
+      () => sendMessage<OfficeProcessingStartResponse | BackgroundErrorResponse>({
+        type: "background:office-processing-start",
+      }),
+      (response) => {
+        if (response.ok) return;
+        clearOfficeStartWatchdog();
+        setOfficeProcessing({
+          status: "error",
+          progress: 0,
+          message: monetizationErrorMessage(t, response),
+          resultKind: null,
+        });
+      },
+    );
+    void refreshMonetization();
+  }
+
   async function cancelOfficeProcessing() {
+    clearOfficeStartWatchdog();
     setOfficeProcessing((current) => ({ ...current, status: "cancelling", message: t("office.cancelling") }));
     await sendMessage<OfficeProcessingCancelResponse>({ type: "background:office-processing-cancel" }).catch(() => undefined);
   }

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { dispatchOfficeProcessing } from "../src/lib/office/office-processing-dispatch";
+import {
+  dispatchOfficeProcessing,
+  dispatchOfficeStartRequest,
+} from "../src/lib/office/office-processing-dispatch";
 
 test("acknowledges Office processing without holding the runtime message channel", async () => {
   let finish!: () => void;
@@ -40,4 +43,33 @@ test("reports an unexpected detached failure without rejecting the start respons
   assert.equal(response.accepted, true);
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(String(captured), /detached failure/);
+});
+
+test("popup dispatch does not wait for the background response channel", () => {
+  let resolve!: (value: { ok: true }) => void;
+  const pending = new Promise<{ ok: true }>((done) => {
+    resolve = done;
+  });
+  let responseReceived = false;
+
+  dispatchOfficeStartRequest(
+    () => pending,
+    () => {
+      responseReceived = true;
+    },
+  );
+
+  assert.equal(responseReceived, false);
+  resolve({ ok: true });
+});
+
+test("popup dispatch ignores a closed runtime response channel", async () => {
+  dispatchOfficeStartRequest(
+    async () => {
+      throw new Error("message channel closed");
+    },
+    () => assert.fail("a rejected transport must not produce a response"),
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
 });

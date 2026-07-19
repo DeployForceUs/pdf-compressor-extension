@@ -151,6 +151,7 @@
     "cancel": "Cancel",
     "download": "Download result",
     "starting": "Starting Office Engine processing…",
+    "startNotConfirmed": "Office Engine did not confirm that processing started. Recheck the connection and try again.",
     "cancelling": "Cancelling Office Engine processing…",
     "processingComplete": "Office Engine processing complete",
     "processingFailed": "Office Engine processing failed"
