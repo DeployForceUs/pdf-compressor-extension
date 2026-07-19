@@ -9,6 +9,7 @@ import type {
   BackgroundCompressionStartRequest,
   BackgroundRequest,
   BackgroundResponse,
+  OffscreenHealthResponse,
   OffscreenSplitCancelRequest,
   OffscreenSplitRequest,
   OffscreenSplitResultDeleteRequest,
@@ -19,6 +20,7 @@ import type {
   SplitResultReadRequest,
 } from "../lib/messaging";
 import { normalizeSplitOutputMode } from "../lib/messaging";
+import { requireRuntimeMessageResponse } from "../lib/runtime-message-response";
 import { isBackgroundRequest } from "../lib/message-routing";
 import { tracePdfSplit } from "../lib/pdf-split-trace";
 import { createUsageLimitService } from "../lib/monetization/limits";
@@ -36,7 +38,15 @@ import {
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
+const OFFSCREEN_READY_ATTEMPTS = 20;
+const OFFSCREEN_READY_DELAY_MS = 50;
 let offscreenCreationPromise: Promise<{ supported: boolean; created: boolean }> | null = null;
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 async function hasOffscreenDocument() {
   const offscreen = browser as typeof browser & {
@@ -71,8 +81,10 @@ async function ensureOffscreenDocument() {
 
   offscreenCreationPromise = (async () => {
     try {
+      let created = false;
       if (await hasOffscreenDocument()) {
-        return { supported: true, created: false };
+        await waitForOffscreenReady();
+        return { supported: true, created };
       }
 
       await createDocument({
@@ -81,13 +93,33 @@ async function ensureOffscreenDocument() {
         justification: "Provide local offscreen storage and compression workflows",
       });
 
-      return { supported: true, created: true };
+      created = true;
+      await waitForOffscreenReady();
+      return { supported: true, created };
     } finally {
       offscreenCreationPromise = null;
     }
   })();
 
   return offscreenCreationPromise;
+}
+
+async function waitForOffscreenReady() {
+  for (let attempt = 1; attempt <= OFFSCREEN_READY_ATTEMPTS; attempt += 1) {
+    const response = await browser.runtime.sendMessage({ type: "offscreen:health" }).catch(() => null);
+    if (
+      response &&
+      typeof response === "object" &&
+      (response as Partial<OffscreenHealthResponse>).ok === true &&
+      (response as Partial<OffscreenHealthResponse>).source === "offscreen"
+    ) {
+      return;
+    }
+
+    await delay(OFFSCREEN_READY_DELAY_MS);
+  }
+
+  throw new Error("Offscreen document did not become ready");
 }
 
 async function closeOffscreenDocument() {
@@ -110,7 +142,11 @@ async function closeOffscreenDocument() {
 }
 
 async function forwardToOffscreen<TResponse>(message: object): Promise<TResponse> {
-  return (await browser.runtime.sendMessage(message)) as TResponse;
+  const messageType = "type" in message && typeof message.type === "string" ? message.type : "offscreen message";
+  return requireRuntimeMessageResponse<TResponse>(
+    messageType,
+    await browser.runtime.sendMessage(message),
+  );
 }
 
 export default defineBackground(() => {
