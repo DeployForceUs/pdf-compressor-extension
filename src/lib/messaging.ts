@@ -5,6 +5,7 @@ import type { SplitOutputMode } from "./split-output-mode";
 import type { UsageSnapshot } from "./monetization/limits";
 import type { STAGE_7_MVP_POLICY } from "./monetization/policy";
 import type { LicenseCheckErrorCode } from "./monetization/license";
+import { requireRuntimeMessageResponse } from "./runtime-message-response";
 
 export {
   SPLIT_OUTPUT_MODES,
@@ -52,7 +53,6 @@ export type PdfReadRequest = {
 
 export type PdfDeleteRequest = {
   type: "pdf:delete";
-  recordId: string;
 };
 
 export type PdfRecord = {
@@ -723,6 +723,11 @@ export type BackgroundResponse =
   | OfficeProcessingCancelResponse
   | BackgroundErrorResponse;
 
+export { requireRuntimeMessageResponse } from "./runtime-message-response";
+
 export async function sendMessage<TResponse>(message: BackgroundRequest | OffscreenRequest): Promise<TResponse> {
-  return (await browser.runtime.sendMessage(message)) as TResponse;
+  return requireRuntimeMessageResponse<TResponse>(
+    message.type,
+    await browser.runtime.sendMessage(message),
+  );
 }
