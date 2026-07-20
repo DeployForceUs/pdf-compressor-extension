@@ -53,6 +53,7 @@ export type PdfReadRequest = {
 
 export type PdfDeleteRequest = {
   type: "pdf:delete";
+  recordId: string;
 };
 
 export type PdfRecord = {

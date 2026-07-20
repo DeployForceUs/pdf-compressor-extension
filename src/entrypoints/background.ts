@@ -38,8 +38,10 @@ import {
 
 const OFFSCREEN_URL = browser.runtime.getURL("offscreen.html");
 const OFFSCREEN_REASON = "BLOBS";
-const OFFSCREEN_READY_ATTEMPTS = 20;
-const OFFSCREEN_READY_DELAY_MS = 50;
+// Offscreen startup can take several seconds immediately after an
+// extension reload while Chrome evaluates and initializes the document bundle.
+const OFFSCREEN_READY_ATTEMPTS = 100;
+const OFFSCREEN_READY_DELAY_MS = 100;
 let offscreenCreationPromise: Promise<{ supported: boolean; created: boolean }> | null = null;
 
 function delay(ms: number) {
