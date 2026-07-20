@@ -50,10 +50,33 @@ function requestType(message: unknown): string | null {
 
 export function isBackgroundRequest(message: unknown): message is BackgroundRequest {
   const type = requestType(message);
-  return type !== null && BACKGROUND_REQUEST_TYPES.has(type as BackgroundRequest["type"]);
+  const accepted = type !== null && BACKGROUND_REQUEST_TYPES.has(type as BackgroundRequest["type"]);
+
+  if (type === "background:office-processing-start") {
+    console.info("[offscreen-lifecycle 1/3] Background routing received Office Engine start", {
+      accepted,
+      type,
+    });
+  }
+
+  return accepted;
 }
 
 export function isOffscreenRequest(message: unknown): message is OffscreenRequest {
   const type = requestType(message);
-  return type !== null && OFFSCREEN_REQUEST_TYPES.has(type as OffscreenRequest["type"]);
+  const accepted = type !== null && OFFSCREEN_REQUEST_TYPES.has(type as OffscreenRequest["type"]);
+
+  if (type === "offscreen:health") {
+    console.info("[offscreen-lifecycle 2/3] Offscreen routing received health probe", {
+      accepted,
+      type,
+    });
+  } else if (type === "offscreen:office-processing-start") {
+    console.info("[offscreen-lifecycle 3/3] Offscreen routing received Office Engine start", {
+      accepted,
+      type,
+    });
+  }
+
+  return accepted;
 }
