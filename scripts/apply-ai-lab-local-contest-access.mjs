@@ -94,3 +94,4 @@ if (!popup.includes("data-ai-lab-contest-access")) {
 }
 
 console.log("AI Lab contest access and Office host permission embedded");
+await import("./verify-ai-lab-build.mjs");
