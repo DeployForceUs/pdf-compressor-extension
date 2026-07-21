@@ -11,6 +11,11 @@ import {
   SMART_PLANNER_BACKGROUND_PREPARE,
   type SmartPlannerPrepareResponse,
 } from "../../lib/ai/smart-planner-runtime-message-contract";
+import {
+  readLocalRuntimeBenchmark,
+  runLocalRuntimeBenchmark,
+  type LocalRuntimeBenchmarkResult,
+} from "../../lib/local/local-runtime-benchmark";
 import { readLocalRuntimeCapability, type LocalRuntimeCapability } from "../../lib/local/local-runtime-capability";
 import { createOfficeEngineClient } from "../../lib/office/office-engine-client";
 import "../../styles/smart-planner-card.css";
@@ -35,6 +40,13 @@ type LocalCapabilityState =
   | { status: "ready"; capability: LocalRuntimeCapability }
   | { status: "unavailable" };
 
+type BenchmarkState =
+  | { status: "loading" }
+  | { status: "not-run" }
+  | { status: "running" }
+  | { status: "ready"; result: LocalRuntimeBenchmarkResult }
+  | { status: "error" };
+
 type Props = {
   pdfReady: boolean;
   officeAvailable: boolean;
@@ -50,6 +62,10 @@ function gigabytes(value: number) {
   return value.toFixed(1);
 }
 
+function benchmarkTierLabel(result: LocalRuntimeBenchmarkResult) {
+  return result.tier.charAt(0).toUpperCase() + result.tier.slice(1);
+}
+
 export function SmartPlannerPreparationCard({
   pdfReady,
   officeAvailable,
@@ -58,6 +74,7 @@ export function SmartPlannerPreparationCard({
 }: Props) {
   const [state, setState] = useState<PlannerUiState>({ status: "idle" });
   const [localCapability, setLocalCapability] = useState<LocalCapabilityState>({ status: "loading" });
+  const [benchmark, setBenchmark] = useState<BenchmarkState>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
@@ -70,10 +87,30 @@ export function SmartPlannerPreparationCard({
         if (active) setLocalCapability({ status: "unavailable" });
       });
 
+    void readLocalRuntimeBenchmark()
+      .then((result) => {
+        if (active) setBenchmark(result ? { status: "ready", result } : { status: "not-run" });
+      })
+      .catch(() => {
+        if (active) setBenchmark({ status: "error" });
+      });
+
     return () => {
       active = false;
     };
   }, []);
+
+  async function benchmarkLocalRuntime() {
+    if (benchmark.status === "running") return;
+    setBenchmark({ status: "running" });
+
+    try {
+      const result = await runLocalRuntimeBenchmark();
+      setBenchmark({ status: "ready", result });
+    } catch {
+      setBenchmark({ status: "error" });
+    }
+  }
 
   async function analyze() {
     if (!pdfReady || state.status === "analyzing") return;
@@ -201,7 +238,23 @@ export function SmartPlannerPreparationCard({
           <span>
             {localCapability.capability.logicalCpuCount} logical CPUs · {gigabytes(localCapability.capability.availableMemoryGb)} GB available of {gigabytes(localCapability.capability.totalMemoryGb)} GB RAM
           </span>
-          <small>Hardware is detected locally. Benchmark calibration has not run yet.</small>
+          {benchmark.status === "ready" ? (
+            <>
+              <span>Benchmark: {benchmarkTierLabel(benchmark.result)} · {Math.round(benchmark.result.operationsPerMs).toLocaleString()} ops/ms</span>
+              <small>Calibration is stored on this browser profile and does not affect routing yet.</small>
+            </>
+          ) : benchmark.status === "error" ? (
+            <small>Benchmark calibration failed. Hardware detection remains available.</small>
+          ) : (
+            <small>Hardware is detected locally. Benchmark calibration has not run yet.</small>
+          )}
+          <button
+            type="button"
+            onClick={() => void benchmarkLocalRuntime()}
+            disabled={benchmark.status === "running"}
+          >
+            {benchmark.status === "running" ? "Benchmarking…" : benchmark.status === "ready" ? "Run benchmark again" : "Benchmark local runtime"}
+          </button>
         </div>
       ) : localCapability.status === "unavailable" ? (
         <p className="planner-card__note">Local hardware details are unavailable in this browser.</p>
