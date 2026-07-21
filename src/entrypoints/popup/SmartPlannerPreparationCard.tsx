@@ -57,7 +57,7 @@ export function SmartPlannerPreparationCard({
         requestId: crypto.randomUUID(),
         userGoal: {
           deliveryTarget: "email_20mb",
-          qualityIntent: "screen",
+          qualityIntent: "print",
           speedPreference: "balanced",
           splitAllowed: true,
         },

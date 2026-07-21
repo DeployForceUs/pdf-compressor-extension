@@ -11,7 +11,7 @@ const request: SmartPlannerRequest = {
   requestId: "planner-request-0001",
   userGoal: {
     deliveryTarget: "email_20mb",
-    qualityIntent: "screen",
+    qualityIntent: "print",
     speedPreference: "balanced",
     splitAllowed: true,
   },

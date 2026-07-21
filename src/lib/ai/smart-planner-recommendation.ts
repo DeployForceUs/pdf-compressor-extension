@@ -10,7 +10,7 @@ import {
 
 export const SMART_PLANNER_REQUEST_POLICY = {
   deliveryTargets: ["email_20mb"],
-  qualityIntents: ["screen"],
+  qualityIntents: ["print"],
   speedPreferences: ["balanced"],
   allowInstruction: false,
 } as const satisfies SmartPlannerRequestPolicy;

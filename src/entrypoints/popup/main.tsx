@@ -1887,6 +1887,8 @@ function Popup() {
               pdfReady={Boolean(pdf.selected)}
 
               officeAvailable={Boolean(officeHealth)}
+              plannerBaseUrl={officeUrl}
+              plannerAccessToken={officeToken}
 
             />
 
