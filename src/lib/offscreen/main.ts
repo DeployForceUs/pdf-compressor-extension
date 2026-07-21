@@ -31,6 +31,7 @@ import type {
   OffscreenCompressionResultDeleteRequest,
   OffscreenCompressionResultReadRequest,
   OffscreenCompressionStartRequest,
+  OffscreenOfficeProcessingStartRequest,
   OffscreenRequest,
   OffscreenResponse,
   PdfRecord,
@@ -49,7 +50,6 @@ import type { CompressionWorkerApi } from "./worker";
 import { normalizeSplitOutputMode } from "../messaging";
 import { tracePdfSplit } from "../pdf-split-trace";
 import { createOfficeEngineClient } from "../office/office-engine-client";
-import { createOfficeEngineSettingsStorage } from "../office/office-engine-settings";
 import { runOfficeProcessingJob } from "../office/office-processing-runtime";
 import { dispatchOfficeProcessing } from "../office/office-processing-dispatch";
 import { isOffscreenRequest } from "../message-routing";
@@ -91,7 +91,6 @@ let workerApi: CompressionWorkerApi | null = null;
 let activeCompression: CompressionRunState | null = null;
 let activeSplit: SplitRunState | null = null;
 let activeOffice: OfficeRunState | null = null;
-const officeSettingsStorage = createOfficeEngineSettingsStorage(browser.storage.local);
 
 type DatabaseHandle = {
   db: IDBDatabase;
@@ -713,7 +712,9 @@ async function cancelOfficeProcessing() {
   return { ok: true as const, cancelled: true, details: "Office Engine cancellation requested" };
 }
 
-async function startOfficeProcessing() {
+async function startOfficeProcessing(
+  settings: Pick<OffscreenOfficeProcessingStartRequest, "baseUrl" | "accessToken">,
+) {
   if (activeOffice || activeCompression || activeSplit) {
     return { ok: false as const, error: "Another PDF operation is already in progress" };
   }
@@ -725,8 +726,6 @@ async function startOfficeProcessing() {
   try {
     const selected = (await readPdf(SELECTED_PDF_RECORD_ID)).record;
     if (!selected) throw new Error("No selected PDF record is available");
-    const settings = await officeSettingsStorage.read();
-    if (!settings) throw new Error("Office Engine is not connected");
 
     client = createOfficeEngineClient(settings);
     if (activeOffice) activeOffice.client = client;
@@ -765,12 +764,12 @@ async function startOfficeProcessing() {
   }
 }
 
-function acceptOfficeProcessing() {
+function acceptOfficeProcessing(message: OffscreenOfficeProcessingStartRequest) {
   if (activeOffice || activeCompression || activeSplit) {
     return { ok: false as const, error: "Another PDF operation is already in progress" };
   }
   return dispatchOfficeProcessing(
-    startOfficeProcessing,
+    () => startOfficeProcessing(message),
     (error) => {
       const message = error instanceof Error ? error.message : "Office processing failed";
       broadcast({ type: "office:error", code: "OFFICE_PROCESSING_FAILED", message });
@@ -842,7 +841,7 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
     case "offscreen:split-result-delete":
       return deleteSplitState(message.recordId);
     case "offscreen:office-processing-start":
-      return acceptOfficeProcessing();
+      return acceptOfficeProcessing(message);
     case "offscreen:office-processing-cancel":
       return cancelOfficeProcessing();
     default:

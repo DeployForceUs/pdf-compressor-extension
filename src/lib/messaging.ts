@@ -523,6 +523,8 @@ export type OfficeProcessingCancelRequest = {
 
 export type OffscreenOfficeProcessingStartRequest = {
   type: "offscreen:office-processing-start";
+  baseUrl: string;
+  accessToken: string;
 };
 
 export type OffscreenOfficeProcessingCancelRequest = {

@@ -30,6 +30,7 @@ import { createExtensionLicenseStorage } from "../lib/monetization/storage";
 import { createLicenseService, type LicenseCheckResult } from "../lib/monetization/license";
 import { PRO_LICENSE_PUBLIC_KEY_PEM } from "../lib/monetization/license-public-key";
 import { createOperationAuthorizer, type OperationAuthorization } from "../lib/monetization/enforcement";
+import { createOfficeEngineSettingsStorage } from "../lib/office/office-engine-settings";
 import {
   cleanupExpiredPdfData,
   PDF_RETENTION_ALARM_NAME,
@@ -153,6 +154,7 @@ async function forwardToOffscreen<TResponse>(message: object): Promise<TResponse
 
 export default defineBackground(() => {
   const logger = createLogger("background");
+  const officeSettingsStorage = createOfficeEngineSettingsStorage(browser.storage.local);
   const usageLimits = createUsageLimitService({
     storage: createExtensionUsageStorage(browser.storage.local),
   });
@@ -298,8 +300,21 @@ export default defineBackground(() => {
         case "background:office-processing-start": {
           const authorization = await authorizeOperation("compression");
           if (!authorization.allowed) return deniedOperationResponse(authorization);
+
+          const settings = await officeSettingsStorage.read();
+          if (!settings) {
+            return {
+              ok: false,
+              error: "Office Engine is not connected",
+            };
+          }
+
           await ensureOffscreenDocument();
-          return forwardToOffscreen({ type: "offscreen:office-processing-start" });
+          return forwardToOffscreen({
+            type: "offscreen:office-processing-start",
+            baseUrl: settings.baseUrl,
+            accessToken: settings.accessToken,
+          });
         }
         case "background:office-processing-cancel": {
           await ensureOffscreenDocument();
