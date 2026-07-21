@@ -15,6 +15,9 @@ export const SMART_PLANNER_REQUEST_POLICY = {
   allowInstruction: false,
 } as const satisfies SmartPlannerRequestPolicy;
 
+const LARGE_SCANNED_OFFICE_MIN_BYTES = 100 * 1024 * 1024;
+const LARGE_SCANNED_OFFICE_MIN_RATIO = 0.8;
+
 export type SmartPlannerGatewayRequest = {
   request: SmartPlannerRequest;
   responseSchema: Record<string, unknown>;
@@ -40,7 +43,7 @@ export type SmartPlannerRecommendationResult =
     };
 
 function blocked(
-  reason: Extract<SmartPlannerRecommendationResult, { status: "blocked" }>['reason'],
+  reason: Extract<SmartPlannerRecommendationResult, { status: "blocked" }>["reason"],
   errors: readonly string[],
 ): SmartPlannerRecommendationResult {
   return {
@@ -49,6 +52,33 @@ function blocked(
     errors: [...errors],
     executionAllowed: false,
     requiresUserConfirmation: true,
+  };
+}
+
+function requiresOfficeForLargeScannedDocument(request: SmartPlannerRequest) {
+  const { documentProfile, engineCapabilities } = request;
+  const fileSizeMb = documentProfile.fileSizeBytes / (1024 * 1024);
+
+  return engineCapabilities.officeAvailable
+    && engineCapabilities.officeCpuCount > 0
+    && engineCapabilities.officeMemoryGb > 0
+    && fileSizeMb <= engineCapabilities.maxFileSizeMb
+    && documentProfile.fileSizeBytes >= LARGE_SCANNED_OFFICE_MIN_BYTES
+    && documentProfile.scannedPageRatio >= LARGE_SCANNED_OFFICE_MIN_RATIO;
+}
+
+function applyDeterministicEngineRouting(
+  request: SmartPlannerRequest,
+  plan: ProcessingPlan,
+): ProcessingPlan {
+  if (!requiresOfficeForLargeScannedDocument(request) || plan.engine === "office") {
+    return plan;
+  }
+
+  return {
+    ...plan,
+    engine: "office",
+    explanation: `${plan.explanation} Office Engine is required because this is a large, predominantly scanned document and a healthy controlled server is available.`,
   };
 }
 
@@ -88,7 +118,7 @@ export async function requestSmartPlannerRecommendation(
 
   return {
     status: "ready",
-    plan: validatedPlan.value,
+    plan: applyDeterministicEngineRouting(validatedRequest.value, validatedPlan.value),
     executionAllowed: false,
     requiresUserConfirmation: true,
   };
