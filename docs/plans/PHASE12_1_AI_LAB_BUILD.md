@@ -85,6 +85,33 @@ It does not change:
 
 Dedicated Phase 12 orchestration storage keys will be introduced only when Phase 12.2 adds interview state. No new orchestration state exists yet.
 
+## Important competition-build boundary
+
+`PDF Compressor AI Lab` is a competition-specific demonstration build. It is not the commercial distribution build and must not redefine commercial licensing, onboarding, or server-connection policy.
+
+For the AI Lab competition build only:
+
+- the license activation screen may be removed from the visible workflow;
+- AI Lab may behave as Pro automatically so judges are not interrupted by entitlement setup;
+- the competition Office Engine URL may be predefined;
+- a temporary, revocable demo access token for the controlled Planner Gateway / Office Engine may be bundled with the AI Lab build;
+- connection may happen automatically and the server URL/token fields may be hidden;
+- the visible product flow should focus on `Upload → Analyze → Clarify goal → Recommend → Confirm → Process`;
+- infrastructure failures should produce a simple demo-service availability message rather than exposing configuration forms.
+
+The normal `PDF Compressor` build remains unchanged and retains its existing commercial boundaries, including license activation, entitlement enforcement, manual server configuration, and access-token handling.
+
+Security constraints:
+
+- the OpenAI API key must never be embedded in the extension;
+- the OpenAI API key remains server-side only;
+- the bundled demo token is not a secret and must be treated as extractable from the extension package;
+- the demo token must have narrow permissions, rate/cost limits, no SSH or administrative access, and a documented revocation path;
+- the temporary competition endpoint and demo token must be disabled or rotated after the competition;
+- no competition shortcut may be merged into the commercial build without a separate product and security review.
+
+This exception simplifies the competition experience without weakening or replacing the commercial architecture.
+
 ## Acceptance checks
 
 Run:
@@ -103,6 +130,9 @@ Confirm:
 4. Both directories exist simultaneously.
 5. Both builds can be loaded in Chrome.
 6. Existing PDF analysis and processing behavior is unchanged in the AI Lab build.
+7. Any automatic Pro/demo-server behavior is present only in the AI Lab build.
+8. The commercial-compatible build still shows and enforces its existing license and server setup flow.
+9. No OpenAI API key appears in extension source, generated manifests, or bundled JavaScript.
 
 ## Recovery
 
