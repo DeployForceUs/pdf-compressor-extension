@@ -3,6 +3,7 @@ import path from "node:path";
 
 const OUTPUT_DIR = path.resolve(".output/chrome-mv3-ai-lab");
 const CSS_MARKER = "Phase 12.2 AI Lab English-only competition build";
+const RUNTIME_MARKER = "Phase 12.2 AI Lab English-only runtime";
 const LANGUAGE_CSS = `
 
 /* ${CSS_MARKER} */
@@ -38,14 +39,19 @@ async function collectCssFiles(directory) {
 
 const popupHtmlPath = path.join(OUTPUT_DIR, "popup.html");
 const popupHtml = await readFile(popupHtmlPath, "utf8");
-const languageBootstrap = '<script>localStorage.setItem("i18nextLng","en");document.documentElement.lang="en";</script>';
+const inlineLanguageBootstrap = '<script>localStorage.setItem("i18nextLng","en");document.documentElement.lang="en";</script>';
+const cleanedPopupHtml = popupHtml.replace(inlineLanguageBootstrap, "");
 
-if (!popupHtml.includes('localStorage.setItem("i18nextLng","en")')) {
-  await writeFile(
-    popupHtmlPath,
-    popupHtml.replace("<head>", `<head>${languageBootstrap}`),
-    "utf8",
-  );
+if (cleanedPopupHtml !== popupHtml) {
+  await writeFile(popupHtmlPath, cleanedPopupHtml, "utf8");
+}
+
+const runtimePath = path.join(OUTPUT_DIR, "ai-lab-runtime.js");
+const runtimeSource = await readFile(runtimePath, "utf8");
+
+if (!runtimeSource.includes(RUNTIME_MARKER)) {
+  const runtimeBootstrap = `\n/* ${RUNTIME_MARKER} */\nlocalStorage.setItem("i18nextLng", "en");\ndocument.documentElement.lang = "en";\n`;
+  await writeFile(runtimePath, `${runtimeBootstrap}${runtimeSource}`, "utf8");
 }
 
 const cssFiles = await collectCssFiles(OUTPUT_DIR);
@@ -65,4 +71,9 @@ if (applied === 0) {
   throw new Error("AI Lab English-only patch failed: competition popup stylesheet was not found");
 }
 
-console.log(`AI Lab English-only mode applied: styles=${applied}, language=en`);
+const finalPopupHtml = await readFile(popupHtmlPath, "utf8");
+if (finalPopupHtml.includes("<script>")) {
+  throw new Error("AI Lab English-only patch failed: inline script remains in popup.html");
+}
+
+console.log(`AI Lab English-only mode applied without inline scripts: styles=${applied}, language=en`);
