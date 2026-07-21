@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer as createNodeServer } from "node:http";
 
+import { createCapabilitiesResponse } from "./capabilities-contract.mjs";
 import { detectGhostscriptVersion } from "./ghostscript-processor.mjs";
 import { createHealthResponse } from "./health-contract.mjs";
 import { EngineRequestError, OfficeEngineJobManager } from "./job-manager.mjs";
@@ -23,6 +24,7 @@ function writeJson(response, statusCode, body, includeBody = true) {
 
 function classifyRoute(pathname) {
   if (pathname === "/api/v1/health") return { name: "health" };
+  if (pathname === "/api/v1/capabilities") return { name: "capabilities" };
   if (pathname === "/api/v1/compress") return { name: "compress" };
   const match = JOB_ROUTE.exec(pathname);
   if (!match) return { name: "unknown" };
@@ -50,6 +52,7 @@ export function createOfficeEngineServer({
   manager = new OfficeEngineJobManager(),
   processorVersion = detectGhostscriptVersion(),
   runtimeCapabilities,
+  benchmark,
 } = {}) {
   return createNodeServer(async (request, response) => {
     const startedAt = performance.now();
@@ -86,6 +89,29 @@ export function createOfficeEngineServer({
           response,
           statusCode,
           createHealthResponse({ processorVersion, runtimeCapabilities }),
+          request.method !== "HEAD",
+        );
+        return;
+      }
+
+      if (route.name === "capabilities") {
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          statusCode = 405;
+          response.setHeader("allow", "GET, HEAD");
+          writeJson(response, statusCode, { error: "method_not_allowed" });
+          return;
+        }
+        statusCode = 200;
+        writeJson(
+          response,
+          statusCode,
+          createCapabilitiesResponse({
+            processorVersion,
+            runtimeCapabilities,
+            queueDepth: manager.queue?.length ?? 0,
+            activeJobs: manager.active ?? 0,
+            benchmark,
+          }),
           request.method !== "HEAD",
         );
         return;
