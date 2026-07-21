@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY gateway/server.ts ./gateway/server.ts
 COPY src/lib/ai/ ./src/lib/ai/
+COPY src/lib/office/ ./src/lib/office/
 
 RUN ./node_modules/.bin/esbuild gateway/server.ts \
     --bundle \

@@ -10,6 +10,11 @@ import { createSplitZipArchive, type SplitArchiveRequest, type SplitArchiveOutco
 import { transferSplitWorkerReturn } from "./split-worker-transfer";
 import { normalizeSplitOutputMode } from "../split-output-mode";
 import { tracePdfSplit } from "../pdf-split-trace";
+import {
+  profileContentBlindPdf,
+  type ContentBlindProfilerRequest,
+  type ContentBlindProfilerResult,
+} from "../ai/content-blind-pdf-profiler";
 
 type CancellationChecker = () => boolean | Promise<boolean>;
 type ProgressReporter = (event: CompressionProgressEvent) => void | Promise<void>;
@@ -17,6 +22,10 @@ type SplitProgressReporter = (event: SplitProgressEvent) => void | Promise<void>
 
 export type CompressionWorkerApi = {
   health: (mupdfRuntimeUrl: string) => Promise<Awaited<ReturnType<typeof checkMuPdfHealth>>>;
+  profileContentBlind: (
+    request: ContentBlindProfilerRequest,
+    isCancelled: CancellationChecker,
+  ) => Promise<ContentBlindProfilerResult>;
   compress: (
     request: CompressionRequest,
     isCancelled: CancellationChecker,
@@ -32,6 +41,10 @@ export type CompressionWorkerApi = {
 const api: CompressionWorkerApi = {
   async health(mupdfRuntimeUrl: string) {
     return checkMuPdfHealth(mupdfRuntimeUrl);
+  },
+
+  async profileContentBlind(request: ContentBlindProfilerRequest, isCancelled: CancellationChecker) {
+    return profileContentBlindPdf(request, isCancelled);
   },
 
   async compress(request: CompressionRequest, isCancelled: CancellationChecker, onProgress: ProgressReporter) {

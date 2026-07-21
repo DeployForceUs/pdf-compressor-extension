@@ -52,6 +52,11 @@ import { tracePdfSplit } from "../pdf-split-trace";
 import { createOfficeEngineClient } from "../office/office-engine-client";
 import { runOfficeProcessingJob } from "../office/office-processing-runtime";
 import { dispatchOfficeProcessing } from "../office/office-processing-dispatch";
+import {
+  isOffscreenSmartPlannerPrepareRequest,
+  type OffscreenSmartPlannerPrepareRequest,
+} from "../ai/smart-planner-runtime-message-contract";
+import { prepareSmartPlannerRuntimeRequest } from "../ai/smart-planner-runtime-preparation";
 import { isOffscreenRequest } from "../message-routing";
 
 const COMPRESSION_TIMEOUT_MS = 30_000;
@@ -779,6 +784,35 @@ function acceptOfficeProcessing(message: OffscreenOfficeProcessingStartRequest) 
   );
 }
 
+async function prepareSmartPlannerFromSelectedPdf(
+  message: OffscreenSmartPlannerPrepareRequest,
+) {
+  return prepareSmartPlannerRuntimeRequest(
+    {
+      requestId: message.requestId,
+      userGoal: message.userGoal,
+      engineCapabilities: message.engineCapabilities,
+      mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
+    },
+    {
+      readSelectedPdf: async () => (await readPdf(SELECTED_PDF_RECORD_ID)).record,
+      profilePdf: (request, isCancelled) => {
+        const input = request.input;
+        return getCompressionWorker().profileContentBlind(
+          transfer(
+            {
+              input,
+              mupdfRuntimeUrl: getMuPdfRuntimeUrl(),
+            },
+            [input],
+          ),
+          proxy(isCancelled),
+        );
+      },
+    },
+  );
+}
+
 async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { ok: false; error: string } | null> {
   switch (message.type) {
     case "offscreen:health":
@@ -852,6 +886,19 @@ async function handle(message: OffscreenRequest): Promise<OffscreenResponse | { 
 const offscreenMessageListener = (
   message: unknown,
 ) => {
+  if (isOffscreenSmartPlannerPrepareRequest(message)) {
+    return prepareSmartPlannerFromSelectedPdf(message)
+      .catch((error) => {
+        logger.error("Captured Smart Planner exception in offscreen", error);
+        return {
+          ok: false as const,
+          error: "CANCELLED" as const,
+          message: error instanceof Error ? error.message : "Smart Planner preparation failed",
+          executionAllowed: false as const,
+          requiresUserConfirmation: true as const,
+        };
+      });
+  }
   if (!isOffscreenRequest(message)) return undefined;
 
   return handle(message)

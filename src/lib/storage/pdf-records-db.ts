@@ -60,7 +60,9 @@ export async function writePdfRecord(record: PdfRecord): Promise<PdfRecord> {
   const now = Date.now();
   const stored: PdfRecord = {
     ...record,
-    data: [...record.data],
+    data: record.data instanceof Uint8Array
+      ? record.data.slice()
+      : Uint8Array.from(record.data),
     createdAt: record.createdAt ?? existing?.createdAt ?? now,
     updatedAt: now,
   };

@@ -17,7 +17,7 @@ export default defineConfig({
     description: "__MSG_extensionDescription__",
     default_locale: "en",
     version: "0.1.0",
-    permissions: ["storage", "offscreen", "alarms"],
+    permissions: ["storage", "offscreen", "alarms", "system.cpu", "system.memory"],
     optional_host_permissions: ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
     action: {
       default_popup: "popup.html",

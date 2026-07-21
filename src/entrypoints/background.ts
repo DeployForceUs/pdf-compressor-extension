@@ -22,6 +22,12 @@ import type {
 import { normalizeSplitOutputMode } from "../lib/messaging";
 import { requireRuntimeMessageResponse } from "../lib/runtime-message-response";
 import { isBackgroundRequest } from "../lib/message-routing";
+import {
+  isBackgroundSmartPlannerPrepareRequest,
+  toOffscreenSmartPlannerPrepareRequest,
+  type BackgroundSmartPlannerPrepareRequest,
+  type SmartPlannerPrepareResponse,
+} from "../lib/ai/smart-planner-runtime-message-contract";
 import { tracePdfSplit } from "../lib/pdf-split-trace";
 import { createUsageLimitService } from "../lib/monetization/limits";
 import { STAGE_7_MVP_POLICY } from "../lib/monetization/policy";
@@ -223,6 +229,15 @@ export default defineBackground(() => {
     };
   }
 
+  async function prepareSmartPlannerViaOffscreen(
+    message: BackgroundSmartPlannerPrepareRequest,
+  ): Promise<SmartPlannerPrepareResponse> {
+    await ensureOffscreenDocument();
+    return forwardToOffscreen<SmartPlannerPrepareResponse>(
+      toOffscreenSmartPlannerPrepareRequest(message),
+    );
+  }
+
   async function handle(message: BackgroundRequest): Promise<BackgroundResponse | null> {
     try {
       switch (message.type) {
@@ -392,6 +407,9 @@ export default defineBackground(() => {
   const backgroundMessageListener = (
     message: unknown,
   ) => {
+    if (isBackgroundSmartPlannerPrepareRequest(message)) {
+      return prepareSmartPlannerViaOffscreen(message);
+    }
     if (!isBackgroundRequest(message)) return undefined;
     return handle(message);
   };
