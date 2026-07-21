@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H13-CONTRACT-C6";
+const REVISION = "H14-CONTRACT-C7";
 
 function gitCommit() {
   try {
@@ -64,7 +64,8 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C6"', "Router canonical lifecycle integration");
+requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C7"', "Router canonical lifecycle integration");
+requireMarker(router, 'const TARGET_WORKFLOW_SCHEMA_VERSION = "1";', "Router schema dependency binding");
 requireMarker(router, "let activeTargetContract = null", "Router validated contract state");
 requirePattern(confirmationSource, /activeTargetContract\s*=\s*structuredSplit\?\.enabled\s*===\s*true/, "Canonical contract activation");
 requirePattern(confirmationSource, /activeTargetPartSizeMb\s*=\s*activeTargetContract\?\.targetPartSizeMb\s*\?\?\s*null/, "Target size derived from contract");
