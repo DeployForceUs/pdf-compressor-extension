@@ -22,10 +22,15 @@ const routerRuntime = `(() => {
   const ROUTER_EVENT = "ai-lab:execution-router-result";
   const ALLOWED_ROUTES = new Set(["local", "office_current"]);
   const PRESET_QUALITY = Object.freeze({ safe: 85, balanced: 75, strong: 60 });
+  const RESULT_DB_NAME = "pdf-compressor-phase4";
+  const RESULT_DB_VERSION = 1;
+  const RESULT_STORE_NAME = "compression-results";
+  const RESULT_RECORD_ID = "compressed-pdf";
   let active = false;
   let activeButton = null;
   let activeRoute = null;
   let activePreset = null;
+  let completedResult = null;
 
   function emit(detail) {
     globalThis.__AI_LAB_LAST_EXECUTION_ROUTER_RESULT__ = detail;
@@ -89,6 +94,7 @@ const routerRuntime = `(() => {
 
   function renderError(button, message) {
     button.disabled = false;
+    button.dataset.aiAction = "process";
     button.textContent = button.dataset.aiOriginalLabel || "Try again";
     setStatus(button, message, "alert");
   }
@@ -107,10 +113,12 @@ const routerRuntime = `(() => {
     const button = activeButton;
     const route = activeRoute;
     const preset = activePreset;
-    button.disabled = true;
-    button.textContent = "Processing complete";
-    setStatus(button, "Your processed PDF is ready in the existing result section.");
-    emit({ status: "complete", route, preset, result: result ?? null });
+    completedResult = result ?? null;
+    button.disabled = false;
+    button.dataset.aiAction = "download";
+    button.textContent = "Download processed PDF";
+    setStatus(button, "Processing complete. Your PDF is ready to download.");
+    emit({ status: "complete", route, preset, result: completedResult });
     resetActive();
   }
 
@@ -122,6 +130,62 @@ const routerRuntime = `(() => {
     renderError(button, message || "Processing failed.");
     emit({ status: "error", route, preset, error: message || "processing_failed", code: code || null });
     resetActive();
+  }
+
+  function openResultDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(RESULT_DB_NAME, RESULT_DB_VERSION);
+      request.onerror = () => reject(request.error || new Error("result_database_open_failed"));
+      request.onsuccess = () => resolve(request.result);
+    });
+  }
+
+  async function readCompletedResult() {
+    const db = await openResultDb();
+    try {
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction(RESULT_STORE_NAME, "readonly");
+        const request = transaction.objectStore(RESULT_STORE_NAME).get(RESULT_RECORD_ID);
+        request.onerror = () => reject(request.error || new Error("processed_pdf_read_failed"));
+        request.onsuccess = () => resolve(request.result || null);
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  function downloadName(record) {
+    const sourceName = record?.fileName || completedResult?.fileName || "processed.pdf";
+    return /\\.pdf$/i.test(sourceName) ? sourceName.replace(/\\.pdf$/i, "-compressed.pdf") : sourceName + "-compressed.pdf";
+  }
+
+  async function downloadProcessedPdf(button) {
+    button.disabled = true;
+    button.textContent = "Preparing download…";
+    setStatus(button, "Reading the completed PDF from local storage…");
+    try {
+      const record = await readCompletedResult();
+      if (!record?.data) throw new Error("processed_pdf_not_available");
+      const blob = new Blob([record.data], { type: record.mimeType || "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadName(record);
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      button.disabled = false;
+      button.textContent = "Download again";
+      setStatus(button, "Download started. Check your Downloads folder.");
+      emit({ status: "downloaded", fileName: anchor.download, byteLength: record.data.byteLength ?? blob.size });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "processed_pdf_download_failed";
+      button.disabled = false;
+      button.textContent = "Try download again";
+      setStatus(button, message, "alert");
+      emit({ status: "download_error", error: message });
+    }
   }
 
   async function confirmExecution(button) {
@@ -141,11 +205,13 @@ const routerRuntime = `(() => {
       return;
     }
 
+    completedResult = null;
     active = true;
     activeButton = button;
     activeRoute = route;
     activePreset = preset;
     button.dataset.aiOriginalLabel ||= button.textContent || "Process PDF";
+    button.dataset.aiAction = "process";
     button.disabled = true;
     button.textContent = route === "office_current" ? "Starting Office Engine…" : "Starting local processing…";
     setStatus(button, "Starting processing…");
@@ -201,6 +267,10 @@ const routerRuntime = `(() => {
     if (!(button instanceof HTMLButtonElement)) return;
     event.preventDefault();
     event.stopPropagation();
+    if (button.dataset.aiAction === "download") {
+      void downloadProcessedPdf(button);
+      return;
+    }
     void confirmExecution(button);
   }, true);
 
