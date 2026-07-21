@@ -9,7 +9,14 @@ import "../../styles/smart-planner-card.css";
 type PlannerUiState =
   | { status: "idle" }
   | { status: "analyzing" }
-  | { status: "ready"; pageCount: number; scannedPercent: number; textPercent: number; vectorPercent: number }
+  | {
+      status: "ready";
+      pageCount: number;
+      imageObjectCount: number;
+      scannedPercent: number;
+      textPercent: number;
+      vectorPercent: number;
+    }
   | { status: "blocked"; message: string }
   | { status: "error"; message: string };
 
@@ -66,6 +73,7 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
       setState({
         status: "ready",
         pageCount: profile.pageCount,
+        imageObjectCount: profile.imageObjectCount,
         scannedPercent: profile.scannedPageRatio,
         textPercent: profile.textPageRatio,
         vectorPercent: profile.vectorPageRatio,
@@ -109,13 +117,14 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
 
       {state.status === "ready" ? (
         <div className="planner-card__result" role="status" aria-live="polite">
-          <strong>Recommendation ready</strong>
           <span>{state.pageCount} pages analyzed</span>
+          <span>{state.imageObjectCount} image objects detected</span>
           <div className="planner-card__metrics">
             <span>Scanned {percent(state.scannedPercent)}</span>
             <span>Text {percent(state.textPercent)}</span>
             <span>Vector {percent(state.vectorPercent)}</span>
           </div>
+          <small>Page type reflects the main content of each page. Images may also appear on text pages.</small>
           <small>Preparation only. Nothing will run until you confirm a future recommendation.</small>
         </div>
       ) : null}
