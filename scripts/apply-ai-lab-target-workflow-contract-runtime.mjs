@@ -130,7 +130,7 @@ if (workflowStart < 0 || workflowEnd < 0) {
   throw new Error("Structured target workflow function boundary not found");
 }
 
-const workflowSource = `  ${schemaBinding.trimStart()}\n\n  ${assertSource}\n\n  ${decideSource}\n\n  async function continueTargetSizeWorkflow(result, resultKind = "compressed") {\n    completedResult = result ?? null;\n    const contract = activeTargetContract;\n    if (!contract) throw new Error("target_workflow_contract_missing_at_completion");\n    const record = await readCompletedResult();\n    if (!record?.data) throw new Error("processed_pdf_not_available_for_size_validation");\n\n    const actualBytes = resultByteLength(record, result);\n    const decision = decideTargetWorkflowCompletion({\n      contract,\n      actualBytes,\n      resultKind,\n    });\n\n    emit({\n      status: "validating_target_size",\n      targetPartSizeMb: contract.targetPartSizeMb,\n      actualBytes,\n      decision: decision.action,\n    });\n\n    if (decision.action === "complete_pdf") {\n      renderComplete(result);\n      return;\n    }\n\n    workflowStage = "splitting";\n    if (activeButton) {\n      activeButton.disabled = true;\n      activeButton.textContent = "Splitting to the delivery limit…";\n      setStatus(activeButton, "Compression complete. Creating parts under " + contract.targetPartSizeMb + " MB…");\n    }\n\n    await storeCompressedAsSelectedPdf(record);\n    const response = await runtimeSendMessage(decision.request);\n    if (response?.ok === false) {\n      throw new Error(response.error || response.code || "split_start_rejected");\n    }\n\n    emit({\n      status: "split_started",\n      route: activeRoute,\n      preset: activePreset,\n      targetPartSizeMb: contract.targetPartSizeMb,\n      response: response ?? null,\n    });\n    if (response?.result) renderSplitComplete(response.result);\n  }\n\n`;
+const workflowSource = `  ${schemaBinding.trimStart()}\n\n  ${assertSource}\n\n  ${decideSource}\n\n  async function continueTargetSizeWorkflow(result, resultKind = "compressed") {\n    completedResult = result ?? null;\n    const contract = activeTargetContract;\n    if (!contract) {\n      emit({\n        status: "target_workflow_not_required",\n        route: activeRoute,\n        preset: activePreset,\n        resultKind,\n      });\n      renderComplete(result);\n      return;\n    }\n    const record = await readCompletedResult();\n    if (!record?.data) throw new Error("processed_pdf_not_available_for_size_validation");\n\n    const actualBytes = resultByteLength(record, result);\n    const decision = decideTargetWorkflowCompletion({\n      contract,\n      actualBytes,\n      resultKind,\n    });\n\n    emit({\n      status: "validating_target_size",\n      targetPartSizeMb: contract.targetPartSizeMb,\n      actualBytes,\n      decision: decision.action,\n    });\n\n    if (decision.action === "complete_pdf") {\n      renderComplete(result);\n      return;\n    }\n\n    workflowStage = "splitting";\n    if (activeButton) {\n      activeButton.disabled = true;\n      activeButton.textContent = "Splitting to the delivery limit…";\n      setStatus(activeButton, "Compression complete. Creating parts under " + contract.targetPartSizeMb + " MB…");\n    }\n\n    await storeCompressedAsSelectedPdf(record);\n    const response = await runtimeSendMessage(decision.request);\n    if (response?.ok === false) {\n      throw new Error(response.error || response.code || "split_start_rejected");\n    }\n\n    emit({\n      status: "split_started",\n      route: activeRoute,\n      preset: activePreset,\n      targetPartSizeMb: contract.targetPartSizeMb,\n      response: response ?? null,\n    });\n    if (response?.result) renderSplitComplete(response.result);\n  }\n\n`;
 
 router =
   router.slice(0, workflowStart) +
@@ -144,6 +144,9 @@ if (router.includes(forbiddenReset)) {
 if (!router.includes('decision.action === "complete_pdf"')) {
   throw new Error("Structured target workflow decision is not bound at completion");
 }
+if (router.includes("target_workflow_contract_missing_at_completion")) {
+  throw new Error("Missing-contract completion crash remains active");
+}
 
 const installedHandoffStart = router.indexOf(handoffStartMarker);
 const installedHandoffEnd = router.indexOf(handoffEndMarker, installedHandoffStart);
@@ -156,7 +159,7 @@ if (!installedHandoff.includes('indexedDB.open("pdf-compressor-phase1", 2)')) {
 }
 
 const revisionMarker =
-  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C8";\n';
+  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C9";\n';
 const existingRevision = /  globalThis\.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C\d+";\n/;
 if (existingRevision.test(router)) {
   router = router.replace(existingRevision, revisionMarker);
@@ -169,4 +172,4 @@ if (existingRevision.test(router)) {
 }
 
 await writeFile(routerPath, router, "utf8");
-process.stdout.write("AI Lab structured target workflow contract runtime C8 applied\n");
+process.stdout.write("AI Lab structured target workflow contract runtime C9 applied\n");
