@@ -1,6 +1,11 @@
 import type { PdfRecord } from "../messaging";
 import type { ContentBlindProfilerRequest, ContentBlindProfilerResult } from "./content-blind-pdf-profiler";
-import type { SmartPlannerEngineCapabilities, SmartPlannerGoal } from "./smart-planner-contract";
+import type {
+  SmartPlannerEngineCapabilities,
+  SmartPlannerGoal,
+  SmartPlannerRequest,
+} from "./smart-planner-contract";
+import { SMART_PLANNER_SCHEMA_VERSION } from "./smart-planner-contract";
 
 export type SmartPlannerProfiler = (
   request: ContentBlindProfilerRequest,
@@ -15,14 +20,42 @@ export type PrepareSmartPlannerRequestInput = {
   engineCapabilities: SmartPlannerEngineCapabilities;
 };
 
-export type SmartPlannerRequestPreparation = {
-  status: "blocked";
-  reason: "incomplete_document_profile";
-  unavailableMetrics: ContentBlindProfilerResult["unavailableMetrics"];
-  derivedMetrics: ContentBlindProfilerResult["derivedMetrics"];
-  executionAllowed: false;
-  requiresUserConfirmation: true;
-};
+export type SmartPlannerRequestPreparation =
+  | {
+      status: "ready";
+      request: SmartPlannerRequest;
+      executionAllowed: false;
+      requiresUserConfirmation: true;
+    }
+  | {
+      status: "blocked";
+      reason: "incomplete_document_profile";
+      unavailableMetrics: readonly string[];
+      derivedMetrics: Extract<ContentBlindProfilerResult, { status: "incomplete" }>["derivedMetrics"];
+      executionAllowed: false;
+      requiresUserConfirmation: true;
+    };
+
+function copyGoal(goal: SmartPlannerGoal): SmartPlannerGoal {
+  return {
+    deliveryTarget: goal.deliveryTarget,
+    qualityIntent: goal.qualityIntent,
+    speedPreference: goal.speedPreference,
+    splitAllowed: goal.splitAllowed,
+    ...(goal.instruction === undefined ? {} : { instruction: goal.instruction }),
+  };
+}
+
+function copyCapabilities(capabilities: SmartPlannerEngineCapabilities): SmartPlannerEngineCapabilities {
+  return {
+    localAvailable: capabilities.localAvailable,
+    officeAvailable: capabilities.officeAvailable,
+    officeCpuCount: capabilities.officeCpuCount,
+    officeMemoryGb: capabilities.officeMemoryGb,
+    allowedPresets: [...capabilities.allowedPresets],
+    maxFileSizeMb: capabilities.maxFileSizeMb,
+  };
+}
 
 export async function prepareSmartPlannerRequestForSelectedPdf(
   input: PrepareSmartPlannerRequestInput,
@@ -37,18 +70,33 @@ export async function prepareSmartPlannerRequestForSelectedPdf(
     isCancelled,
   );
 
-  return {
-    status: "blocked",
-    reason: "incomplete_document_profile",
-    unavailableMetrics: [...profilerResult.unavailableMetrics],
-    derivedMetrics: {
-      fileSizeBytes: profilerResult.derivedMetrics.fileSizeBytes,
-      pageCount: profilerResult.derivedMetrics.pageCount,
-      imageObjectCount: profilerResult.derivedMetrics.imageObjectCount,
-      codecCounts: { ...profilerResult.derivedMetrics.codecCounts },
-      pageImageStreamSizeDistributionBytes: {
-        ...profilerResult.derivedMetrics.pageImageStreamSizeDistributionBytes,
+  if (profilerResult.status === "incomplete") {
+    return {
+      status: "blocked",
+      reason: "incomplete_document_profile",
+      unavailableMetrics: [...profilerResult.unavailableMetrics],
+      derivedMetrics: {
+        fileSizeBytes: profilerResult.derivedMetrics.fileSizeBytes,
+        pageCount: profilerResult.derivedMetrics.pageCount,
+        imageObjectCount: profilerResult.derivedMetrics.imageObjectCount,
+        codecCounts: { ...profilerResult.derivedMetrics.codecCounts },
+        pageImageStreamSizeDistributionBytes: {
+          ...profilerResult.derivedMetrics.pageImageStreamSizeDistributionBytes,
+        },
       },
+      executionAllowed: false,
+      requiresUserConfirmation: true,
+    };
+  }
+
+  return {
+    status: "ready",
+    request: {
+      schemaVersion: SMART_PLANNER_SCHEMA_VERSION,
+      requestId: input.requestId,
+      userGoal: copyGoal(input.userGoal),
+      documentProfile: profilerResult.documentProfile,
+      engineCapabilities: copyCapabilities(input.engineCapabilities),
     },
     executionAllowed: false,
     requiresUserConfirmation: true,
