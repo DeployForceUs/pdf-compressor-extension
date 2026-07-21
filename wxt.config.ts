@@ -1,5 +1,7 @@
 import { defineConfig } from "wxt";
 
+const AI_LAB_MODE = "ai-lab";
+
 export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
@@ -7,12 +9,23 @@ export default defineConfig({
     title: "__MSG_extensionTitle__",
   },
   hooks: {
-    "build:manifestGenerated": (_wxt: any, manifest: any) => {
+    "build:manifestGenerated": (wxt: any, manifest: any) => {
+      const isAiLab = wxt.config.mode === AI_LAB_MODE;
+
       manifest.action ??= {};
-      manifest.action.default_title = "__MSG_extensionTitle__";
+      manifest.action.default_title = isAiLab
+        ? "PDF Compressor AI Lab"
+        : "__MSG_extensionTitle__";
+
+      if (isAiLab) {
+        manifest.name = "PDF Compressor AI Lab";
+        manifest.short_name = "PDF AI Lab";
+        manifest.description =
+          "Experimental privacy-first AI orchestration build for PDF processing.";
+      }
     },
   },
-    manifest: {
+  manifest: {
     name: "__MSG_extensionName__",
     description: "__MSG_extensionDescription__",
     default_locale: "en",
