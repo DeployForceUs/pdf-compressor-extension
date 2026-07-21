@@ -48,8 +48,7 @@ if (!router.includes("function targetSizeFromPlannerResult(")) {
 const assignmentBoundary = `    activeTargetPartSizeMb = Number.parseFloat(button.dataset.aiTargetPartSizeMb || "") || null;`;
 const assignmentReplacement = `    activeTargetPartSizeMb =
       targetSizeFromPlannerResult(plannerResult) ??
-      Number.parseFloat(button.dataset.aiTargetPartSizeMb || "") ||
-      null;`;
+      (Number.parseFloat(button.dataset.aiTargetPartSizeMb || "") || null);`;
 
 if (!router.includes(assignmentReplacement)) {
   if (!router.includes(assignmentBoundary)) {
