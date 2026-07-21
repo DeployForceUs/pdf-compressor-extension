@@ -3,12 +3,13 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const OUTPUT_DIR = path.resolve(".output/chrome-mv3-ai-lab");
+const PLANNER_RUNTIME_PATH = path.join(OUTPUT_DIR, "ai-lab-planner-runtime.js");
 const PRESENTER_PATH = path.join(OUTPUT_DIR, "ai-lab-recommendation-presenter.js");
 const ROUTER_PATH = path.join(OUTPUT_DIR, "ai-lab-execution-router.js");
 const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 
-const REVISION = "H6";
+const REVISION = "H7-N1";
 
 function gitCommit() {
   try {
@@ -34,7 +35,8 @@ function requireMarker(source, marker, label) {
   else fail(label, `missing marker: ${marker}`);
 }
 
-const [presenter, router, manifestText, contestAccess] = await Promise.all([
+const [plannerRuntime, presenter, router, manifestText, contestAccess] = await Promise.all([
+  readFile(PLANNER_RUNTIME_PATH, "utf8"),
   readFile(PRESENTER_PATH, "utf8"),
   readFile(ROUTER_PATH, "utf8"),
   readFile(MANIFEST_PATH, "utf8"),
@@ -49,6 +51,26 @@ const hostPermissions = Array.isArray(manifest.host_permissions)
 process.stdout.write(`AI Lab build commit: ${gitCommit()}\n`);
 process.stdout.write(`AI Lab target-size workflow revision: ${REVISION}\n`);
 
+requireMarker(
+  plannerRuntime,
+  "normalizePlannerSplitPlan",
+  "Planner split normalization",
+);
+requireMarker(
+  plannerRuntime,
+  'strategy: "by-max-size"',
+  "Planner normalized split strategy",
+);
+requireMarker(
+  plannerRuntime,
+  'outputMode: "single-zip"',
+  "Planner normalized ZIP output",
+);
+requireMarker(
+  plannerRuntime,
+  "targetPartSizeMb",
+  "Planner normalized target size",
+);
 requireMarker(
   presenter,
   "aiTargetPartSizeMb",
