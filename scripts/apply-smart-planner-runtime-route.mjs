@@ -3,7 +3,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const BACKGROUND_PATH = "src/entrypoints/background.ts";
-const OFFSCREEN_PATH = "src/lib/offscreen/offscreen.ts";
+const OFFSCREEN_PATH_CANDIDATES = [
+  "src/entrypoints/offscreen.ts",
+  "src/entrypoints/offscreen/index.ts",
+  "src/entrypoints/offscreen/main.ts",
+  "src/lib/offscreen.ts",
+  "src/lib/offscreen/index.ts",
+  "src/lib/offscreen/offscreen.ts",
+];
 
 function insertOnce(source, anchor, insertion, label) {
   if (source.includes(insertion.trim())) return source;
@@ -73,26 +80,45 @@ export function patchOffscreenSource(source) {
   return next;
 }
 
+async function findOffscreenEntrypoint(rootDir) {
+  for (const candidate of OFFSCREEN_PATH_CANDIDATES) {
+    const absolutePath = path.join(rootDir, candidate);
+    try {
+      const source = await readFile(absolutePath, "utf8");
+      if (source.includes("const offscreenMessageListener") && source.includes("isOffscreenRequest")) {
+        return { absolutePath, source, relativePath: candidate };
+      }
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(
+    `Cannot locate offscreen entrypoint. Checked: ${OFFSCREEN_PATH_CANDIDATES.join(", ")}`,
+  );
+}
+
 async function applyToRepository(rootDir) {
   const backgroundPath = path.join(rootDir, BACKGROUND_PATH);
-  const offscreenPath = path.join(rootDir, OFFSCREEN_PATH);
-
-  const [background, offscreen] = await Promise.all([
+  const [background, offscreenEntrypoint] = await Promise.all([
     readFile(backgroundPath, "utf8"),
-    readFile(offscreenPath, "utf8"),
+    findOffscreenEntrypoint(rootDir),
   ]);
 
   const patchedBackground = patchBackgroundSource(background);
-  const patchedOffscreen = patchOffscreenSource(offscreen);
+  const patchedOffscreen = patchOffscreenSource(offscreenEntrypoint.source);
 
   await Promise.all([
     writeFile(backgroundPath, patchedBackground),
-    writeFile(offscreenPath, patchedOffscreen),
+    writeFile(offscreenEntrypoint.absolutePath, patchedOffscreen),
   ]);
 
   return {
     backgroundChanged: patchedBackground !== background,
-    offscreenChanged: patchedOffscreen !== offscreen,
+    offscreenChanged: patchedOffscreen !== offscreenEntrypoint.source,
+    offscreenPath: offscreenEntrypoint.relativePath,
   };
 }
 
