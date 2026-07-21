@@ -98,8 +98,6 @@ async function collectCssFiles(directory) {
 }
 
 const runtime = `(() => {
-  const MARKER = "ai-lab-pdf-link-ready";
-
   function isValidHttpUrl(value) {
     try {
       const url = new URL(value.trim());
@@ -114,7 +112,7 @@ const runtime = `(() => {
     const hostname = url.hostname.toLowerCase();
     if (hostname !== "drive.google.com" && hostname !== "www.drive.google.com") return url.href;
 
-    const fileMatch = url.pathname.match(/^\/file\/d\/([^/]+)/i);
+    const fileMatch = url.pathname.match(/^\\/file\\/d\\/([^/]+)/i);
     const fileId = fileMatch?.[1] || url.searchParams.get("id");
     if (!fileId) return url.href;
 
@@ -177,8 +175,8 @@ const runtime = `(() => {
   }
 
   function install() {
-    if (document.body.classList.contains(MARKER)) return;
     const dropzone = document.querySelector(".dropzone");
+    if (dropzone?.querySelector(".ai-lab-pdf-link")) return;
     const fileInput = dropzone?.querySelector('input[type="file"]');
     const actions = dropzone?.querySelector(".dropzone__actions");
     if (!dropzone || !fileInput || !actions) return;
@@ -212,8 +210,6 @@ const runtime = `(() => {
       void loadPdfFromLink(linkInput.value, fileInput, loadButton, error);
     });
     loadButton.addEventListener("click", () => void loadPdfFromLink(linkInput.value, fileInput, loadButton, error));
-
-    document.body.classList.add(MARKER);
   }
 
   install();
