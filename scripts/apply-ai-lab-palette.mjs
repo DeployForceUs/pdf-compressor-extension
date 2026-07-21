@@ -31,7 +31,7 @@ body {
 }
 
 .shell {
-  border: none !important;
+  border-color: transparent !important;
   background: var(--ai-ink) !important;
   box-shadow: 0 24px 80px rgba(2, 3, 7, 0.76) !important;
 }
@@ -59,7 +59,9 @@ body {
 .dropzone__note,
 .metadata-row__label,
 .planner-card__disclosure,
-.planner-card__note {
+.planner-card__note,
+.planner-card__analysis-progress span,
+.planner-card__analysis-result small {
   color: var(--ai-silver) !important;
 }
 
@@ -84,32 +86,29 @@ body {
   box-shadow: 0 8px 24px rgba(20, 50, 148, 0.42) !important;
 }
 
-.input-card {
-  border: none !important;
-}
-
 .input-card,
 .planner-card,
 .metadata-card {
+  border-color: transparent !important;
   background: linear-gradient(180deg, rgba(8, 13, 23, 0.98), rgba(2, 3, 7, 0.98)) !important;
   box-shadow: 0 18px 48px rgba(2, 3, 7, 0.5) !important;
 }
 
 .dropzone {
-  border: none !important;
+  border-color: transparent !important;
+  outline: none !important;
   background:
     radial-gradient(circle at 50% 10%, rgba(60, 140, 227, 0.14), transparent 18rem),
     linear-gradient(180deg, rgba(20, 50, 148, 0.2), rgba(8, 13, 23, 0.86)) !important;
-  box-shadow: inset 0 0 0 1px rgba(60, 140, 227, 0.06) !important;
 }
 
 .dropzone:hover,
 .dropzone--active {
-  border: none !important;
+  border-color: transparent !important;
+  outline: none !important;
   background:
     radial-gradient(circle at 50% 8%, rgba(60, 140, 227, 0.24), transparent 18rem),
     linear-gradient(180deg, rgba(20, 50, 148, 0.32), rgba(8, 13, 23, 0.9)) !important;
-  box-shadow: inset 0 0 0 1px rgba(60, 140, 227, 0.12) !important;
 }
 
 .primary,
@@ -131,7 +130,6 @@ body {
   box-shadow: none !important;
 }
 
-/* The current workflow step uses exactly the same visual language as the primary action. */
 .ai-lab-stage-strip span:first-child,
 body.ai-lab--pdf-ready .ai-lab-stage-strip span:nth-child(2) {
   color: var(--ai-white) !important;
@@ -140,7 +138,6 @@ body.ai-lab--pdf-ready .ai-lab-stage-strip span:nth-child(2) {
   box-shadow: 0 12px 30px rgba(20, 50, 148, 0.46) !important;
 }
 
-/* Completed steps remain inside the blue system but become visually quieter. */
 body.ai-lab--pdf-ready .ai-lab-stage-strip span:first-child {
   color: var(--ai-ice) !important;
   border-color: rgba(127, 171, 220, 0.42) !important;
@@ -151,6 +148,83 @@ body.ai-lab--pdf-ready .ai-lab-stage-strip span:first-child {
 .planner-card::before {
   background: linear-gradient(180deg, #3C8CE3 0%, #143294 100%) !important;
   color: var(--ai-white) !important;
+}
+
+/* One fixed central work area: upload is replaced by local analysis. */
+body.ai-lab--pdf-ready .input-card {
+  display: none !important;
+}
+
+body.ai-lab--pdf-ready .planner-card {
+  display: flex !important;
+  min-height: 330px;
+  max-height: 330px;
+  padding: 24px !important;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden !important;
+}
+
+body.ai-lab--pdf-ready .planner-card__header {
+  margin-bottom: 12px !important;
+}
+
+body.ai-lab--pdf-ready .planner-card__disclosure {
+  margin: 0 0 18px !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+body.ai-lab--pdf-ready .planner-card__capability,
+body.ai-lab--pdf-ready .planner-card > .primary,
+body.ai-lab--pdf-ready .planner-card > .planner-card__note {
+  display: none !important;
+}
+
+.planner-card__analysis-progress,
+.planner-card__analysis-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 150px;
+  text-align: center;
+}
+
+.planner-card__analysis-result {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.planner-card__analysis-result .planner-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.planner-card__analysis-result .planner-card__metrics span {
+  padding: 8px 6px;
+  border: 1px solid rgba(127, 171, 220, 0.22);
+  border-radius: 12px;
+  background: rgba(8, 13, 23, 0.78);
+  color: var(--ai-ice);
+  font-size: 11px;
+}
+
+.planner-card__spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(127, 171, 220, 0.2);
+  border-top-color: var(--ai-azure);
+  border-radius: 50%;
+  animation: ai-lab-spin 900ms linear infinite;
+}
+
+@keyframes ai-lab-spin {
+  to { transform: rotate(360deg); }
 }
 `;
 
