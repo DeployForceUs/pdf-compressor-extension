@@ -9,7 +9,7 @@ const ROUTER_PATH = path.join(OUTPUT_DIR, "ai-lab-execution-router.js");
 const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 
-const REVISION = "H7-N2";
+const REVISION = "H8-N2-F2";
 
 function gitCommit() {
   try {
@@ -55,10 +55,11 @@ requireMarker(plannerRuntime, "normalizePlannerSplitPlan", "Planner split normal
 requireMarker(plannerRuntime, 'strategy: "by-max-size"', "Planner normalized split strategy");
 requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZIP output");
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
-requireMarker(plannerRuntime, "compression|compress|reduce|shrink", "Planner approximate compression target detection");
+requireMarker(plannerRuntime, "approximateCompressionTarget", "Planner approximate compression target detection");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
 requireMarker(router, "validating_target_size", "Router target-size validation");
+requireMarker(router, "target_size_recovered_at_completion", "Router completion target recovery");
 requireMarker(router, "split_started", "Split workflow start");
 requireMarker(router, 'dataset.aiAction = "download-split"', "ZIP download route");
 requireMarker(router, 'type: "by-max-size"', "Deterministic by-max-size strategy");
