@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/vendor-mupdf.mjs",
+    "prebuild:ai": "node scripts/vendor-mupdf.mjs",
     "build": "wxt build",
+    "build:ai": "wxt build --mode ai-lab",
     "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
     "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
