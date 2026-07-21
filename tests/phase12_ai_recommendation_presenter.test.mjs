@@ -29,3 +29,11 @@ test("Recommendation screen stays inside the existing goal panel", () => {
   assert.doesNotMatch(source, /appendChild\(document\.body/);
   assert.doesNotMatch(source, /fourth phase/i);
 });
+
+test("Recommendation workspace uses one outer vertical scroll", () => {
+  assert.match(source, /ai-lab-recommendation-active/);
+  assert.match(source, /overflow-y: auto !important/);
+  assert.match(source, /ai-lab-recommendation-scroll-host/);
+  assert.match(source, /overflow: visible !important/);
+  assert.doesNotMatch(source, /\.ai-lab-recommendation\s*\{[^}]*overflow-y:\s*auto/is);
+});
