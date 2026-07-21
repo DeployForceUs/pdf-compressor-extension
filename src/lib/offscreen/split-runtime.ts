@@ -35,8 +35,8 @@ async function emitProgress(onProgress: ProgressReporter, event: SplitProgressEv
   await onProgress(event);
 }
 
-function toUint8Array(data: number[]) {
-  return Uint8Array.from(data);
+function toUint8Array(data: Uint8Array | number[]) {
+  return data instanceof Uint8Array ? data : Uint8Array.from(data);
 }
 
 export async function runSplitJob(
