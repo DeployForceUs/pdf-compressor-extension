@@ -13,6 +13,30 @@ recommendedPreset must be present in officeCapabilities.presets.
 Runtime estimates must be non-negative seconds with min <= max. Use null when there is not enough evidence.
 This is recommendation-only. Do not claim that processing was started.`;
 
+const STRICT_PLANNER_RESPONSE_SCHEMA = Object.freeze({
+  ...PLANNER_RESPONSE_JSON_SCHEMA,
+  properties: {
+    ...PLANNER_RESPONSE_JSON_SCHEMA.properties,
+    oversizedConfiguration: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "cpuCores", "memoryMb", "label", "reason"],
+          properties: {
+            id: { type: "string", minLength: 1 },
+            cpuCores: { type: "integer", minimum: 0 },
+            memoryMb: { type: "integer", minimum: 0 },
+            label: { type: "string", minLength: 1 },
+            reason: { type: "string", minLength: 1, maxLength: 600 },
+          },
+        },
+      ],
+    },
+  },
+});
+
 function extractOutputText(payload) {
   if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text;
   if (!Array.isArray(payload.output)) return null;
@@ -66,7 +90,7 @@ export async function requestPlannerResponse(
             type: "json_schema",
             name: "pdf_compute_planner_response",
             strict: true,
-            schema: PLANNER_RESPONSE_JSON_SCHEMA,
+            schema: STRICT_PLANNER_RESPONSE_SCHEMA,
           },
         },
         store: false,
