@@ -1,4 +1,7 @@
-import { discoverImageXObjects } from "../pdf/image-xobject-discovery";
+import {
+  discoverImageXObjects,
+  type PdfImageXObjectDiscovery,
+} from "../pdf/image-xobject-discovery";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
@@ -73,11 +76,10 @@ function nearestRank(sorted: readonly number[], percentile: number): number | nu
   return sorted[rank - 1] ?? null;
 }
 
-function buildDerivedMetrics(
-  input: ArrayBuffer,
-  document: MuPdfPdfDocument,
-): ContentBlindProfilerDerivedMetrics {
-  const discovery = discoverImageXObjects(document);
+export function buildContentBlindProfilerResult(
+  fileSizeBytes: number,
+  discovery: PdfImageXObjectDiscovery,
+): ContentBlindProfilerResult {
   const codecCounts = { jpeg: 0, jpx: 0, other: 0 };
   const pageImageBytes = Array.from({ length: discovery.pageCount }, () => 0);
 
@@ -91,16 +93,25 @@ function buildDerivedMetrics(
   const knownPageImageBytes = pageImageBytes.filter((value) => value > 0).sort((left, right) => left - right);
 
   return {
-    fileSizeBytes: input.byteLength,
-    pageCount: discovery.pageCount,
-    imageObjectCount: discovery.candidates.length,
-    codecCounts,
-    pageImageStreamSizeDistributionBytes: {
-      p50: nearestRank(knownPageImageBytes, 0.5),
-      p90: nearestRank(knownPageImageBytes, 0.9),
-      max: knownPageImageBytes.at(-1) ?? null,
+    schemaVersion: 1,
+    status: "incomplete",
+    derivedMetrics: {
+      fileSizeBytes,
+      pageCount: discovery.pageCount,
+      imageObjectCount: discovery.candidates.length,
+      codecCounts,
+      pageImageStreamSizeDistributionBytes: {
+        p50: nearestRank(knownPageImageBytes, 0.5),
+        p90: nearestRank(knownPageImageBytes, 0.9),
+        max: knownPageImageBytes.at(-1) ?? null,
+      },
     },
+    unavailableMetrics: ["pageClassification", "estimatedDpi"],
   };
+}
+
+function buildRuntimeResult(input: ArrayBuffer, document: MuPdfPdfDocument) {
+  return buildContentBlindProfilerResult(input.byteLength, discoverImageXObjects(document));
 }
 
 export async function profileContentBlindPdf(
@@ -120,15 +131,9 @@ export async function profileContentBlindPdf(
     }
 
     await throwIfCancelled(isCancelled);
-    const derivedMetrics = buildDerivedMetrics(request.input, pdfDocument);
+    const result = buildRuntimeResult(request.input, pdfDocument);
     await throwIfCancelled(isCancelled);
-
-    return {
-      schemaVersion: 1,
-      status: "incomplete",
-      derivedMetrics,
-      unavailableMetrics: ["pageClassification", "estimatedDpi"],
-    };
+    return result;
   } finally {
     document?.destroy();
   }
