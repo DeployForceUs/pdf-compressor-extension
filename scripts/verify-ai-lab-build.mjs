@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H11-CONTRACT-C5";
+const REVISION = "H12-CONTRACT-C6";
 
 function gitCommit() {
   try {
@@ -61,13 +61,6 @@ const hostPermissions = Array.isArray(manifest.host_permissions)
   ? manifest.host_permissions
   : [];
 
-const confirmationStart = router.indexOf("async function confirmExecution(button)");
-const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
-const confirmationSource =
-  confirmationStart >= 0 && confirmationEnd > confirmationStart
-    ? router.slice(confirmationStart, confirmationEnd)
-    : "";
-
 process.stdout.write(`AI Lab build commit: ${gitCommit()}\n`);
 process.stdout.write(`AI Lab target-size workflow revision: ${REVISION}\n`);
 
@@ -79,35 +72,23 @@ requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
 requireMarker(
   router,
-  '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C5"',
-  "Router canonical contract integration",
+  '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C6"',
+  "Router canonical lifecycle integration",
 );
 requireMarker(router, "let activeTargetContract = null", "Router validated contract state");
 requirePattern(
-  confirmationSource,
+  router,
   /activeTargetContract\s*=\s*structuredSplit\?\.enabled\s*===\s*true/,
   "Canonical contract activation",
 );
 requirePattern(
-  confirmationSource,
+  router,
   /activeTargetPartSizeMb\s*=\s*activeTargetContract\?\.targetPartSizeMb\s*\?\?\s*null/,
   "Target size derived from contract",
 );
-forbidMarker(
-  confirmationSource,
-  "button.dataset.aiTargetPartSizeMb",
-  "Button dataset removed as execution source",
-);
-forbidMarker(
-  confirmationSource,
-  "targetSizeFromPlannerResult(plannerResult)",
-  "Planner text inference removed from execution",
-);
-forbidMarker(
-  confirmationSource,
-  "targetSizeFromRenderedPlan(button)",
-  "Rendered-plan inference removed from execution",
-);
+forbidMarker(router, "button.dataset.aiTargetPartSizeMb", "Button dataset removed as execution source");
+forbidMarker(router, "targetSizeFromPlannerResult(plannerResult)", "Planner text inference removed from execution");
+forbidMarker(router, "targetSizeFromRenderedPlan(button)", "Rendered-plan inference removed from execution");
 requireMarker(router, "const contract = activeTargetContract", "Completion uses retained contract");
 forbidMarker(
   router,
