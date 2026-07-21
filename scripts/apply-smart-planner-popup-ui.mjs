@@ -20,10 +20,19 @@ export function patchPopupSource(source) {
     "Planner component import",
   );
 
-  const officeAnchor = '            <article className={officeHealth ? "office-card office-card--ready" : "office-card"}>\n';
-  const plannerMarkup = `            <SmartPlannerPreparationCard\n              key={pdf.recordId ?? "no-pdf"}\n              pdfReady={Boolean(pdf.selected)}\n              officeAvailable={Boolean(officeHealth)}\n            />\n\n`;
+  const officePattern = /^(\s*)<article className=\{officeHealth \? "office-card office-card--ready" : "office-card"\}>/m;
+  const match = next.match(officePattern);
+  if (!match) {
+    throw new Error("Cannot apply Planner card placement: anchor not found");
+  }
 
-  next = insertOnce(next, officeAnchor, plannerMarkup, "Planner card placement");
+  const indent = match[1] ?? "";
+  const plannerMarkup = `${indent}<SmartPlannerPreparationCard\n${indent}  key={pdf.recordId ?? "no-pdf"}\n${indent}  pdfReady={Boolean(pdf.selected)}\n${indent}  officeAvailable={Boolean(officeHealth)}\n${indent}/>\n\n`;
+
+  if (!next.includes("<SmartPlannerPreparationCard")) {
+    next = next.replace(officePattern, `${plannerMarkup}${match[0]}`);
+  }
+
   return next;
 }
 
