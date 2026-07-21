@@ -58,7 +58,6 @@ const runtime = `(() => {
         type: "license:activate",
         token: proToken
       });
-
       if (!activated?.ok || !activated?.isPro) {
         throw new Error("Automatic Pro activation failed");
       }
@@ -94,4 +93,5 @@ if (!popup.includes("data-ai-lab-contest-access")) {
 }
 
 console.log("AI Lab contest access and Office host permission embedded");
+await import("./apply-ai-lab-cosmetic-pass.mjs");
 await import("./verify-ai-lab-build.mjs");
