@@ -17,6 +17,63 @@ const runtime = `(() => {
     return configured.replace(/\\\/$/, "");
   }
 
+  function deliveryTargetSizeMb(orchestration, payload) {
+    const explicit =
+      payload?.response?.processingPlan?.split?.targetPartSizeMb ??
+      payload?.response?.split?.targetPartSizeMb;
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+    const text = [
+      orchestration?.userGoal?.deliveryTarget,
+      orchestration?.userGoal?.instruction,
+      orchestration?.plannerRequest?.userGoal?.deliveryTarget,
+      orchestration?.plannerRequest?.userGoal?.instruction,
+      payload?.response?.explanation,
+    ]
+      .filter((value) => typeof value === "string")
+      .join(" ");
+
+    const patterns = [
+      /(?:portal\\s+target|delivery\\s+limit|target(?:ing)?|maximum|max|under|below|parts?\\s+under)\\D{0,40}(\\d+(?:\\.\\d+)?)\\s*MB\\b/i,
+      /(\\d+(?:\\.\\d+)?)\\s*MB\\b\\D{0,40}(?:portal\\s+target|delivery\\s+limit|target|limit|maximum|max)/i,
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) return Number(match[1]);
+    }
+    return null;
+  }
+
+  function normalizePlannerSplitPlan(orchestration, payload) {
+    if (!payload || typeof payload !== "object" || !payload.response || typeof payload.response !== "object") {
+      return payload;
+    }
+
+    const targetPartSizeMb = deliveryTargetSizeMb(orchestration, payload);
+    if (!targetPartSizeMb) return payload;
+
+    const currentPlan = payload.response.processingPlan && typeof payload.response.processingPlan === "object"
+      ? payload.response.processingPlan
+      : {};
+    const currentSplit = currentPlan.split && typeof currentPlan.split === "object"
+      ? currentPlan.split
+      : payload.response.split && typeof payload.response.split === "object"
+        ? payload.response.split
+        : {};
+
+    payload.response.processingPlan = {
+      ...currentPlan,
+      split: {
+        ...currentSplit,
+        enabled: true,
+        strategy: "by-max-size",
+        targetPartSizeMb,
+        outputMode: "single-zip",
+      },
+    };
+    return payload;
+  }
+
   function publish(orchestration, plannerResult, plannerResultStatus) {
     const detail = {
       ...orchestration,
@@ -60,8 +117,9 @@ const runtime = `(() => {
         return;
       }
 
-      const status = payload.status === "ready" ? "ready" : "fallback";
-      publish(orchestration, payload, status);
+      const normalizedPayload = normalizePlannerSplitPlan(orchestration, payload);
+      const status = normalizedPayload.status === "ready" ? "ready" : "fallback";
+      publish(orchestration, normalizedPayload, status);
     } catch (error) {
       if (sequence !== requestSequence) return;
       publish(orchestration, {
@@ -92,4 +150,4 @@ const nextHtml = popupHtml.includes(scriptTag)
 await writeFile(RUNTIME_PATH, runtime, "utf8");
 await writeFile(POPUP_HTML_PATH, nextHtml, "utf8");
 
-process.stdout.write("AI Lab server planner runtime bridge applied\n");
+process.stdout.write("AI Lab server planner runtime bridge applied with split normalization N1\n");
