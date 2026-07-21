@@ -24,31 +24,57 @@ if (!router.includes("let activeTargetContract = null;")) {
   router = router.replace(stateAnchor, stateReplacement);
 }
 
-// Deliberately do not clear activeTargetContract in resetActive(). Office completion
-// can arrive through a later lifecycle callback after generic UI state has reset.
-// The next confirmation always overwrites the contract, including with null for
-// ordinary non-delivery workflows.
-const forbiddenReset = "activeTargetContract = null;\n    workflowStage";
-if (router.includes(forbiddenReset)) {
-  throw new Error("Validated target contract must survive resetActive");
+const confirmationStart = router.indexOf("async function confirmExecution(button)");
+const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
+if (confirmationStart < 0 || confirmationEnd <= confirmationStart) {
+  throw new Error("Execution confirmation boundary not found");
 }
 
-const legacyAssignment = `    activeTargetPartSizeMb =
-      targetSizeFromPlannerResult(plannerResult) ??
-      targetSizeFromRenderedPlan(button) ??
-      null;`;
-const structuredAssignment = `    const structuredSplit = plannerResult?.response?.processingPlan?.split;
+let confirmationSource = router.slice(confirmationStart, confirmationEnd);
+
+// Remove every legacy target-size assignment from the active confirmation path.
+confirmationSource = confirmationSource.replace(
+  /\n\s*activeTargetPartSizeMb\s*=\s*(?:[\s\S]*?);(?=\n\s*workflowStage\s*=\s*["']compression["'];)/g,
+  "",
+);
+confirmationSource = confirmationSource.replace(
+  /\n\s*const structuredSplit\s*=\s*plannerResult\?\.response\?\.processingPlan\?\.split;[\s\S]*?activeTargetPartSizeMb\s*=\s*activeTargetContract\?\.targetPartSizeMb\s*\?\?\s*null;/g,
+  "",
+);
+
+const canonicalAnchor = "    completedSplitResult = null;";
+const canonicalBinding = `    completedSplitResult = null;
+    const structuredSplit = plannerResult?.response?.processingPlan?.split;
     activeTargetContract = structuredSplit?.enabled === true
       ? assertTargetWorkflowPlan(plannerResult.response)
       : null;
     activeTargetPartSizeMb = activeTargetContract?.targetPartSizeMb ?? null;`;
 
-if (!router.includes(structuredAssignment)) {
-  if (!router.includes(legacyAssignment)) {
-    throw new Error("Exact target workflow confirmation anchor not found");
-  }
-  router = router.replace(legacyAssignment, structuredAssignment);
+if (!confirmationSource.includes(canonicalAnchor)) {
+  throw new Error("Canonical target workflow confirmation state anchor not found");
 }
+confirmationSource = confirmationSource.replace(canonicalAnchor, canonicalBinding);
+
+if ((confirmationSource.match(/activeTargetContract\s*=/g) || []).length !== 1) {
+  throw new Error("Target contract must have exactly one assignment in confirmation");
+}
+if ((confirmationSource.match(/activeTargetPartSizeMb\s*=/g) || []).length !== 1) {
+  throw new Error("Target size must have exactly one derived assignment in confirmation");
+}
+if (confirmationSource.includes("targetSizeFromPlannerResult(plannerResult)")) {
+  throw new Error("Legacy target inference remains in active confirmation path");
+}
+if (confirmationSource.includes("targetSizeFromRenderedPlan(button)")) {
+  throw new Error("Rendered-plan inference remains in active confirmation path");
+}
+if (confirmationSource.includes("button.dataset.aiTargetPartSizeMb")) {
+  throw new Error("Button dataset remains an execution source in confirmation");
+}
+
+router =
+  router.slice(0, confirmationStart) +
+  confirmationSource +
+  router.slice(confirmationEnd);
 
 const workflowStartMarker = "  async function continueTargetSizeWorkflow";
 const workflowEndMarker = "  async function findArtifactRecord";
@@ -65,25 +91,16 @@ router =
   workflowSource +
   router.slice(workflowEnd);
 
-if (!router.includes("activeTargetContract = structuredSplit?.enabled === true")) {
-  throw new Error("Structured target workflow contract is not bound at confirmation");
+const forbiddenReset = "activeTargetContract = null;\n    workflowStage";
+if (router.includes(forbiddenReset)) {
+  throw new Error("Validated target contract must survive resetActive");
 }
 if (!router.includes('decision.action === "complete_pdf"')) {
   throw new Error("Structured target workflow decision is not bound at completion");
 }
 
-const confirmationStart = router.indexOf("async function confirmExecution(button)");
-const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
-const confirmationSource = router.slice(confirmationStart, confirmationEnd);
-if (confirmationSource.includes("targetSizeFromPlannerResult(plannerResult)")) {
-  throw new Error("Legacy target inference remains in active confirmation path");
-}
-if (confirmationSource.includes("targetSizeFromRenderedPlan(button)")) {
-  throw new Error("Rendered-plan inference remains in active confirmation path");
-}
-
 const revisionMarker =
-  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C4";\n';
+  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C5";\n';
 const existingRevision = /  globalThis\.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C\d+";\n/;
 if (existingRevision.test(router)) {
   router = router.replace(existingRevision, revisionMarker);
@@ -96,4 +113,4 @@ if (existingRevision.test(router)) {
 }
 
 await writeFile(routerPath, router, "utf8");
-process.stdout.write("AI Lab structured target workflow contract runtime C4 applied\n");
+process.stdout.write("AI Lab structured target workflow contract runtime C5 applied\n");
