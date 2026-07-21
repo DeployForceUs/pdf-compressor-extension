@@ -9,7 +9,7 @@ const ROUTER_PATH = path.join(OUTPUT_DIR, "ai-lab-execution-router.js");
 const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 
-const REVISION = "H8-N2-F2";
+const REVISION = "H9-CONTRACT-C1";
 
 function gitCommit() {
   try {
@@ -35,6 +35,11 @@ function requireMarker(source, marker, label) {
   else fail(label, `missing marker: ${marker}`);
 }
 
+function forbidMarker(source, marker, label) {
+  if (!source.includes(marker)) pass(label);
+  else fail(label, `forbidden marker remains active: ${marker}`);
+}
+
 const [plannerRuntime, presenter, router, manifestText, contestAccess] = await Promise.all([
   readFile(PLANNER_RUNTIME_PATH, "utf8"),
   readFile(PRESENTER_PATH, "utf8"),
@@ -55,16 +60,25 @@ requireMarker(plannerRuntime, "normalizePlannerSplitPlan", "Planner split normal
 requireMarker(plannerRuntime, 'strategy: "by-max-size"', "Planner normalized split strategy");
 requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZIP output");
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
-requireMarker(plannerRuntime, "approximateCompressionTarget", "Planner approximate compression target detection");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, "validating_target_size", "Router target-size validation");
-requireMarker(router, "target_size_recovered_at_completion", "Router completion target recovery");
+requireMarker(router, "activeTargetWorkflowPlan = plannerResult.response", "Router structured plan binding");
+requireMarker(router, "assertTargetWorkflowPlan(activeTargetWorkflowPlan)", "Router contract validation");
+requireMarker(router, "decideTargetWorkflowCompletion", "Router deterministic completion decision");
+requireMarker(router, 'decision.action === "complete_pdf"', "Router complete-or-split boundary");
+requireMarker(router, "validating_target_size", "Router target-size validation event");
 requireMarker(router, "split_started", "Split workflow start");
 requireMarker(router, 'dataset.aiAction = "download-split"', "ZIP download route");
 requireMarker(router, 'type: "by-max-size"', "Deterministic by-max-size strategy");
 requireMarker(router, 'outputMode: "single-zip"', "Single ZIP output mode");
-requireMarker(router, "targetSizeFromRenderedPlan", "Rendered-plan fallback");
+forbidMarker(
+  router.slice(
+    router.indexOf("activeTargetWorkflowPlan = plannerResult.response"),
+    router.indexOf('workflowStage = "compression";', router.indexOf("activeTargetWorkflowPlan = plannerResult.response")) + 100,
+  ),
+  "targetSizeFromPlannerResult",
+  "Legacy inference removed from active confirmation path",
+);
 
 if (hostPermissions.includes("https://pdf-66-55-75-239.sslip.io/*")) {
   pass("Office host permission");
