@@ -62,10 +62,6 @@ function gigabytes(value: number) {
   return value.toFixed(1);
 }
 
-function benchmarkTierLabel(result: LocalRuntimeBenchmarkResult) {
-  return result.tier.charAt(0).toUpperCase() + result.tier.slice(1);
-}
-
 export function SmartPlannerPreparationCard({
   pdfReady,
   officeAvailable,
@@ -240,8 +236,8 @@ export function SmartPlannerPreparationCard({
           </span>
           {benchmark.status === "ready" ? (
             <>
-              <span>Benchmark: {benchmarkTierLabel(benchmark.result)} · {Math.round(benchmark.result.operationsPerMs).toLocaleString()} ops/ms</span>
-              <small>Calibration is stored on this browser profile and does not affect routing yet.</small>
+              <span>Memory transform benchmark · {Math.round(benchmark.result.throughputMbPerSecond).toLocaleString()} MB/s</span>
+              <small>Median of {benchmark.result.sampleCount} local buffer-processing runs. Stored on this browser profile and not used for routing yet.</small>
             </>
           ) : benchmark.status === "error" ? (
             <small>Benchmark calibration failed. Hardware detection remains available.</small>
