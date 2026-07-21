@@ -123,4 +123,5 @@ if (!popup.includes("data-ai-lab-contest-access")) {
 await writeFile(popupPath, popup, "utf8");
 
 console.log("AI Lab contest access, download visuals, and Office host permission embedded");
+await import("./apply-ai-lab-wait-spinners.mjs");
 await import("./verify-ai-lab-build.mjs");
