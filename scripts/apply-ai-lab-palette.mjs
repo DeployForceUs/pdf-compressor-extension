@@ -31,7 +31,7 @@ body {
 }
 
 .shell {
-  border-color: rgba(60, 140, 227, 0.34) !important;
+  border: none !important;
   background: var(--ai-ink) !important;
   box-shadow: 0 24px 80px rgba(2, 3, 7, 0.76) !important;
 }
@@ -84,27 +84,32 @@ body {
   box-shadow: 0 8px 24px rgba(20, 50, 148, 0.42) !important;
 }
 
+.input-card {
+  border: none !important;
+}
+
 .input-card,
 .planner-card,
 .metadata-card {
-  border-color: rgba(60, 140, 227, 0.28) !important;
   background: linear-gradient(180deg, rgba(8, 13, 23, 0.98), rgba(2, 3, 7, 0.98)) !important;
   box-shadow: 0 18px 48px rgba(2, 3, 7, 0.5) !important;
 }
 
 .dropzone {
-  border-color: rgba(60, 140, 227, 0.46) !important;
+  border: none !important;
   background:
     radial-gradient(circle at 50% 10%, rgba(60, 140, 227, 0.14), transparent 18rem),
     linear-gradient(180deg, rgba(20, 50, 148, 0.2), rgba(8, 13, 23, 0.86)) !important;
+  box-shadow: inset 0 0 0 1px rgba(60, 140, 227, 0.06) !important;
 }
 
 .dropzone:hover,
 .dropzone--active {
-  border-color: var(--ai-azure) !important;
+  border: none !important;
   background:
     radial-gradient(circle at 50% 8%, rgba(60, 140, 227, 0.24), transparent 18rem),
     linear-gradient(180deg, rgba(20, 50, 148, 0.32), rgba(8, 13, 23, 0.9)) !important;
+  box-shadow: inset 0 0 0 1px rgba(60, 140, 227, 0.12) !important;
 }
 
 .primary,
