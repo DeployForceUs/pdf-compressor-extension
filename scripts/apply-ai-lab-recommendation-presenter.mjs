@@ -6,6 +6,7 @@ const POPUP_HTML_PATH = path.join(OUTPUT_DIR, "popup.html");
 const GOAL_RUNTIME_PATH = path.join(OUTPUT_DIR, "ai-lab-all-goal-flows.js");
 const PRESENTER_RUNTIME_PATH = path.join(OUTPUT_DIR, "ai-lab-recommendation-presenter.js");
 const SCRIPT_NAME = "ai-lab-recommendation-presenter.js";
+const STYLE_ID = "ai-lab-recommendation-scroll-style";
 
 const goalRuntime = await readFile(GOAL_RUNTIME_PATH, "utf8");
 const startMarker = "  function planFor(";
@@ -43,6 +44,16 @@ const presenterRuntime = `(() => {
 
   function panel() {
     return document.querySelector(".ai-lab-goal-panel");
+  }
+
+  function enableRecommendationScroll(target) {
+    document.documentElement.classList.add("ai-lab-recommendation-active");
+    let current = target;
+    while (current && current !== document.documentElement) {
+      current.classList?.add("ai-lab-recommendation-scroll-host");
+      current = current.parentElement;
+    }
+    globalThis.requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
   }
 
   function element(tag, className, text) {
@@ -96,6 +107,7 @@ const presenterRuntime = `(() => {
     back.type = "button";
     back.setAttribute("aria-label", "Back to goal choices");
     target.append(back, element("p", "ai-lab-goal-panel__eyebrow", "Recommended Plan"), element("h2", "", title));
+    enableRecommendationScroll(target);
   }
 
   function renderLoading(orchestration) {
@@ -169,11 +181,36 @@ const presenterRuntime = `(() => {
 
 await writeFile(PRESENTER_RUNTIME_PATH, presenterRuntime, "utf8");
 
+const scrollStyle = `<style id="${STYLE_ID}">
+html.ai-lab-recommendation-active,
+html.ai-lab-recommendation-active body {
+  height: auto !important;
+  min-height: 100% !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+html.ai-lab-recommendation-active .ai-lab-recommendation-scroll-host {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+html.ai-lab-recommendation-active .ai-lab-goal-panel[data-ai-lab-goal-view="recommendation"] {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-bottom: 24px !important;
+}
+</style>`;
+
 const popupHtml = await readFile(POPUP_HTML_PATH, "utf8");
 const scriptTag = `<script src="/${SCRIPT_NAME}"></script>`;
-const nextHtml = popupHtml.includes(scriptTag)
+let nextHtml = popupHtml.includes(scriptTag)
   ? popupHtml
   : popupHtml.replace("</body>", `${scriptTag}</body>`);
+if (!nextHtml.includes(`id="${STYLE_ID}"`)) {
+  nextHtml = nextHtml.replace("</head>", `${scrollStyle}</head>`);
+}
 await writeFile(POPUP_HTML_PATH, nextHtml, "utf8");
 
 process.stdout.write("AI Lab real Planner recommendation presenter applied\n");
