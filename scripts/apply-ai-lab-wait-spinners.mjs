@@ -7,90 +7,102 @@ const runtimeName = "ai-lab-wait-spinners.js";
 const runtimePath = path.join(outputDir, runtimeName);
 
 const runtime = `(() => {
-  const ANALYSIS_SPINNER_ID = "ai-lab-analysis-wait-spinner";
-  const PLANNER_SPINNER_ID = "ai-lab-planner-wait-spinner";
+  const PROGRESS_ID = "ai-lab-planner-progress";
 
   function normalizedText(node) {
     return (node?.textContent || "").replace(/\\s+/g, " ").trim().toLowerCase();
   }
 
-  function createSpinner(id) {
-    const wrap = document.createElement("div");
-    wrap.id = id;
-    wrap.className = "ai-lab-wait-spinner";
-    wrap.setAttribute("role", "status");
-    wrap.setAttribute("aria-live", "polite");
-
-    const spinner = document.createElement("span");
-    spinner.className = "planner-card__spinner";
-    spinner.setAttribute("aria-hidden", "true");
-    wrap.appendChild(spinner);
-    return wrap;
+  function removeProgress() {
+    document.getElementById(PROGRESS_ID)?.remove();
   }
 
-  function removeSpinner(id) {
-    document.getElementById(id)?.remove();
+  function createProgress() {
+    const track = document.createElement("div");
+    track.id = PROGRESS_ID;
+    track.className = "ai-lab-planner-progress";
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-label", "AI Planner is working");
+
+    const bar = document.createElement("span");
+    bar.className = "ai-lab-planner-progress__bar";
+    track.appendChild(bar);
+    return track;
   }
 
-  function syncWaitSpinners() {
+  function syncPlannerProgress() {
     const containers = Array.from(document.querySelectorAll("article, section, .planner-card, .ai-lab-goal-panel"));
-
-    const analysisCard = containers.find((node) => normalizedText(node).includes("automatic local analysis"));
-    if (analysisCard) {
-      const text = normalizedText(analysisCard);
-      const finished = text.includes("local analysis complete") || text.includes("analysis failed") || text.includes("error");
-      if (!finished && !document.getElementById(ANALYSIS_SPINNER_ID)) {
-        analysisCard.appendChild(createSpinner(ANALYSIS_SPINNER_ID));
-      } else if (finished) {
-        removeSpinner(ANALYSIS_SPINNER_ID);
-      }
-    } else {
-      removeSpinner(ANALYSIS_SPINNER_ID);
-    }
-
     const plannerCard = containers.find((node) => {
       const text = normalizedText(node);
-      return text.includes("building your plan") || text.includes("consulting ai planner");
+      return text.includes("building your plan") && text.includes("consulting ai planner");
     });
-    if (plannerCard) {
-      const text = normalizedText(plannerCard);
-      const finished = text.includes("recommendation unavailable") || text.includes("planner timeout") || text.includes("error");
-      if (!finished && !document.getElementById(PLANNER_SPINNER_ID)) {
-        const statusRow = Array.from(plannerCard.querySelectorAll("div, p")).find((node) => normalizedText(node).includes("consulting ai planner"));
-        (statusRow || plannerCard).appendChild(createSpinner(PLANNER_SPINNER_ID));
-      } else if (finished) {
-        removeSpinner(PLANNER_SPINNER_ID);
-      }
-    } else {
-      removeSpinner(PLANNER_SPINNER_ID);
+
+    if (!plannerCard) {
+      removeProgress();
+      return;
     }
+
+    const text = normalizedText(plannerCard);
+    const finished = text.includes("recommendation unavailable") ||
+      text.includes("planner timeout") ||
+      text.includes("document analysis failed") ||
+      text.includes("best route");
+
+    if (finished) {
+      removeProgress();
+      return;
+    }
+
+    if (document.getElementById(PROGRESS_ID)) return;
+
+    const statusRow = Array.from(plannerCard.querySelectorAll("div, p"))
+      .find((node) => normalizedText(node).includes("consulting ai planner"));
+    (statusRow?.parentElement || plannerCard).appendChild(createProgress());
   }
 
-  const observer = new MutationObserver(syncWaitSpinners);
+  const observer = new MutationObserver(syncPlannerProgress);
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  syncWaitSpinners();
+  syncPlannerProgress();
 })();
 `;
 
 await writeFile(runtimePath, runtime, "utf8");
 
 let popup = await readFile(popupPath, "utf8");
-const spinnerStyle = `<style data-ai-lab-wait-spinner-style>
-.ai-lab-wait-spinner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const progressStyle = `<style data-ai-lab-wait-spinner-style>
+.ai-lab-planner-progress {
+  position: relative;
   width: 100%;
-  min-height: 34px;
-  padding: 8px 0 2px;
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(118, 185, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
 }
-.ai-lab-wait-spinner .planner-card__spinner {
-  display: inline-block !important;
+.ai-lab-planner-progress__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f7cff, #46d7ff, #7b61ff);
+  box-shadow: 0 0 16px rgba(70, 215, 255, 0.58);
+  animation: ai-lab-planner-progress-slide 1.15s ease-in-out infinite;
+}
+@keyframes ai-lab-planner-progress-slide {
+  0% { left: -42%; }
+  100% { left: 104%; }
 }
 </style>`;
 
 if (!popup.includes("data-ai-lab-wait-spinner-style")) {
-  popup = popup.replace("</head>", `${spinnerStyle}</head>`);
+  popup = popup.replace("</head>", `${progressStyle}</head>`);
+} else {
+  popup = popup.replace(
+    /<style data-ai-lab-wait-spinner-style>[\\s\\S]*?<\\/style>/,
+    progressStyle,
+  );
 }
 
 if (!popup.includes("data-ai-lab-wait-spinners")) {
@@ -101,4 +113,4 @@ if (!popup.includes("data-ai-lab-wait-spinners")) {
 }
 
 await writeFile(popupPath, popup, "utf8");
-console.log("AI Lab visual wait spinners embedded");
+console.log("AI Lab planner progress indicator embedded");
