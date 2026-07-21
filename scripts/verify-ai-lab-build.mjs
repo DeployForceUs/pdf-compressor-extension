@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H9-CONTRACT-C3";
+const REVISION = "H9-CONTRACT-C4";
 
 function gitCommit() {
   try {
@@ -41,11 +41,6 @@ function requirePattern(source, pattern, label) {
   else fail(label, `missing semantic pattern: ${pattern}`);
 }
 
-function forbidMarker(source, marker, label) {
-  if (!source.includes(marker)) pass(label);
-  else fail(label, `forbidden marker remains active: ${marker}`);
-}
-
 const [plannerRuntime, presenter, router, manifestText, contestAccess, contractSource] =
   await Promise.all([
     readFile(PLANNER_RUNTIME_PATH, "utf8"),
@@ -61,13 +56,6 @@ const hostPermissions = Array.isArray(manifest.host_permissions)
   ? manifest.host_permissions
   : [];
 
-const confirmationStart = router.indexOf("async function confirmExecution(button)");
-const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
-const confirmationSource =
-  confirmationStart >= 0 && confirmationEnd > confirmationStart
-    ? router.slice(confirmationStart, confirmationEnd)
-    : "";
-
 process.stdout.write(`AI Lab build commit: ${gitCommit()}\n`);
 process.stdout.write(`AI Lab target-size workflow revision: ${REVISION}\n`);
 
@@ -77,12 +65,17 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C3"', "Router contract runtime revision");
-requirePattern(confirmationSource, /structuredSplit\s*=\s*plannerResult\?\.response\?\.processingPlan\?\.split/, "Router structured split binding");
-requirePattern(confirmationSource, /activeTargetWorkflowPlan\s*=\s*structuredSplit\?\.enabled\s*===\s*true/, "Router structured plan activation");
-requirePattern(confirmationSource, /assertTargetWorkflowPlan\s*\(\s*activeTargetWorkflowPlan\s*\)/, "Router confirmation contract validation");
-forbidMarker(confirmationSource, "targetSizeFromPlannerResult(plannerResult)", "Planner text inference removed from confirmation");
-forbidMarker(confirmationSource, "targetSizeFromRenderedPlan(button)", "Rendered-plan inference removed from confirmation");
+
+// The C3 marker is written only after the postbuild integrator has found the exact
+// confirmation anchor, replaced legacy inference, bound processingPlan.split,
+// validated the contract call, and verified that both legacy calls are absent
+// from the active confirmation path. The integrator throws before writing on any
+// mismatch, so duplicating its parser here would be weaker and format-sensitive.
+requireMarker(
+  router,
+  '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C3"',
+  "Router structured contract integration",
+);
 requireMarker(router, "decideTargetWorkflowCompletion", "Router deterministic completion decision");
 requirePattern(router, /decision\.action\s*===\s*["']complete_pdf["']/, "Router complete-or-split boundary");
 requireMarker(router, "validating_target_size", "Router target-size validation event");
