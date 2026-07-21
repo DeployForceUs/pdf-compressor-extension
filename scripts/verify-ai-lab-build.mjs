@@ -9,7 +9,7 @@ const ROUTER_PATH = path.join(OUTPUT_DIR, "ai-lab-execution-router.js");
 const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 
-const REVISION = "H9-CONTRACT-C1";
+const REVISION = "H9-CONTRACT-C2";
 
 function gitCommit() {
   try {
@@ -53,6 +53,13 @@ const hostPermissions = Array.isArray(manifest.host_permissions)
   ? manifest.host_permissions
   : [];
 
+const confirmationStart = router.indexOf("  async function confirmExecution(button)");
+const confirmationEnd = router.indexOf("  const runtime =", confirmationStart);
+const confirmationSource =
+  confirmationStart >= 0 && confirmationEnd > confirmationStart
+    ? router.slice(confirmationStart, confirmationEnd)
+    : "";
+
 process.stdout.write(`AI Lab build commit: ${gitCommit()}\n`);
 process.stdout.write(`AI Lab target-size workflow revision: ${REVISION}\n`);
 
@@ -62,8 +69,11 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, "activeTargetWorkflowPlan = plannerResult.response", "Router structured plan binding");
-requireMarker(router, "assertTargetWorkflowPlan(activeTargetWorkflowPlan)", "Router contract validation");
+requireMarker(confirmationSource, "const structuredSplit = plannerResult?.response?.processingPlan?.split", "Router structured split binding");
+requireMarker(confirmationSource, "activeTargetWorkflowPlan = structuredSplit?.enabled === true", "Router structured plan activation");
+requireMarker(confirmationSource, "assertTargetWorkflowPlan(activeTargetWorkflowPlan)", "Router confirmation contract validation");
+forbidMarker(confirmationSource, "targetSizeFromPlannerResult(plannerResult)", "Planner text inference removed from confirmation");
+forbidMarker(confirmationSource, "targetSizeFromRenderedPlan(button)", "Rendered-plan inference removed from confirmation");
 requireMarker(router, "decideTargetWorkflowCompletion", "Router deterministic completion decision");
 requireMarker(router, 'decision.action === "complete_pdf"', "Router complete-or-split boundary");
 requireMarker(router, "validating_target_size", "Router target-size validation event");
@@ -71,14 +81,6 @@ requireMarker(router, "split_started", "Split workflow start");
 requireMarker(router, 'dataset.aiAction = "download-split"', "ZIP download route");
 requireMarker(router, 'type: "by-max-size"', "Deterministic by-max-size strategy");
 requireMarker(router, 'outputMode: "single-zip"', "Single ZIP output mode");
-forbidMarker(
-  router.slice(
-    router.indexOf("activeTargetWorkflowPlan = plannerResult.response"),
-    router.indexOf('workflowStage = "compression";', router.indexOf("activeTargetWorkflowPlan = plannerResult.response")) + 100,
-  ),
-  "targetSizeFromPlannerResult",
-  "Legacy inference removed from active confirmation path",
-);
 
 if (hostPermissions.includes("https://pdf-66-55-75-239.sslip.io/*")) {
   pass("Office host permission");
