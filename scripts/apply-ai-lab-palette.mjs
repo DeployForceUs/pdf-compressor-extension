@@ -150,16 +150,31 @@ body.ai-lab--pdf-ready .ai-lab-stage-strip span:first-child {
   color: var(--ai-white) !important;
 }
 
-/* One fixed central work area: upload is replaced by local analysis. */
+/* One fixed central work area: replace only the old upload content, not its parent container. */
 body.ai-lab--pdf-ready .input-card {
+  display: block !important;
+  min-height: 330px;
+  max-height: 330px;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.ai-lab--pdf-ready .input-card > .input-card__header,
+body.ai-lab--pdf-ready .input-card > .dropzone,
+body.ai-lab--pdf-ready .input-card > .metadata-card {
   display: none !important;
 }
 
 body.ai-lab--pdf-ready .planner-card {
   display: flex !important;
+  width: 100%;
   min-height: 330px;
   max-height: 330px;
+  margin: 0 !important;
   padding: 24px !important;
+  box-sizing: border-box;
   flex-direction: column;
   justify-content: center;
   overflow: hidden !important;
