@@ -77,8 +77,8 @@ if (!router.includes('decision.action === "complete_pdf"')) {
   throw new Error("Structured target workflow decision is not bound at completion");
 }
 
-const confirmationStart = router.indexOf("  async function confirmExecution(button)");
-const confirmationEnd = router.indexOf("  const runtime =", confirmationStart);
+const confirmationStart = router.indexOf("async function confirmExecution(button)");
+const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
 const confirmationSource = router.slice(confirmationStart, confirmationEnd);
 if (confirmationSource.includes("targetSizeFromPlannerResult(plannerResult)")) {
   throw new Error("Legacy target inference remains in active confirmation path");
@@ -87,5 +87,15 @@ if (confirmationSource.includes("targetSizeFromRenderedPlan(button)")) {
   throw new Error("Rendered-plan inference remains in active confirmation path");
 }
 
+const revisionMarker =
+  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C3";\n';
+if (!router.includes("__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__")) {
+  const readyMarker = '  console.info("[AI Lab] ExecutionRouter ready");';
+  if (!router.includes(readyMarker)) {
+    throw new Error("ExecutionRouter ready marker not found");
+  }
+  router = router.replace(readyMarker, revisionMarker + readyMarker);
+}
+
 await writeFile(routerPath, router, "utf8");
-process.stdout.write("AI Lab structured target workflow contract runtime C2 applied\n");
+process.stdout.write("AI Lab structured target workflow contract runtime C3 applied\n");
