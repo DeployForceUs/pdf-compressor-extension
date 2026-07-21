@@ -31,29 +31,21 @@ if (confirmationStart < 0 || confirmationEnd <= confirmationStart) {
 }
 
 let confirmationSource = router.slice(confirmationStart, confirmationEnd);
+const lifecycleBoundary = /(\n\s*completedResult\s*=\s*null;)([\s\S]*?)(\n\s*active\s*=\s*true;)/;
+const lifecycleMatch = confirmationSource.match(lifecycleBoundary);
+if (!lifecycleMatch) {
+  throw new Error("Canonical target workflow lifecycle boundary not found");
+}
 
-// Remove every legacy target-size assignment from the active confirmation path.
-confirmationSource = confirmationSource.replace(
-  /\n\s*activeTargetPartSizeMb\s*=\s*(?:[\s\S]*?);(?=\n\s*workflowStage\s*=\s*["']compression["'];)/g,
-  "",
-);
-confirmationSource = confirmationSource.replace(
-  /\n\s*const structuredSplit\s*=\s*plannerResult\?\.response\?\.processingPlan\?\.split;[\s\S]*?activeTargetPartSizeMb\s*=\s*activeTargetContract\?\.targetPartSizeMb\s*\?\?\s*null;/g,
-  "",
-);
-
-const canonicalAnchor = "    completedSplitResult = null;";
-const canonicalBinding = `    completedSplitResult = null;
+const canonicalLifecycle = `${lifecycleMatch[1]}
+    completedSplitResult = null;
     const structuredSplit = plannerResult?.response?.processingPlan?.split;
     activeTargetContract = structuredSplit?.enabled === true
       ? assertTargetWorkflowPlan(plannerResult.response)
       : null;
-    activeTargetPartSizeMb = activeTargetContract?.targetPartSizeMb ?? null;`;
-
-if (!confirmationSource.includes(canonicalAnchor)) {
-  throw new Error("Canonical target workflow confirmation state anchor not found");
-}
-confirmationSource = confirmationSource.replace(canonicalAnchor, canonicalBinding);
+    activeTargetPartSizeMb = activeTargetContract?.targetPartSizeMb ?? null;
+    workflowStage = "compression";${lifecycleMatch[3]}`;
+confirmationSource = confirmationSource.replace(lifecycleBoundary, canonicalLifecycle);
 
 if ((confirmationSource.match(/activeTargetContract\s*=/g) || []).length !== 1) {
   throw new Error("Target contract must have exactly one assignment in confirmation");
@@ -100,7 +92,7 @@ if (!router.includes('decision.action === "complete_pdf"')) {
 }
 
 const revisionMarker =
-  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C5";\n';
+  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C6";\n';
 const existingRevision = /  globalThis\.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C\d+";\n/;
 if (existingRevision.test(router)) {
   router = router.replace(existingRevision, revisionMarker);
@@ -113,4 +105,4 @@ if (existingRevision.test(router)) {
 }
 
 await writeFile(routerPath, router, "utf8");
-process.stdout.write("AI Lab structured target workflow contract runtime C5 applied\n");
+process.stdout.write("AI Lab structured target workflow contract runtime C6 applied\n");
