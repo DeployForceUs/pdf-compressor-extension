@@ -14,7 +14,7 @@ test("ExecutionRouter starts only after explicit recommendation confirmation", (
 
 test("ExecutionRouter routes local to the existing local engine entry point", () => {
   assert.match(source, /background:compression-start/);
-  assert.match(source, /mode: \"Balanced\"/);
+  assert.match(source, /mode: "Balanced"/);
   assert.match(source, /PRESET_QUALITY/);
 });
 
@@ -25,7 +25,7 @@ test("ExecutionRouter routes Office recommendations to the existing Office Engin
 });
 
 test("ExecutionRouter accepts only a current validated Planner recommendation", () => {
-  assert.match(source, /plannerResult\?\.status !== \"ready\"/);
+  assert.match(source, /plannerResult\?\.status !== "ready"/);
   assert.match(source, /recommendedRoute !== route/);
   assert.match(source, /ALLOWED_ROUTES/);
   assert.match(source, /planner_result_mismatch/);
@@ -36,4 +36,21 @@ test("ExecutionRouter prevents duplicate starts and exposes debug state", () => 
   assert.match(source, /button\.disabled = true/);
   assert.match(source, /__AI_LAB_LAST_EXECUTION_ROUTER_RESULT__/);
   assert.match(source, /ai-lab:execution-router-result/);
+});
+
+test("ExecutionRouter tracks existing local and Office lifecycle events", () => {
+  assert.match(source, /runtime\?\.onMessage\?\.addListener/);
+  assert.match(source, /compression:progress/);
+  assert.match(source, /compression:result/);
+  assert.match(source, /compression:error/);
+  assert.match(source, /office:progress/);
+  assert.match(source, /office:result/);
+  assert.match(source, /office:error/);
+});
+
+test("ExecutionRouter closes the local lifecycle when the start response already contains a result", () => {
+  assert.match(source, /route === "local" && response\?\.result/);
+  assert.match(source, /renderComplete\(response\.result\)/);
+  assert.match(source, /status: "complete"/);
+  assert.match(source, /resetActive\(\)/);
 });
