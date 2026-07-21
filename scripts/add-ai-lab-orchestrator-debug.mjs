@@ -8,6 +8,8 @@ const SCRIPT_NAME = "ai-lab-orchestrator-debug.js";
 
 const runtime = `(() => {
   const EVENT_NAME = "ai-lab:orchestration-debug";
+  const PROFILE_EVENT_NAME = "ai-lab:document-profile-ready";
+  const SMART_PLANNER_PREPARE = "background:smart-planner-prepare";
   const DEFAULT_OFFICE_URL = "http://127.0.0.1:8787";
   const CAPACITY_CATALOG = [
     { id: "small", cpuCores: 2, memoryMb: 4096, label: "2 vCPU · 4 GB RAM" },
@@ -41,7 +43,7 @@ const runtime = `(() => {
 
   async function collectOfficeCapabilities() {
     const configured = localStorage.getItem("ai-lab-office-engine-url") || DEFAULT_OFFICE_URL;
-    const baseUrl = configured.replace(/\\/$/, "");
+    const baseUrl = configured.replace(/\\\/$/, "");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2500);
     try {
@@ -76,6 +78,85 @@ const runtime = `(() => {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  function complexitySignals(profile) {
+    const signals = [];
+    if (profile.pageCount >= 200) signals.push("large_page_count");
+    if (profile.fileSizeBytes >= 100 * 1024 * 1024) signals.push("large_file_size");
+    if (profile.imageObjectCount >= profile.pageCount * 2) signals.push("image_dense");
+    if (profile.scannedPageRatio >= 0.75) signals.push("scan_dominant");
+    if (profile.textPageRatio >= 0.75) signals.push("text_dominant");
+    if (profile.vectorPageRatio >= 0.5) signals.push("vector_heavy");
+    if (profile.estimatedDpiBuckets?.over300 >= 0.5) signals.push("high_dpi_images");
+    if (profile.codecCounts?.jpx > 0) signals.push("contains_jpx_images");
+    if (profile.pageSizeDistributionBytes?.p90 >= 5 * 1024 * 1024) signals.push("large_page_streams");
+    return signals.length > 0 ? signals : ["standard_complexity"];
+  }
+
+  function adaptDocumentProfile(profile) {
+    if (!profile || typeof profile !== "object") return null;
+    const values = [
+      profile.pageCount,
+      profile.fileSizeBytes,
+      profile.imageObjectCount,
+      profile.scannedPageRatio,
+      profile.textPageRatio,
+      profile.vectorPageRatio,
+    ];
+    if (!values.every(Number.isFinite) || profile.pageCount <= 0 || profile.fileSizeBytes < 0 || profile.imageObjectCount < 0) return null;
+    return {
+      pageCount: profile.pageCount,
+      fileSizeBytes: profile.fileSizeBytes,
+      imageObjectCount: profile.imageObjectCount,
+      scannedRatio: profile.scannedPageRatio,
+      textRatio: profile.textPageRatio,
+      vectorRatio: profile.vectorPageRatio,
+      complexitySignals: complexitySignals(profile),
+    };
+  }
+
+  function capturePrepareResponse(response) {
+    const preparation = response?.ok && response.preparation?.status !== "blocked" ? response.preparation : null;
+    const profile = adaptDocumentProfile(preparation?.request?.documentProfile);
+    if (!profile) return;
+    globalThis.__AI_LAB_DOCUMENT_PROFILE__ = profile;
+    globalThis.dispatchEvent(new CustomEvent(PROFILE_EVENT_NAME, { detail: profile }));
+    console.info("[AI Lab] Document profile bridged from Local Analysis", profile);
+  }
+
+  function installPrepareResponseBridge() {
+    const runtime = globalThis.chrome?.runtime;
+    if (!runtime || typeof runtime.sendMessage !== "function" || runtime.sendMessage.__aiLabProfileBridge === true) return;
+    const original = runtime.sendMessage.bind(runtime);
+
+    function wrappedSendMessage(...args) {
+      const message = args[0];
+      const callbackIndex = args.findIndex((value, index) => index > 0 && typeof value === "function");
+      if (message?.type === SMART_PLANNER_PREPARE && callbackIndex >= 0) {
+        const originalCallback = args[callbackIndex];
+        args[callbackIndex] = (response) => {
+          capturePrepareResponse(response);
+          originalCallback(response);
+        };
+      }
+      const result = original(...args);
+      if (message?.type === SMART_PLANNER_PREPARE && result && typeof result.then === "function") {
+        return result.then((response) => {
+          capturePrepareResponse(response);
+          return response;
+        });
+      }
+      return result;
+    }
+
+    wrappedSendMessage.__aiLabProfileBridge = true;
+    runtime.sendMessage = wrappedSendMessage;
+  }
+
+  function clearDocumentProfile() {
+    delete globalThis.__AI_LAB_DOCUMENT_PROFILE__;
+    delete globalThis.__AI_LAB_LAST_ORCHESTRATION__;
   }
 
   function readDocumentProfile() {
@@ -117,6 +198,13 @@ const runtime = `(() => {
     globalThis.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
   }
 
+  document.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.matches('.dropzone input[type="file"]')) clearDocumentProfile();
+  }, true);
+  document.addEventListener("drop", (event) => {
+    if (event.target instanceof Element && event.target.closest(".dropzone")) clearDocumentProfile();
+  }, true);
+
   document.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
     const panel = button?.closest(".ai-lab-goal-panel");
@@ -146,6 +234,7 @@ const runtime = `(() => {
     }
   }, true);
 
+  installPrepareResponseBridge();
   console.info("[AI Lab] Compute orchestrator debug bridge ready");
 })();
 `;
