@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
 import { createSmartPlannerApiClient } from "../../lib/ai/smart-planner-api-client";
 import { requestSmartPlannerRecommendationWithClient } from "../../lib/ai/smart-planner-browser-gateway";
@@ -11,6 +11,7 @@ import {
   SMART_PLANNER_BACKGROUND_PREPARE,
   type SmartPlannerPrepareResponse,
 } from "../../lib/ai/smart-planner-runtime-message-contract";
+import { readLocalRuntimeCapability, type LocalRuntimeCapability } from "../../lib/local/local-runtime-capability";
 import { createOfficeEngineClient } from "../../lib/office/office-engine-client";
 import "../../styles/smart-planner-card.css";
 
@@ -29,6 +30,11 @@ type PlannerUiState =
   | { status: "blocked"; message: string }
   | { status: "error"; message: string };
 
+type LocalCapabilityState =
+  | { status: "loading" }
+  | { status: "ready"; capability: LocalRuntimeCapability }
+  | { status: "unavailable" };
+
 type Props = {
   pdfReady: boolean;
   officeAvailable: boolean;
@@ -40,6 +46,10 @@ function percent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+function gigabytes(value: number) {
+  return value.toFixed(1);
+}
+
 export function SmartPlannerPreparationCard({
   pdfReady,
   officeAvailable,
@@ -47,6 +57,23 @@ export function SmartPlannerPreparationCard({
   plannerAccessToken,
 }: Props) {
   const [state, setState] = useState<PlannerUiState>({ status: "idle" });
+  const [localCapability, setLocalCapability] = useState<LocalCapabilityState>({ status: "loading" });
+
+  useEffect(() => {
+    let active = true;
+
+    void readLocalRuntimeCapability()
+      .then((capability) => {
+        if (active) setLocalCapability({ status: "ready", capability });
+      })
+      .catch(() => {
+        if (active) setLocalCapability({ status: "unavailable" });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function analyze() {
     if (!pdfReady || state.status === "analyzing") return;
@@ -166,6 +193,21 @@ export function SmartPlannerPreparationCard({
       <p className="planner-card__disclosure">
         Analysis stays on this device. Only content-blind structural metrics are sent to the Planner. No filename, text, image, preview, or PDF content is sent.
       </p>
+
+      {localCapability.status === "ready" ? (
+        <div className="planner-card__result" aria-label="Local runtime capability">
+          <strong>Local runtime detected</strong>
+          <span>{localCapability.capability.cpuModel}</span>
+          <span>
+            {localCapability.capability.logicalCpuCount} logical CPUs · {gigabytes(localCapability.capability.availableMemoryGb)} GB available of {gigabytes(localCapability.capability.totalMemoryGb)} GB RAM
+          </span>
+          <small>Hardware is detected locally. Benchmark calibration has not run yet.</small>
+        </div>
+      ) : localCapability.status === "unavailable" ? (
+        <p className="planner-card__note">Local hardware details are unavailable in this browser.</p>
+      ) : (
+        <p className="planner-card__note">Reading local hardware capability…</p>
+      )}
 
       <button
         type="button"
