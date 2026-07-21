@@ -33,11 +33,13 @@ const runtime = `(() => {
   }
 
   function markDownloadButtons() {
-    document.querySelectorAll("button").forEach((button) => {
-      const text = normalizedText(button);
-      if (text === "download processed pdf" || text === "download split zip") {
-        button.classList.add("ai-lab-download-action");
-      }
+    document.querySelectorAll("button, a, [role='button']").forEach((control) => {
+      const text = normalizedText(control);
+      const action = control.getAttribute("data-ai-action") || "";
+      const isDownload = action.startsWith("download") ||
+        text.includes("download processed pdf") ||
+        text.includes("download split zip");
+      if (isDownload) control.classList.add("ai-lab-download-action");
     });
   }
 
@@ -123,7 +125,7 @@ const runtime = `(() => {
   }, true);
 
   const observer = new MutationObserver(syncVisualState);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
   syncVisualState();
 })();
 `;
