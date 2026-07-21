@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H15-CONTRACT-C8";
+const REVISION = "H16-CONTRACT-C9";
 
 function gitCommit() {
   try {
@@ -69,7 +69,7 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C8"', "Router canonical lifecycle integration");
+requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C9"', "Router canonical lifecycle integration");
 requireMarker(router, 'const TARGET_WORKFLOW_SCHEMA_VERSION = "1"', "Router schema dependency binding");
 requireMarker(router, "let activeTargetContract = null", "Router validated contract state");
 requirePattern(confirmationSource, /activeTargetContract\s*=\s*structuredSplit\?\.enabled\s*===\s*true/, "Canonical contract activation");
@@ -78,6 +78,8 @@ forbidMarker(confirmationSource, "button.dataset.aiTargetPartSizeMb", "Button da
 forbidMarker(confirmationSource, "targetSizeFromPlannerResult(plannerResult)", "Planner text inference removed from active execution path");
 forbidMarker(confirmationSource, "targetSizeFromRenderedPlan(button)", "Rendered-plan inference removed from active execution path");
 requireMarker(router, "const contract = activeTargetContract", "Completion uses retained contract");
+requireMarker(router, 'status: "target_workflow_not_required"', "Non-split completion fallback");
+forbidMarker(router, "target_workflow_contract_missing_at_completion", "Missing-contract crash removed");
 forbidMarker(router, "activeTargetContract = null;\n    workflowStage", "Reset does not clear retained contract");
 requireMarker(router, "decideTargetWorkflowCompletion", "Router deterministic completion decision");
 requirePattern(router, /decision\.action\s*===\s*["']complete_pdf["']/, "Router complete-or-split boundary");
