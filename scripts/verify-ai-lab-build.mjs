@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H9-CONTRACT-C4";
+const REVISION = "H10-CONTRACT-C4";
 
 function gitCommit() {
   try {
@@ -41,6 +41,11 @@ function requirePattern(source, pattern, label) {
   else fail(label, `missing semantic pattern: ${pattern}`);
 }
 
+function forbidMarker(source, marker, label) {
+  if (!source.includes(marker)) pass(label);
+  else fail(label, `forbidden marker remains: ${marker}`);
+}
+
 const [plannerRuntime, presenter, router, manifestText, contestAccess, contractSource] =
   await Promise.all([
     readFile(PLANNER_RUNTIME_PATH, "utf8"),
@@ -65,16 +70,22 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-
-// The C3 marker is written only after the postbuild integrator has found the exact
-// confirmation anchor, replaced legacy inference, bound processingPlan.split,
-// validated the contract call, and verified that both legacy calls are absent
-// from the active confirmation path. The integrator throws before writing on any
-// mismatch, so duplicating its parser here would be weaker and format-sensitive.
 requireMarker(
   router,
-  '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C3"',
-  "Router structured contract integration",
+  '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C4"',
+  "Router retained contract integration",
+);
+requireMarker(router, "let activeTargetContract = null", "Router validated contract state");
+requirePattern(
+  router,
+  /activeTargetContract\s*=\s*structuredSplit\?\.enabled\s*===\s*true/,
+  "Router contract activation",
+);
+requireMarker(router, "const contract = activeTargetContract", "Completion uses retained contract");
+forbidMarker(
+  router,
+  "activeTargetContract = null;\n    workflowStage",
+  "Reset does not clear retained contract",
 );
 requireMarker(router, "decideTargetWorkflowCompletion", "Router deterministic completion decision");
 requirePattern(router, /decision\.action\s*===\s*["']complete_pdf["']/, "Router complete-or-split boundary");
