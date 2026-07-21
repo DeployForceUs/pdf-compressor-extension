@@ -11,7 +11,7 @@ const PALETTE_CSS = `
    ink #020307, midnight #080D17, panel #1F2639,
    royal #143294, azure #3C8CE3, ice #7FABDC,
    silver #B9BBBC, white #F8F9F9.
-*/
+ */
 :root {
   --ai-ink: #020307;
   --ai-midnight: #080D17;
@@ -123,21 +123,24 @@ body {
   color: var(--ai-silver) !important;
   border-color: rgba(127, 171, 220, 0.24) !important;
   background: rgba(8, 13, 23, 0.9) !important;
+  box-shadow: none !important;
 }
 
+/* The current workflow step uses exactly the same visual language as the primary action. */
 .ai-lab-stage-strip span:first-child,
 body.ai-lab--pdf-ready .ai-lab-stage-strip span:nth-child(2) {
   color: var(--ai-white) !important;
-  border-color: rgba(60, 140, 227, 0.7) !important;
-  background: linear-gradient(180deg, rgba(60, 140, 227, 0.28), rgba(20, 50, 148, 0.5)) !important;
-  box-shadow: 0 8px 22px rgba(20, 50, 148, 0.26) !important;
+  border-color: rgba(127, 171, 220, 0.36) !important;
+  background: linear-gradient(180deg, #3C8CE3 0%, #143294 100%) !important;
+  box-shadow: 0 12px 30px rgba(20, 50, 148, 0.46) !important;
 }
 
+/* Completed steps remain inside the blue system but become visually quieter. */
 body.ai-lab--pdf-ready .ai-lab-stage-strip span:first-child {
   color: var(--ai-ice) !important;
-  border-color: rgba(127, 171, 220, 0.46) !important;
-  background: rgba(31, 38, 57, 0.78) !important;
-  box-shadow: none !important;
+  border-color: rgba(127, 171, 220, 0.42) !important;
+  background: linear-gradient(180deg, rgba(31, 38, 57, 0.96), rgba(8, 13, 23, 0.96)) !important;
+  box-shadow: inset 0 0 0 1px rgba(60, 140, 227, 0.08) !important;
 }
 
 .planner-card::before {
