@@ -56,7 +56,13 @@ body {
   background: rgba(37, 99, 235, 0.14);
 }
 
-.body > article:not(.input-card):not(.planner-card) {
+/* Legacy commercial/setup panels stay mounted for now, but are invisible in AI Lab. */
+.license-card,
+.office-card,
+.split-card,
+.compression-card,
+.diagnostics,
+.footnote {
   display: none !important;
 }
 
