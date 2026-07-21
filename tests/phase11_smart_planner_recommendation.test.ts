@@ -81,6 +81,52 @@ test("returns a validated non-executable recommendation preview", async () => {
   assert.equal(gatewayInput?.responseSchema.additionalProperties, false);
 });
 
+test("forces a healthy Office Engine for a large predominantly scanned PDF", async () => {
+  const largeScannedRequest: SmartPlannerRequest = {
+    ...request,
+    documentProfile: {
+      ...request.documentProfile,
+      fileSizeBytes: 150 * 1024 * 1024,
+      imageObjectCount: 220,
+      scannedPageRatio: 1,
+      textPageRatio: 0,
+    },
+  };
+
+  const result = await requestSmartPlannerRecommendation(largeScannedRequest, async () => validPlan);
+
+  assert.equal(result.status, "ready");
+  if (result.status !== "ready") throw new Error("Expected ready recommendation");
+  assert.equal(result.plan.engine, "office");
+  assert.equal(result.plan.quality, 65);
+  assert.equal(result.plan.dpi, 144);
+  assert.match(result.plan.explanation, /Office Engine is required/);
+});
+
+test("does not force Office when the controlled server is unavailable", async () => {
+  const largeScannedRequest: SmartPlannerRequest = {
+    ...request,
+    documentProfile: {
+      ...request.documentProfile,
+      fileSizeBytes: 150 * 1024 * 1024,
+      scannedPageRatio: 1,
+      textPageRatio: 0,
+    },
+    engineCapabilities: {
+      ...request.engineCapabilities,
+      officeAvailable: false,
+      officeCpuCount: 0,
+      officeMemoryGb: 0,
+    },
+  };
+
+  const result = await requestSmartPlannerRecommendation(largeScannedRequest, async () => validPlan);
+
+  assert.equal(result.status, "ready");
+  if (result.status !== "ready") throw new Error("Expected ready recommendation");
+  assert.equal(result.plan.engine, "local");
+});
+
 test("blocks invalid requests before the gateway is called", async () => {
   let calls = 0;
   const result = await requestSmartPlannerRecommendation(
