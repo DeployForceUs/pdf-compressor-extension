@@ -35,6 +35,8 @@ const runtime = `(() => {
 
     const patterns = [
       /(?:portal\\s+target|delivery\\s+limit|target(?:ing)?|maximum|max|under|below|parts?\\s+under)\\D{0,40}(\\d+(?:\\.\\d+)?)\\s*MB\\b/i,
+      /(?:compression|compress|reduce|shrink)(?:\\s+the\\s+(?:file|document|pdf))?\\s+(?:to|toward|towards|around|approximately|about)\\s*[~≈]?\\s*(\\d+(?:\\.\\d+)?)\\s*MB\\b/i,
+      /(?:to|toward|towards|around|approximately|about)\\s*[~≈]?\\s*(\\d+(?:\\.\\d+)?)\\s*MB\\b/i,
       /(\\d+(?:\\.\\d+)?)\\s*MB\\b\\D{0,40}(?:portal\\s+target|delivery\\s+limit|target|limit|maximum|max)/i,
     ];
     for (const pattern of patterns) {
@@ -150,4 +152,4 @@ const nextHtml = popupHtml.includes(scriptTag)
 await writeFile(RUNTIME_PATH, runtime, "utf8");
 await writeFile(POPUP_HTML_PATH, nextHtml, "utf8");
 
-process.stdout.write("AI Lab server planner runtime bridge applied with split normalization N1\n");
+process.stdout.write("AI Lab server planner runtime bridge applied with split normalization N2\n");
