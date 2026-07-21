@@ -104,9 +104,11 @@ if (!runtime.includes("function renderOfficeConnectionRequired")) {
   runtime = runtime.replace(functionAnchor, `${helpers}${functionAnchor}`);
 }
 
-const responseBoundary = `      if (response && response.ok === false) {`;
-const responseMarker = `route === "office_current" && /office engine is not connected/i.test(response.error || "")`;
-const responseReplacement = `      if (response && response.ok === false) {
+const primaryResponseAnchor = `      const response = await runtimeSendMessage(requestFor(route, preset));
+      if (response && response.ok === false) {`;
+const primaryResponseReplacement = `      const response = await runtimeSendMessage(requestFor(route, preset));
+      if (response && response.ok === false) {
+        // AI_LAB_OFFICE_CONNECTION_PRIMARY_BOUNDARY
         if (route === "office_current" && /office engine is not connected/i.test(response.error || "")) {
           const button = activeButton;
           const deniedPreset = activePreset;
@@ -115,11 +117,11 @@ const responseReplacement = `      if (response && response.ok === false) {
           return;
         }`;
 
-if (!runtime.includes(responseMarker)) {
-  if (!runtime.includes(responseBoundary)) {
-    throw new Error("AI Lab Office fallback response boundary not found");
+if (!runtime.includes("AI_LAB_OFFICE_CONNECTION_PRIMARY_BOUNDARY")) {
+  if (!runtime.includes(primaryResponseAnchor)) {
+    throw new Error("AI Lab primary Office fallback response anchor not found");
   }
-  runtime = runtime.replace(responseBoundary, responseReplacement);
+  runtime = runtime.replace(primaryResponseAnchor, primaryResponseReplacement);
 }
 
 await writeFile(ROUTER_RUNTIME_PATH, runtime, "utf8");
