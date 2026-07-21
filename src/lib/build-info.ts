@@ -1,1 +1,1 @@
-export const EXTENSION_BUILD = "2026.07.19.4";
+export const EXTENSION_BUILD = "2026.07.20.1";
