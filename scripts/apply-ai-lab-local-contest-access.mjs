@@ -96,7 +96,8 @@ const visualStyle = `<style data-ai-lab-download-visuals>
   color: #ffffff !important;
   opacity: 1 !important;
 }
-button[data-ai-action^="download"] {
+button[data-ai-action^="download"],
+button.ai-lab-download-action {
   color: #041204 !important;
   background: linear-gradient(135deg, #c6ff00 0%, #39ff14 48%, #00f56a 100%) !important;
   border-color: #caff3d !important;
@@ -104,7 +105,8 @@ button[data-ai-action^="download"] {
   font-weight: 900 !important;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.34) !important;
 }
-button[data-ai-action^="download"]:hover:not(:disabled) {
+button[data-ai-action^="download"]:hover:not(:disabled),
+button.ai-lab-download-action:hover:not(:disabled) {
   filter: brightness(1.08) saturate(1.16);
 }
 </style>`;
@@ -122,6 +124,6 @@ if (!popup.includes("data-ai-lab-contest-access")) {
 
 await writeFile(popupPath, popup, "utf8");
 
-console.log("AI Lab contest access, download visuals, and Office host permission embedded");
+console.log("AI Lab contest access, unified download visuals, and Office host permission embedded");
 await import("./apply-ai-lab-wait-spinners.mjs");
 await import("./verify-ai-lab-build.mjs");
