@@ -105,6 +105,7 @@ if (!runtime.includes("function renderOfficeConnectionRequired")) {
 }
 
 const responseBoundary = `      if (response && response.ok === false) {`;
+const responseMarker = `route === "office_current" && /office engine is not connected/i.test(response.error || "")`;
 const responseReplacement = `      if (response && response.ok === false) {
         if (route === "office_current" && /office engine is not connected/i.test(response.error || "")) {
           const button = activeButton;
@@ -114,7 +115,7 @@ const responseReplacement = `      if (response && response.ok === false) {
           return;
         }`;
 
-if (!runtime.includes("office_connection_required")) {
+if (!runtime.includes(responseMarker)) {
   if (!runtime.includes(responseBoundary)) {
     throw new Error("AI Lab Office fallback response boundary not found");
   }
