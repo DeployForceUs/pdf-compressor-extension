@@ -67,6 +67,14 @@ function requiresOfficeForLargeScannedDocument(request: SmartPlannerRequest) {
     && documentProfile.scannedPageRatio >= LARGE_SCANNED_OFFICE_MIN_RATIO;
 }
 
+function officeRoutingExplanation(plan: ProcessingPlan) {
+  const splitSentence = plan.split.enabled
+    ? ` Split into approximately ${plan.split.targetPartSizeMb} MB parts to meet the delivery target.`
+    : " Keep the document in one file.";
+
+  return `Use Office Engine processing with the ${plan.preset} preset.${splitSentence} Office Engine is required because this is a large, predominantly scanned document and a healthy controlled server is available.`;
+}
+
 function applyDeterministicEngineRouting(
   request: SmartPlannerRequest,
   plan: ProcessingPlan,
@@ -78,7 +86,7 @@ function applyDeterministicEngineRouting(
   return {
     ...plan,
     engine: "office",
-    explanation: `${plan.explanation} Office Engine is required because this is a large, predominantly scanned document and a healthy controlled server is available.`,
+    explanation: officeRoutingExplanation(plan),
   };
 }
 
