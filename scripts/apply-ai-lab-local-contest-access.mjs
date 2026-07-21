@@ -96,8 +96,8 @@ const visualStyle = `<style data-ai-lab-download-visuals>
   color: #ffffff !important;
   opacity: 1 !important;
 }
-[data-ai-action^="download"],
-.ai-lab-download-action {
+button[data-ai-action^="download"],
+button.ai-lab-download-action {
   color: #041204 !important;
   background: linear-gradient(135deg, #c6ff00 0%, #39ff14 48%, #00f56a 100%) !important;
   border-color: #caff3d !important;
@@ -105,8 +105,8 @@ const visualStyle = `<style data-ai-lab-download-visuals>
   font-weight: 900 !important;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.34) !important;
 }
-[data-ai-action^="download"]:hover:not(:disabled),
-.ai-lab-download-action:hover:not(:disabled) {
+button[data-ai-action^="download"]:hover:not(:disabled),
+button.ai-lab-download-action:hover:not(:disabled) {
   filter: brightness(1.08) saturate(1.16);
 }
 </style>`;
