@@ -10,6 +10,22 @@ function insertOnce(source, anchor, insertion, label) {
   return source.replace(anchor, `${insertion}${anchor}`);
 }
 
+function upgradePlannerProps(source) {
+  const oldMarkup = `  pdfReady={Boolean(pdf.selected)}
+  officeAvailable={Boolean(officeHealth)}
+/>`;
+  const newMarkup = `  pdfReady={Boolean(pdf.selected)}
+  officeAvailable={Boolean(officeHealth)}
+  plannerBaseUrl={officeUrl}
+  plannerAccessToken={officeToken}
+/>`;
+  if (source.includes(newMarkup)) return source;
+  if (!source.includes(oldMarkup)) {
+    throw new Error("Cannot apply Planner gateway props: existing Planner card anchor not found");
+  }
+  return source.replace(oldMarkup, newMarkup);
+}
+
 export function patchPopupSource(source) {
   let next = source;
 
@@ -27,10 +43,12 @@ export function patchPopupSource(source) {
   }
 
   const indent = match[1] ?? "";
-  const plannerMarkup = `${indent}<SmartPlannerPreparationCard\n${indent}  key={pdf.recordId ?? "no-pdf"}\n${indent}  pdfReady={Boolean(pdf.selected)}\n${indent}  officeAvailable={Boolean(officeHealth)}\n${indent}/>\n\n`;
+  const plannerMarkup = `${indent}<SmartPlannerPreparationCard\n${indent}  key={pdf.recordId ?? "no-pdf"}\n${indent}  pdfReady={Boolean(pdf.selected)}\n${indent}  officeAvailable={Boolean(officeHealth)}\n${indent}  plannerBaseUrl={officeUrl}\n${indent}  plannerAccessToken={officeToken}\n${indent}/>\n\n`;
 
   if (!next.includes("<SmartPlannerPreparationCard")) {
     next = next.replace(officePattern, `${plannerMarkup}${match[0]}`);
+  } else {
+    next = upgradePlannerProps(next);
   }
 
   return next;
