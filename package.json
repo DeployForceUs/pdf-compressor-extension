@@ -9,7 +9,7 @@
     "prebuild:ai": "node scripts/vendor-mupdf.mjs",
     "build": "wxt build",
     "build:ai": "wxt build --mode ai-lab",
-    "postbuild:ai": "node scripts/mark-ai-lab-build.mjs && node scripts/apply-ai-lab-palette.mjs",
+    "postbuild:ai": "node scripts/mark-ai-lab-build.mjs && node scripts/apply-ai-lab-palette.mjs && node scripts/force-ai-lab-english.mjs",
     "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
     "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
