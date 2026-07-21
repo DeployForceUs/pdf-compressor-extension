@@ -10,7 +10,7 @@ const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
 const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
 
-const REVISION = "H14-CONTRACT-C7";
+const REVISION = "H15-CONTRACT-C8";
 
 function gitCommit() {
   try {
@@ -54,6 +54,11 @@ const confirmationEnd = router.indexOf("const runtime =", confirmationStart);
 const confirmationSource = confirmationStart >= 0 && confirmationEnd > confirmationStart
   ? router.slice(confirmationStart, confirmationEnd)
   : "";
+const handoffStart = router.indexOf("async function storeCompressedAsSelectedPdf");
+const handoffEnd = router.indexOf("function renderSplitComplete", handoffStart);
+const handoffSource = handoffStart >= 0 && handoffEnd > handoffStart
+  ? router.slice(handoffStart, handoffEnd)
+  : "";
 
 process.stdout.write(`AI Lab build commit: ${gitCommit()}\n`);
 process.stdout.write(`AI Lab target-size workflow revision: ${REVISION}\n`);
@@ -64,8 +69,8 @@ requireMarker(plannerRuntime, 'outputMode: "single-zip"', "Planner normalized ZI
 requireMarker(plannerRuntime, "targetPartSizeMb", "Planner normalized target size");
 requireMarker(presenter, "aiTargetPartSizeMb", "Presenter target-size binding");
 requireMarker(presenter, "Compress, validate, then split into parts under", "Presenter delivery workflow");
-requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C7"', "Router canonical lifecycle integration");
-requireMarker(router, 'const TARGET_WORKFLOW_SCHEMA_VERSION = "1";', "Router schema dependency binding");
+requireMarker(router, '__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C8"', "Router canonical lifecycle integration");
+requireMarker(router, 'const TARGET_WORKFLOW_SCHEMA_VERSION = "1"', "Router schema dependency binding");
 requireMarker(router, "let activeTargetContract = null", "Router validated contract state");
 requirePattern(confirmationSource, /activeTargetContract\s*=\s*structuredSplit\?\.enabled\s*===\s*true/, "Canonical contract activation");
 requirePattern(confirmationSource, /activeTargetPartSizeMb\s*=\s*activeTargetContract\?\.targetPartSizeMb\s*\?\?\s*null/, "Target size derived from contract");
@@ -79,6 +84,11 @@ requirePattern(router, /decision\.action\s*===\s*["']complete_pdf["']/, "Router 
 requireMarker(router, "validating_target_size", "Router target-size validation event");
 requireMarker(router, "split_started", "Split workflow start");
 requireMarker(router, 'dataset.aiAction = "download-split"', "ZIP download route");
+requireMarker(handoffSource, 'indexedDB.open("pdf-compressor-phase1", 2)', "Direct IndexedDB PDF handoff");
+requireMarker(handoffSource, 'transaction.objectStore("binary-records").put', "Selected PDF record write");
+requireMarker(handoffSource, 'id: "selected-pdf"', "Selected PDF handoff record");
+forbidMarker(handoffSource, 'type: "pdf:store"', "Binary PDF excluded from runtime messaging");
+forbidMarker(handoffSource, "runtimeSendMessage", "Handoff avoids runtime messaging");
 requireMarker(contractSource, 'split.strategy !== "by-max-size"', "Deterministic by-max-size contract");
 requireMarker(contractSource, 'split.outputMode !== "single-zip"', "Single ZIP output contract");
 requireMarker(contractSource, 'type: "split:local"', "Local split dispatch contract");
