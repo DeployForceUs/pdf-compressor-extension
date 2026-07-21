@@ -4,6 +4,8 @@ import path from "node:path";
 
 const outputDir = path.resolve(".output/chrome-mv3-ai-lab");
 const popupPath = path.join(outputDir, "popup.html");
+const manifestPath = path.join(outputDir, "manifest.json");
+const officeHostPermission = "https://pdf-66-55-75-239.sslip.io/*";
 const runtimeName = "ai-lab-contest-access.js";
 const runtimePath = path.join(outputDir, runtimeName);
 
@@ -24,6 +26,19 @@ const officeSettings = {
 if (!proToken || !officeToken) {
   throw new Error("AI Lab contest tokens are missing or empty");
 }
+
+const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+manifest.host_permissions = [
+  ...new Set([
+    ...(manifest.host_permissions ?? []),
+    officeHostPermission,
+  ]),
+];
+await writeFile(
+  manifestPath,
+  `${JSON.stringify(manifest, null, 2)}\n`,
+  "utf8",
+);
 
 const runtime = `(() => {
   const officeSettings = ${JSON.stringify(officeSettings)};
@@ -78,4 +93,4 @@ if (!popup.includes("data-ai-lab-contest-access")) {
   await writeFile(popupPath, popup, "utf8");
 }
 
-console.log("AI Lab contest access embedded");
+console.log("AI Lab contest access and Office host permission embedded");
