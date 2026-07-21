@@ -16,21 +16,21 @@ const assertSource = assertTargetWorkflowPlan.toString();
 const decideSource = decideTargetWorkflowCompletion.toString();
 
 const stateAnchor = "  let activeTargetPartSizeMb = null;";
-const stateReplacement = `${stateAnchor}\n  let activeTargetWorkflowPlan = null;`;
-if (!router.includes("let activeTargetWorkflowPlan = null;")) {
+const stateReplacement = `${stateAnchor}\n  let activeTargetContract = null;`;
+if (!router.includes("let activeTargetContract = null;")) {
   if (!router.includes(stateAnchor)) {
     throw new Error("Structured target workflow state anchor not found");
   }
   router = router.replace(stateAnchor, stateReplacement);
 }
 
-const resetAnchor = `    activeTargetPartSizeMb = null;\n    workflowStage = "compression";`;
-const resetReplacement = `    activeTargetPartSizeMb = null;\n    activeTargetWorkflowPlan = null;\n    workflowStage = "compression";`;
-if (!router.includes("activeTargetWorkflowPlan = null;\n    workflowStage")) {
-  if (!router.includes(resetAnchor)) {
-    throw new Error("Structured target workflow reset anchor not found");
-  }
-  router = router.replace(resetAnchor, resetReplacement);
+// Deliberately do not clear activeTargetContract in resetActive(). Office completion
+// can arrive through a later lifecycle callback after generic UI state has reset.
+// The next confirmation always overwrites the contract, including with null for
+// ordinary non-delivery workflows.
+const forbiddenReset = "activeTargetContract = null;\n    workflowStage";
+if (router.includes(forbiddenReset)) {
+  throw new Error("Validated target contract must survive resetActive");
 }
 
 const legacyAssignment = `    activeTargetPartSizeMb =
@@ -38,15 +38,10 @@ const legacyAssignment = `    activeTargetPartSizeMb =
       targetSizeFromRenderedPlan(button) ??
       null;`;
 const structuredAssignment = `    const structuredSplit = plannerResult?.response?.processingPlan?.split;
-    activeTargetWorkflowPlan = structuredSplit?.enabled === true
-      ? plannerResult.response
+    activeTargetContract = structuredSplit?.enabled === true
+      ? assertTargetWorkflowPlan(plannerResult.response)
       : null;
-    if (activeTargetWorkflowPlan) {
-      const activeTargetContract = assertTargetWorkflowPlan(activeTargetWorkflowPlan);
-      activeTargetPartSizeMb = activeTargetContract.targetPartSizeMb;
-    } else {
-      activeTargetPartSizeMb = null;
-    }`;
+    activeTargetPartSizeMb = activeTargetContract?.targetPartSizeMb ?? null;`;
 
 if (!router.includes(structuredAssignment)) {
   if (!router.includes(legacyAssignment)) {
@@ -63,15 +58,15 @@ if (workflowStart < 0 || workflowEnd < 0) {
   throw new Error("Structured target workflow function boundary not found");
 }
 
-const workflowSource = `  ${assertSource}\n\n  ${decideSource}\n\n  async function continueTargetSizeWorkflow(result, resultKind = "compressed") {\n    completedResult = result ?? null;\n    const contract = assertTargetWorkflowPlan(activeTargetWorkflowPlan);\n    const record = await readCompletedResult();\n    if (!record?.data) throw new Error("processed_pdf_not_available_for_size_validation");\n\n    const actualBytes = resultByteLength(record, result);\n    const decision = decideTargetWorkflowCompletion({\n      contract,\n      actualBytes,\n      resultKind,\n    });\n\n    emit({\n      status: "validating_target_size",\n      targetPartSizeMb: contract.targetPartSizeMb,\n      actualBytes,\n      decision: decision.action,\n    });\n\n    if (decision.action === "complete_pdf") {\n      renderComplete(result);\n      return;\n    }\n\n    workflowStage = "splitting";\n    if (activeButton) {\n      activeButton.disabled = true;\n      activeButton.textContent = "Splitting to the delivery limit…";\n      setStatus(activeButton, "Compression complete. Creating parts under " + contract.targetPartSizeMb + " MB…");\n    }\n\n    await storeCompressedAsSelectedPdf(record);\n    const response = await runtimeSendMessage(decision.request);\n    if (response?.ok === false) {\n      throw new Error(response.error || response.code || "split_start_rejected");\n    }\n\n    emit({\n      status: "split_started",\n      route: activeRoute,\n      preset: activePreset,\n      targetPartSizeMb: contract.targetPartSizeMb,\n      response: response ?? null,\n    });\n    if (response?.result) renderSplitComplete(response.result);\n  }\n\n`;
+const workflowSource = `  ${assertSource}\n\n  ${decideSource}\n\n  async function continueTargetSizeWorkflow(result, resultKind = "compressed") {\n    completedResult = result ?? null;\n    const contract = activeTargetContract;\n    if (!contract) throw new Error("target_workflow_contract_missing_at_completion");\n    const record = await readCompletedResult();\n    if (!record?.data) throw new Error("processed_pdf_not_available_for_size_validation");\n\n    const actualBytes = resultByteLength(record, result);\n    const decision = decideTargetWorkflowCompletion({\n      contract,\n      actualBytes,\n      resultKind,\n    });\n\n    emit({\n      status: "validating_target_size",\n      targetPartSizeMb: contract.targetPartSizeMb,\n      actualBytes,\n      decision: decision.action,\n    });\n\n    if (decision.action === "complete_pdf") {\n      renderComplete(result);\n      return;\n    }\n\n    workflowStage = "splitting";\n    if (activeButton) {\n      activeButton.disabled = true;\n      activeButton.textContent = "Splitting to the delivery limit…";\n      setStatus(activeButton, "Compression complete. Creating parts under " + contract.targetPartSizeMb + " MB…");\n    }\n\n    await storeCompressedAsSelectedPdf(record);\n    const response = await runtimeSendMessage(decision.request);\n    if (response?.ok === false) {\n      throw new Error(response.error || response.code || "split_start_rejected");\n    }\n\n    emit({\n      status: "split_started",\n      route: activeRoute,\n      preset: activePreset,\n      targetPartSizeMb: contract.targetPartSizeMb,\n      response: response ?? null,\n    });\n    if (response?.result) renderSplitComplete(response.result);\n  }\n\n`;
 
 router =
   router.slice(0, workflowStart) +
   workflowSource +
   router.slice(workflowEnd);
 
-if (!router.includes("activeTargetWorkflowPlan = structuredSplit?.enabled === true")) {
-  throw new Error("Structured target workflow plan is not bound at confirmation");
+if (!router.includes("activeTargetContract = structuredSplit?.enabled === true")) {
+  throw new Error("Structured target workflow contract is not bound at confirmation");
 }
 if (!router.includes('decision.action === "complete_pdf"')) {
   throw new Error("Structured target workflow decision is not bound at completion");
@@ -88,8 +83,11 @@ if (confirmationSource.includes("targetSizeFromRenderedPlan(button)")) {
 }
 
 const revisionMarker =
-  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C3";\n';
-if (!router.includes("__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__")) {
+  '  globalThis.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C4";\n';
+const existingRevision = /  globalThis\.__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__ = "C\d+";\n/;
+if (existingRevision.test(router)) {
+  router = router.replace(existingRevision, revisionMarker);
+} else {
   const readyMarker = '  console.info("[AI Lab] ExecutionRouter ready");';
   if (!router.includes(readyMarker)) {
     throw new Error("ExecutionRouter ready marker not found");
@@ -98,4 +96,4 @@ if (!router.includes("__AI_LAB_TARGET_WORKFLOW_CONTRACT_REVISION__")) {
 }
 
 await writeFile(routerPath, router, "utf8");
-process.stdout.write("AI Lab structured target workflow contract runtime C3 applied\n");
+process.stdout.write("AI Lab structured target workflow contract runtime C4 applied\n");
