@@ -2,6 +2,9 @@ import {
   discoverImageXObjects,
   type PdfImageXObjectDiscovery,
 } from "../pdf/image-xobject-discovery";
+import { buildContentBlindDocumentProfile } from "./content-blind-profile-builder";
+import { observeContentBlindPage } from "./content-blind-page-observer";
+import type { SmartPlannerDocumentProfile } from "./smart-planner-contract";
 
 type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
@@ -29,12 +32,19 @@ export type ContentBlindProfilerDerivedMetrics = {
   };
 };
 
-export type ContentBlindProfilerResult = {
-  schemaVersion: 1;
-  status: "incomplete";
-  derivedMetrics: ContentBlindProfilerDerivedMetrics;
-  unavailableMetrics: readonly ["pageClassification", "estimatedDpi"];
-};
+export type ContentBlindProfilerResult =
+  | {
+      schemaVersion: 1;
+      status: "incomplete";
+      derivedMetrics: ContentBlindProfilerDerivedMetrics;
+      unavailableMetrics: readonly ["pageClassification", "estimatedDpi"];
+    }
+  | {
+      schemaVersion: 1;
+      status: "complete";
+      documentProfile: SmartPlannerDocumentProfile;
+      unavailableMetrics: readonly [];
+    };
 
 export class ContentBlindPdfProfilerCancelledError extends Error {
   constructor() {
@@ -110,8 +120,59 @@ export function buildContentBlindProfilerResult(
   };
 }
 
-function buildRuntimeResult(input: ArrayBuffer, document: MuPdfPdfDocument) {
-  return buildContentBlindProfilerResult(input.byteLength, discoverImageXObjects(document));
+async function buildRuntimeResult(
+  input: ArrayBuffer,
+  document: MuPdfPdfDocument,
+  mupdf: MuPdfNamespace,
+  isCancelled: () => boolean | Promise<boolean>,
+): Promise<ContentBlindProfilerResult> {
+  const discovery = discoverImageXObjects(document);
+  const pages = [];
+
+  for (let pageIndex = 0; pageIndex < discovery.pageCount; pageIndex += 1) {
+    await throwIfCancelled(isCancelled);
+    const page = document.loadPage(pageIndex);
+    try {
+      const observed = observeContentBlindPage(mupdf, page, pageIndex + 1);
+      const candidates = discovery.candidates.filter((candidate) => candidate.pageNumber === pageIndex + 1);
+      const codecCounts = { jpeg: 0, jpx: 0, other: 0 };
+      let estimatedSizeBytes = 0;
+
+      for (const candidate of candidates) {
+        codecCounts[codecBucket(candidate.filterEncoding)] += 1;
+        if (candidate.estimatedStreamSize !== null && candidate.estimatedStreamSize >= 0) {
+          estimatedSizeBytes += candidate.estimatedStreamSize;
+        }
+      }
+
+      pages.push({
+        pageNumber: pageIndex + 1,
+        classification: observed.classification,
+        estimatedSizeBytes,
+        estimatedDpi: observed.estimatedDpi,
+        imageObjectCount: candidates.length,
+        codecCounts,
+      });
+    } finally {
+      page.destroy();
+    }
+  }
+
+  const documentProfile = await buildContentBlindDocumentProfile(
+    {
+      fileSizeBytes: input.byteLength,
+      pageCount: discovery.pageCount,
+      pages,
+    },
+    { isCancelled },
+  );
+
+  return {
+    schemaVersion: 1,
+    status: "complete",
+    documentProfile,
+    unavailableMetrics: [],
+  };
 }
 
 export async function profileContentBlindPdf(
@@ -131,7 +192,7 @@ export async function profileContentBlindPdf(
     }
 
     await throwIfCancelled(isCancelled);
-    const result = buildRuntimeResult(request.input, pdfDocument);
+    const result = await buildRuntimeResult(request.input, pdfDocument, mupdf, isCancelled);
     await throwIfCancelled(isCancelled);
     return result;
   } finally {
