@@ -2,8 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const OUTPUT_DIR = path.resolve(".output/chrome-mv3-ai-lab");
-const CSS_MARKER = "Phase 12.2 explicit workflow navigation";
-const JS_MARKER = "Phase 12.2 explicit workflow navigation runtime";
+const CSS_MARKER = "Phase 12.2 React-owned workflow navigation";
 
 const WORKFLOW_CSS = `
 
@@ -90,6 +89,11 @@ body.ai-lab-session-analysis .planner-card__disclosure {
   text-align: center !important;
 }
 
+body.ai-lab-session-analysis .planner-card__capability,
+body.ai-lab-session-analysis .planner-card > .planner-card__note {
+  display: none !important;
+}
+
 body.ai-lab-session-analysis .planner-card__analysis-progress,
 body.ai-lab-session-analysis .planner-card__analysis-result {
   min-height: 0 !important;
@@ -98,10 +102,6 @@ body.ai-lab-session-analysis .planner-card__analysis-result {
 
 body.ai-lab-session-analysis .planner-card__analysis-result > strong:first-child {
   font-size: 16px !important;
-}
-
-body.ai-lab-session-analysis .planner-card__analysis-result small {
-  display: none !important;
 }
 
 .ai-lab-continue-button {
@@ -144,16 +144,20 @@ body.ai-lab-session-goal .ai-lab-stage-strip span:nth-child(2) {
 }
 
 .ai-lab-goal-panel {
+  display: none;
   min-height: 330px;
   max-height: 330px;
   padding: 22px;
-  display: flex;
   flex-direction: column;
   justify-content: center;
   box-sizing: border-box;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(8, 13, 23, 0.98), rgba(2, 3, 7, 0.98));
   color: var(--ai-white);
+}
+
+body.ai-lab-session-goal .ai-lab-goal-panel {
+  display: flex !important;
 }
 
 .ai-lab-goal-panel__eyebrow {
@@ -199,207 +203,31 @@ body.ai-lab-session-goal .ai-lab-stage-strip span:nth-child(2) {
 }
 `;
 
-const WORKFLOW_RUNTIME = `
-
-/* ${JS_MARKER} */
-(() => {
-  const RELOAD_FLAG = "ai-lab-reload-after-upload";
-  const navigationEntry = performance.getEntriesByType("navigation")[0];
-  const resumeAnalysis = navigationEntry?.type === "reload" && sessionStorage.getItem(RELOAD_FLAG) === "1";
-  sessionStorage.removeItem(RELOAD_FLAG);
-
-  let currentStage = resumeAnalysis ? "analysis" : "upload";
-  let analysisComplete = false;
-  let awaitingFreshUpload = false;
-  let sawValidationState = false;
-  let reloadScheduled = false;
-
-  function stageStrip() {
-    return document.querySelector(".ai-lab-stage-strip");
-  }
-
-  function ensureGoalPanel() {
-    const inputCard = document.querySelector(".input-card");
-    if (!inputCard || inputCard.querySelector(".ai-lab-goal-panel")) return;
-
-    const panel = document.createElement("section");
-    panel.className = "ai-lab-goal-panel";
-    panel.setAttribute("aria-labelledby", "ai-lab-goal-title");
-    panel.innerHTML = [
-      '<p class="ai-lab-goal-panel__eyebrow">Define Goal</p>',
-      '<h2 id="ai-lab-goal-title">What do you need to do with this PDF?</h2>',
-      '<div class="ai-lab-goal-options">',
-      '<button type="button" class="ai-lab-goal-option">Send by email</button>',
-      '<button type="button" class="ai-lab-goal-option">Upload to a portal</button>',
-      '<button type="button" class="ai-lab-goal-option">Print</button>',
-      '<button type="button" class="ai-lab-goal-option">Archive</button>',
-      '<button type="button" class="ai-lab-goal-option">Reduce file size</button>',
-      '<button type="button" class="ai-lab-goal-option">Something else</button>',
-      '</div>',
-    ].join("");
-    inputCard.append(panel);
-  }
-
-  function setStage(stage) {
-    currentStage = stage;
-    document.body.classList.toggle("ai-lab-session-upload", stage === "upload");
-    document.body.classList.toggle("ai-lab-session-analysis", stage === "analysis");
-    document.body.classList.toggle("ai-lab-session-goal", stage === "goal");
-
-    const spans = stageStrip()?.querySelectorAll("span") ?? [];
-    spans.forEach((span, index) => {
-      const enabled = index === 0 || (index === 1 && currentStage !== "upload") || (index === 2 && analysisComplete);
-      span.setAttribute("role", enabled ? "button" : "status");
-      span.setAttribute("aria-disabled", enabled ? "false" : "true");
-      span.tabIndex = enabled ? 0 : -1;
-    });
-  }
-
-  function startOver() {
-    analysisComplete = false;
-    awaitingFreshUpload = false;
-    sawValidationState = false;
-    reloadScheduled = false;
-    setStage("upload");
-  }
-
-  function showAnalysis() {
-    if (currentStage === "upload") return;
-    setStage("analysis");
-  }
-
-  function showGoal() {
-    if (!analysisComplete) return;
-    ensureGoalPanel();
-    setStage("goal");
-  }
-
-  function bindStageNavigation() {
-    const spans = stageStrip()?.querySelectorAll("span");
-    if (!spans || spans.length < 3 || spans[0].dataset.aiLabBound === "1") return;
-
-    const activate = (index) => {
-      if (index === 0) startOver();
-      if (index === 1) showAnalysis();
-      if (index === 2) showGoal();
-    };
-
-    spans.forEach((span, index) => {
-      span.dataset.aiLabBound = "1";
-      span.addEventListener("click", () => activate(index));
-      span.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          activate(index);
-        }
-      });
-    });
-  }
-
-  function markFreshUpload() {
-    awaitingFreshUpload = true;
-    sawValidationState = false;
-    reloadScheduled = false;
-  }
-
-  function bindFreshUploadDetection() {
-    const input = document.querySelector('.dropzone input[type="file"]');
-    if (input && input.dataset.aiLabBound !== "1") {
-      input.dataset.aiLabBound = "1";
-      input.addEventListener("change", markFreshUpload, true);
-    }
-
-    const dropzone = document.querySelector(".dropzone");
-    if (dropzone && dropzone.dataset.aiLabDropBound !== "1") {
-      dropzone.dataset.aiLabDropBound = "1";
-      dropzone.addEventListener("drop", markFreshUpload, true);
-    }
-  }
-
-  function maybeReloadForFreshPdf() {
-    if (!awaitingFreshUpload || reloadScheduled) return;
-    const status = document.querySelector(".input-card__header .status-badge")?.textContent?.trim() ?? "";
-    const ready = status === "Ready" || status === "Listo";
-
-    if (!ready) {
-      sawValidationState = true;
-      return;
-    }
-
-    if (!sawValidationState) return;
-    reloadScheduled = true;
-    sessionStorage.setItem(RELOAD_FLAG, "1");
-    window.setTimeout(() => window.location.reload(), 80);
-  }
-
-  function syncAnalysisCompletion() {
-    const result = document.querySelector(".planner-card__analysis-result");
-    if (!result) return;
-
-    const completed = result.textContent?.includes("Local analysis complete") ?? false;
-    if (!completed) return;
-
-    analysisComplete = true;
-    document.body.classList.add("ai-lab-analysis-complete");
-
-    if (!result.querySelector(".ai-lab-continue-button")) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "primary ai-lab-continue-button";
-      button.textContent = "Continue to Define Goal";
-      button.addEventListener("click", showGoal);
-      result.append(button);
-    }
-  }
-
-  function sync() {
-    bindStageNavigation();
-    bindFreshUploadDetection();
-    ensureGoalPanel();
-    maybeReloadForFreshPdf();
-    syncAnalysisCompletion();
-    setStage(currentStage);
-  }
-
-  const observer = new MutationObserver(sync);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  sync();
-})();
-`;
-
-async function collectFiles(directory, extension) {
+async function collectCssFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
-
   for (const entry of entries) {
     const absolutePath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await collectFiles(absolutePath, extension));
-    } else if (entry.isFile() && entry.name.endsWith(extension)) {
+      files.push(...await collectCssFiles(absolutePath));
+    } else if (entry.isFile() && entry.name.endsWith(".css")) {
       files.push(absolutePath);
     }
   }
-
   return files;
 }
 
-const cssFiles = await collectFiles(OUTPUT_DIR, ".css");
-let cssApplied = 0;
+const cssFiles = await collectCssFiles(OUTPUT_DIR);
+let applied = 0;
 for (const file of cssFiles) {
   const source = await readFile(file, "utf8");
-  if (!source.includes("Phase 12.2 sampled reference palette") || source.includes(CSS_MARKER)) continue;
+  if (!source.includes("Phase 12.2 competition-only shell") || source.includes(CSS_MARKER)) continue;
   await writeFile(file, `${source}${WORKFLOW_CSS}`, "utf8");
-  cssApplied += 1;
+  applied += 1;
 }
 
-if (cssApplied === 0) {
-  throw new Error("AI Lab workflow navigation failed: popup stylesheet was not found");
+if (applied === 0) {
+  throw new Error("AI Lab React workflow styles were not applied");
 }
 
-const runtimePath = path.join(OUTPUT_DIR, "ai-lab-runtime.js");
-const runtimeSource = await readFile(runtimePath, "utf8");
-if (!runtimeSource.includes(JS_MARKER)) {
-  await writeFile(runtimePath, `${runtimeSource}${WORKFLOW_RUNTIME}`, "utf8");
-}
-
-console.log(`AI Lab workflow navigation applied: styles=${cssApplied}, runtime=1`);
+console.log(`AI Lab React workflow styles applied: styles=${applied}`);
