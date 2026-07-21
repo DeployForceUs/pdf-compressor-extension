@@ -7,27 +7,66 @@ const runtimeName = "ai-lab-wait-spinners.js";
 const runtimePath = path.join(outputDir, runtimeName);
 
 const runtime = `(() => {
-  const PROGRESS_ID = "ai-lab-planner-progress";
+  const PLANNER_PROGRESS_ID = "ai-lab-planner-progress";
+  const UPLOAD_PROGRESS_ID = "ai-lab-upload-progress";
+  let uploadPending = false;
 
   function normalizedText(node) {
     return (node?.textContent || "").replace(/\\s+/g, " ").trim().toLowerCase();
   }
 
-  function removeProgress() {
-    document.getElementById(PROGRESS_ID)?.remove();
-  }
-
-  function createProgress() {
+  function createProgress(id, label) {
     const track = document.createElement("div");
-    track.id = PROGRESS_ID;
+    track.id = id;
     track.className = "ai-lab-planner-progress";
     track.setAttribute("role", "progressbar");
-    track.setAttribute("aria-label", "AI Planner is working");
+    track.setAttribute("aria-label", label);
 
     const bar = document.createElement("span");
     bar.className = "ai-lab-planner-progress__bar";
     track.appendChild(bar);
     return track;
+  }
+
+  function removeProgress(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  function markDownloadButtons() {
+    document.querySelectorAll("button").forEach((button) => {
+      const text = normalizedText(button);
+      if (text === "download processed pdf" || text === "download split zip") {
+        button.classList.add("ai-lab-download-action");
+      }
+    });
+  }
+
+  function syncUploadProgress() {
+    if (!uploadPending) {
+      removeProgress(UPLOAD_PROGRESS_ID);
+      return;
+    }
+
+    const localAnalysisSpinner = document.querySelector(".planner-card__analysis-progress, .planner-card__spinner");
+    const bodyText = normalizedText(document.body);
+    const analysisFinished = bodyText.includes("local analysis complete") ||
+      bodyText.includes("document analysis failed") ||
+      bodyText.includes("analysis failed");
+
+    if (localAnalysisSpinner || analysisFinished) {
+      uploadPending = false;
+      removeProgress(UPLOAD_PROGRESS_ID);
+      return;
+    }
+
+    if (document.getElementById(UPLOAD_PROGRESS_ID)) return;
+
+    const containers = Array.from(document.querySelectorAll("article, section, .planner-card, .ai-lab-goal-panel, .dropzone"));
+    const host = containers.find((node) => normalizedText(node).includes("automatic local analysis")) ||
+      document.querySelector(".dropzone") ||
+      document.querySelector(".planner-card");
+
+    if (host) host.appendChild(createProgress(UPLOAD_PROGRESS_ID, "PDF upload is being prepared"));
   }
 
   function syncPlannerProgress() {
@@ -38,7 +77,7 @@ const runtime = `(() => {
     });
 
     if (!plannerCard) {
-      removeProgress();
+      removeProgress(PLANNER_PROGRESS_ID);
       return;
     }
 
@@ -49,20 +88,43 @@ const runtime = `(() => {
       text.includes("best route");
 
     if (finished) {
-      removeProgress();
+      removeProgress(PLANNER_PROGRESS_ID);
       return;
     }
 
-    if (document.getElementById(PROGRESS_ID)) return;
+    if (document.getElementById(PLANNER_PROGRESS_ID)) return;
 
     const statusRow = Array.from(plannerCard.querySelectorAll("div, p"))
       .find((node) => normalizedText(node).includes("consulting ai planner"));
-    (statusRow?.parentElement || plannerCard).appendChild(createProgress());
+    (statusRow?.parentElement || plannerCard).appendChild(createProgress(PLANNER_PROGRESS_ID, "AI Planner is working"));
   }
 
-  const observer = new MutationObserver(syncPlannerProgress);
+  function syncVisualState() {
+    markDownloadButtons();
+    syncUploadProgress();
+    syncPlannerProgress();
+  }
+
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type === "file" && target.files?.length) {
+      uploadPending = true;
+      removeProgress(UPLOAD_PROGRESS_ID);
+      syncUploadProgress();
+    }
+  }, true);
+
+  document.addEventListener("drop", (event) => {
+    if (event.dataTransfer?.files?.length) {
+      uploadPending = true;
+      removeProgress(UPLOAD_PROGRESS_ID);
+      syncUploadProgress();
+    }
+  }, true);
+
+  const observer = new MutationObserver(syncVisualState);
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  syncPlannerProgress();
+  syncVisualState();
 })();
 `;
 
@@ -119,4 +181,4 @@ if (!popup.includes("data-ai-lab-wait-spinners")) {
 }
 
 await writeFile(popupPath, popup, "utf8");
-console.log("AI Lab planner progress indicator embedded");
+console.log("AI Lab upload and planner progress indicators embedded");
