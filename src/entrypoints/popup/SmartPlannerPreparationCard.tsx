@@ -1,5 +1,12 @@
 import { useState } from "react";
 import browser from "webextension-polyfill";
+import { createSmartPlannerApiClient } from "../../lib/ai/smart-planner-api-client";
+import { requestSmartPlannerRecommendationWithClient } from "../../lib/ai/smart-planner-browser-gateway";
+import {
+  APPROVED_BALANCED_NUMERIC_POLICY,
+  type ProcessingPlan,
+} from "../../lib/ai/smart-planner-contract";
+import { SMART_PLANNER_REQUEST_POLICY } from "../../lib/ai/smart-planner-recommendation";
 import {
   SMART_PLANNER_BACKGROUND_PREPARE,
   type SmartPlannerPrepareResponse,
@@ -16,6 +23,7 @@ type PlannerUiState =
       scannedPercent: number;
       textPercent: number;
       vectorPercent: number;
+      plan: ProcessingPlan;
     }
   | { status: "blocked"; message: string }
   | { status: "error"; message: string };
@@ -23,13 +31,20 @@ type PlannerUiState =
 type Props = {
   pdfReady: boolean;
   officeAvailable: boolean;
+  plannerBaseUrl: string;
+  plannerAccessToken: string;
 };
 
 function percent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
-export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props) {
+export function SmartPlannerPreparationCard({
+  pdfReady,
+  officeAvailable,
+  plannerBaseUrl,
+  plannerAccessToken,
+}: Props) {
   const [state, setState] = useState<PlannerUiState>({ status: "idle" });
 
   async function analyze() {
@@ -69,7 +84,40 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
         return;
       }
 
-      const profile = response.preparation.request.documentProfile;
+      const baseUrl = plannerBaseUrl.trim();
+      const accessToken = plannerAccessToken.trim();
+      if (!baseUrl || !accessToken) {
+        setState({
+          status: "blocked",
+          message: "Connect Office Engine before requesting an AI recommendation.",
+        });
+        return;
+      }
+
+      const request = response.preparation.request;
+      const client = createSmartPlannerApiClient({
+        baseUrl,
+        accessToken,
+        requestPolicy: SMART_PLANNER_REQUEST_POLICY,
+        planPolicy: {
+          allowedPresets: request.engineCapabilities.allowedPresets,
+          localAvailable: request.engineCapabilities.localAvailable,
+          officeAvailable: request.engineCapabilities.officeAvailable,
+          splitAllowed: request.userGoal.splitAllowed,
+          officeEntitled: request.engineCapabilities.officeAvailable,
+          numericPolicy: APPROVED_BALANCED_NUMERIC_POLICY,
+        },
+      });
+      const recommendation = await requestSmartPlannerRecommendationWithClient(request, client);
+      if (recommendation.status === "blocked") {
+        setState({
+          status: "blocked",
+          message: `Recommendation unavailable: ${recommendation.errors.join("; ")}`,
+        });
+        return;
+      }
+
+      const profile = request.documentProfile;
       setState({
         status: "ready",
         pageCount: profile.pageCount,
@@ -77,6 +125,7 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
         scannedPercent: profile.scannedPageRatio,
         textPercent: profile.textPageRatio,
         vectorPercent: profile.vectorPageRatio,
+        plan: recommendation.plan,
       });
     } catch (error) {
       setState({
@@ -96,12 +145,12 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
           <h2 id="planner-card-title">Analyze this document</h2>
         </div>
         <span className="status-badge">
-          {state.status === "ready" ? "Recommendation ready" : busy ? "Analyzing…" : "Not analyzed"}
+          {state.status === "ready" ? "AI recommendation ready" : busy ? "Analyzing…" : "Not analyzed"}
         </span>
       </div>
 
       <p className="planner-card__disclosure">
-        Analysis stays on this device. No filename, text, image, preview, or PDF content is sent to the Planner.
+        Analysis stays on this device. Only content-blind structural metrics are sent to the Planner. No filename, text, image, preview, or PDF content is sent.
       </p>
 
       <button
@@ -110,7 +159,7 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
         onClick={() => void analyze()}
         disabled={!pdfReady || busy}
       >
-        {busy ? "Analyzing document…" : state.status === "ready" ? "Analyze again" : "Analyze document"}
+        {busy ? "Analyzing and planning…" : state.status === "ready" ? "Analyze again" : "Analyze document"}
       </button>
 
       {!pdfReady ? <p className="planner-card__note">Choose a PDF first.</p> : null}
@@ -124,8 +173,14 @@ export function SmartPlannerPreparationCard({ pdfReady, officeAvailable }: Props
             <span>Text {percent(state.textPercent)}</span>
             <span>Vector {percent(state.vectorPercent)}</span>
           </div>
+          <strong>{state.plan.engine === "office" ? "Office Engine" : "Local Engine"} · {state.plan.preset}</strong>
+          <span>Quality {state.plan.quality} · {state.plan.dpi} DPI</span>
+          <span>
+            Split {state.plan.split.enabled ? `into approximately ${state.plan.split.targetPartSizeMb} MB parts` : "not recommended"}
+          </span>
+          <p>{state.plan.explanation}</p>
           <small>Page type reflects the main content of each page. Images may also appear on text pages.</small>
-          <small>Preparation only. Nothing will run until you confirm a future recommendation.</small>
+          <small>AI recommendation preview only. Nothing will run until you explicitly confirm it.</small>
         </div>
       ) : null}
 
