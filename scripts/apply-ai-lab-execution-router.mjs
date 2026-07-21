@@ -23,6 +23,9 @@ const routerRuntime = `(() => {
   const ALLOWED_ROUTES = new Set(["local", "office_current"]);
   const PRESET_QUALITY = Object.freeze({ safe: 85, balanced: 75, strong: 60 });
   let active = false;
+  let activeButton = null;
+  let activeRoute = null;
+  let activePreset = null;
 
   function emit(detail) {
     globalThis.__AI_LAB_LAST_EXECUTION_ROUTER_RESULT__ = detail;
@@ -59,19 +62,66 @@ const routerRuntime = `(() => {
     return { type: "background:office-processing-start" };
   }
 
-  function renderError(button, message) {
-    button.disabled = false;
-    button.textContent = button.dataset.aiOriginalLabel || "Try again";
+  function statusElement(button, role = "status") {
     const target = button.parentElement;
-    if (!target) return;
+    if (!target) return null;
     let status = target.querySelector(".ai-lab-execution-router__status");
     if (!status) {
       status = document.createElement("p");
       status.className = "ai-lab-execution-router__status";
-      status.setAttribute("role", "alert");
       target.append(status);
     }
-    status.textContent = message;
+    status.setAttribute("role", role);
+    return status;
+  }
+
+  function setStatus(button, message, role = "status") {
+    const status = statusElement(button, role);
+    if (status) status.textContent = message;
+  }
+
+  function resetActive() {
+    active = false;
+    activeButton = null;
+    activeRoute = null;
+    activePreset = null;
+  }
+
+  function renderError(button, message) {
+    button.disabled = false;
+    button.textContent = button.dataset.aiOriginalLabel || "Try again";
+    setStatus(button, message, "alert");
+  }
+
+  function renderProgress(message, progress) {
+    if (!activeButton) return;
+    activeButton.disabled = true;
+    activeButton.textContent = activeRoute === "office_current" ? "Processing with Office Engine…" : "Processing locally…";
+    const suffix = Number.isFinite(progress) ? " " + Math.max(0, Math.min(100, Math.round(progress))) + "%" : "";
+    setStatus(activeButton, (message || "Processing…") + suffix);
+    emit({ status: "progress", route: activeRoute, preset: activePreset, progress: Number.isFinite(progress) ? progress : null, message: message || null });
+  }
+
+  function renderComplete(result) {
+    if (!activeButton) return;
+    const button = activeButton;
+    const route = activeRoute;
+    const preset = activePreset;
+    button.disabled = true;
+    button.textContent = "Processing complete";
+    setStatus(button, "Your processed PDF is ready in the existing result section.");
+    emit({ status: "complete", route, preset, result: result ?? null });
+    resetActive();
+  }
+
+  function renderLifecycleError(message, code) {
+    if (!activeButton) return;
+    const button = activeButton;
+    const route = activeRoute;
+    const preset = activePreset;
+    renderError(button, message || "Processing failed.");
+    emit({ status: "error", route, preset, error: message || "processing_failed", code: code || null });
+    resetActive();
   }
 
   async function confirmExecution(button) {
@@ -92,9 +142,13 @@ const routerRuntime = `(() => {
     }
 
     active = true;
+    activeButton = button;
+    activeRoute = route;
+    activePreset = preset;
     button.dataset.aiOriginalLabel ||= button.textContent || "Process PDF";
     button.disabled = true;
     button.textContent = route === "office_current" ? "Starting Office Engine…" : "Starting local processing…";
+    setStatus(button, "Starting processing…");
     emit({ status: "starting", route, preset });
 
     try {
@@ -103,13 +157,44 @@ const routerRuntime = `(() => {
         throw new Error(response.error || response.code || "execution_start_rejected");
       }
       emit({ status: "started", route, preset, response: response ?? null });
+      if (route === "local" && response?.result) {
+        renderComplete(response.result);
+      } else if (activeButton) {
+        activeButton.textContent = route === "office_current" ? "Processing with Office Engine…" : "Processing locally…";
+        setStatus(activeButton, "Processing started…");
+      }
     } catch (error) {
-      active = false;
       const message = error instanceof Error ? error.message : "execution_start_failed";
-      renderError(button, message);
-      emit({ status: "error", route, preset, error: message });
+      renderLifecycleError(message, "START_FAILED");
     }
   }
+
+  const runtime = globalThis.chrome?.runtime;
+  runtime?.onMessage?.addListener((message) => {
+    if (!active || !message || typeof message !== "object") return;
+    const type = message.type;
+
+    if (activeRoute === "local") {
+      if (type === "compression:progress") {
+        renderProgress(message.message || message.stage || "Processing locally…", message.progress);
+      } else if (type === "compression:result") {
+        renderComplete(message.result);
+      } else if (type === "compression:error") {
+        renderLifecycleError(message.message, message.code);
+      }
+      return;
+    }
+
+    if (activeRoute === "office_current") {
+      if (type === "office:progress") {
+        renderProgress(message.message || "Processing with Office Engine…", message.progress);
+      } else if (type === "office:result") {
+        renderComplete(message.result);
+      } else if (type === "office:error") {
+        renderLifecycleError(message.message, message.code);
+      }
+    }
+  });
 
   document.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest(".ai-lab-process-button") : null;
