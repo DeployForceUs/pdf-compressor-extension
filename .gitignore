@@ -8,3 +8,9 @@ reports/*.md
 .env
 .env.*
 !.env.example
+
+# Local AI Lab contest credentials and generated builds
+.output/
+.ai-lab-*.token
+*office-access-token*
+*pro-license.token*
