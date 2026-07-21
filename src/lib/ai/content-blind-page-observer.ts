@@ -2,7 +2,7 @@ type MuPdfModule = typeof import("mupdf");
 type MuPdfNamespace = MuPdfModule["default"];
 type MuPdfPage = InstanceType<MuPdfNamespace["Page"]>;
 type MuPdfImage = InstanceType<MuPdfNamespace["Image"]>;
-type MuPdfMatrix = InstanceType<MuPdfNamespace["Matrix"]> | number[];
+type MuPdfMatrix = readonly number[];
 
 export type ContentBlindPageObservation = {
   pageNumber: number;
@@ -12,12 +12,8 @@ export type ContentBlindPageObservation = {
   dominantImageCoverageRatio: number | null;
 };
 
-function matrixValues(value: MuPdfMatrix): readonly number[] {
-  return Array.isArray(value) ? value : (value as unknown as readonly number[]);
-}
-
 function placementSizePoints(ctm: MuPdfMatrix) {
-  const [a = 0, b = 0, c = 0, d = 0] = matrixValues(ctm);
+  const [a = 0, b = 0, c = 0, d = 0] = ctm;
   return {
     width: Math.hypot(a, b),
     height: Math.hypot(c, d),
