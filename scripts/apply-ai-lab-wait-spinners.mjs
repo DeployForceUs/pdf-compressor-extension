@@ -69,7 +69,10 @@ const runtime = `(() => {
 await writeFile(runtimePath, runtime, "utf8");
 
 let popup = await readFile(popupPath, "utf8");
-const progressStyle = `<style data-ai-lab-wait-spinner-style>
+const styleMarker = "data-ai-lab-wait-spinner-style";
+const styleStartTag = `<style ${styleMarker}>`;
+const styleEndTag = "</style>";
+const progressStyle = `${styleStartTag}
 .ai-lab-planner-progress {
   position: relative;
   width: 100%;
@@ -94,16 +97,19 @@ const progressStyle = `<style data-ai-lab-wait-spinner-style>
   0% { left: -42%; }
   100% { left: 104%; }
 }
-</style>`;
+${styleEndTag}`;
 
-if (!popup.includes("data-ai-lab-wait-spinner-style")) {
-  popup = popup.replace("</head>", `${progressStyle}</head>`);
-} else {
-  popup = popup.replace(
-    /<style data-ai-lab-wait-spinner-style>[\\s\\S]*?<\\/style>/,
-    progressStyle,
-  );
+function replaceTaggedBlock(source, startTag, endTag, replacement) {
+  const start = source.indexOf(startTag);
+  if (start < 0) return source.replace("</head>", `${replacement}</head>`);
+
+  const end = source.indexOf(endTag, start);
+  if (end < 0) throw new Error(`Unclosed tagged block: ${startTag}`);
+
+  return source.slice(0, start) + replacement + source.slice(end + endTag.length);
 }
+
+popup = replaceTaggedBlock(popup, styleStartTag, styleEndTag, progressStyle);
 
 if (!popup.includes("data-ai-lab-wait-spinners")) {
   popup = popup.replace(
