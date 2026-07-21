@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
+import { SmartPlannerPreparationCard } from "./SmartPlannerPreparationCard";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
 import { EXTENSION_BUILD } from "../../lib/build-info";
@@ -1878,6 +1879,17 @@ function Popup() {
                 </div>
               ) : null}
             </div>
+
+            <SmartPlannerPreparationCard
+
+              key={pdf.recordId ?? "no-pdf"}
+
+              pdfReady={Boolean(pdf.selected)}
+
+              officeAvailable={Boolean(officeHealth)}
+
+            />
+
 
             <article className={officeHealth ? "office-card office-card--ready" : "office-card"}>
               <div className="office-card__header">
