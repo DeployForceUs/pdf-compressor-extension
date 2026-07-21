@@ -35,8 +35,8 @@ async function emitProgress(onProgress: ProgressReporter, event: SplitProgressEv
   await onProgress(event);
 }
 
-function toUint8Array(data: Uint8Array | number[]) {
-  return data instanceof Uint8Array ? data : Uint8Array.from(data);
+function toArrayBuffer(data: Uint8Array | number[]): ArrayBuffer {
+  return Uint8Array.from(data).buffer;
 }
 
 export async function runSplitJob(
@@ -62,7 +62,7 @@ export async function runSplitJob(
     message: "Validating source PDF",
   });
 
-  const inputBytes = toUint8Array(inputRecord.data).buffer;
+  const inputBytes = toArrayBuffer(inputRecord.data);
   const outputMode = normalizeSplitOutputMode(request.outputMode);
   const splitRequest: SplitArchiveRequest = {
     inputBytes,
