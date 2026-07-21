@@ -11,6 +11,7 @@ import {
   SMART_PLANNER_BACKGROUND_PREPARE,
   type SmartPlannerPrepareResponse,
 } from "../../lib/ai/smart-planner-runtime-message-contract";
+import { createOfficeEngineClient } from "../../lib/office/office-engine-client";
 import "../../styles/smart-planner-card.css";
 
 type PlannerUiState =
@@ -52,6 +53,29 @@ export function SmartPlannerPreparationCard({
     setState({ status: "analyzing" });
 
     try {
+      const baseUrl = plannerBaseUrl.trim();
+      const accessToken = plannerAccessToken.trim();
+      if (!baseUrl || !accessToken) {
+        setState({
+          status: "blocked",
+          message: "Connect Office Engine before requesting an AI recommendation.",
+        });
+        return;
+      }
+
+      let liveOfficeAvailable = false;
+      let officeCpuCount = 0;
+      let officeMemoryGb = 0;
+      let maxFileSizeMb = 1024;
+
+      if (officeAvailable) {
+        const health = await createOfficeEngineClient({ baseUrl, accessToken }).health();
+        liveOfficeAvailable = health.readiness === "ready" && health.capabilities.jobCreation;
+        officeCpuCount = liveOfficeAvailable ? health.runtime?.effectiveCpuCount ?? 0 : 0;
+        officeMemoryGb = liveOfficeAvailable ? (health.runtime?.effectiveMemoryMb ?? 0) / 1024 : 0;
+        maxFileSizeMb = health.limits.maxFileSizeMb;
+      }
+
       const response = await browser.runtime.sendMessage({
         type: SMART_PLANNER_BACKGROUND_PREPARE,
         requestId: crypto.randomUUID(),
@@ -63,11 +87,11 @@ export function SmartPlannerPreparationCard({
         },
         engineCapabilities: {
           localAvailable: true,
-          officeAvailable,
-          officeCpuCount: 0,
-          officeMemoryGb: 0,
+          officeAvailable: liveOfficeAvailable,
+          officeCpuCount,
+          officeMemoryGb,
           allowedPresets: ["balanced"],
-          maxFileSizeMb: 1024,
+          maxFileSizeMb,
         },
       }) as SmartPlannerPrepareResponse;
 
@@ -80,16 +104,6 @@ export function SmartPlannerPreparationCard({
         setState({
           status: "blocked",
           message: "Document analysis is incomplete. Processing remains disabled.",
-        });
-        return;
-      }
-
-      const baseUrl = plannerBaseUrl.trim();
-      const accessToken = plannerAccessToken.trim();
-      if (!baseUrl || !accessToken) {
-        setState({
-          status: "blocked",
-          message: "Connect Office Engine before requesting an AI recommendation.",
         });
         return;
       }
