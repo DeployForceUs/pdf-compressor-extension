@@ -109,6 +109,21 @@ const runtime = `(() => {
     }
   }
 
+  function normalizeGoogleDriveUrl(value) {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== "drive.google.com" && hostname !== "www.drive.google.com") return url.href;
+
+    const fileMatch = url.pathname.match(/^\/file\/d\/([^/]+)/i);
+    const fileId = fileMatch?.[1] || url.searchParams.get("id");
+    if (!fileId) return url.href;
+
+    const downloadUrl = new URL("https://drive.google.com/uc");
+    downloadUrl.searchParams.set("export", "download");
+    downloadUrl.searchParams.set("id", fileId);
+    return downloadUrl.href;
+  }
+
   function fileNameFromUrl(value) {
     try {
       const url = new URL(value);
@@ -127,7 +142,8 @@ const runtime = `(() => {
   }
 
   async function loadPdfFromLink(urlValue, input, button, error) {
-    const url = urlValue.trim();
+    const originalUrl = urlValue.trim();
+    const url = normalizeGoogleDriveUrl(originalUrl);
     error.textContent = "";
     button.disabled = true;
     button.textContent = "Loading…";
@@ -141,9 +157,14 @@ const runtime = `(() => {
 
       const bytes = new Uint8Array(await response.arrayBuffer());
       const signature = new TextDecoder().decode(bytes.slice(0, 5));
-      if (signature !== "%PDF-") throw new Error("This link did not return a valid PDF.");
+      if (signature !== "%PDF-") {
+        const isGoogleDrive = new URL(originalUrl).hostname.toLowerCase().includes("drive.google.com");
+        throw new Error(isGoogleDrive
+          ? "Google Drive did not return the PDF. Make sure the file is shared with anyone who has the link."
+          : "This link did not return a valid PDF.");
+      }
 
-      const file = new File([bytes], fileNameFromUrl(response.url || url), { type: "application/pdf" });
+      const file = new File([bytes], fileNameFromUrl(response.url || originalUrl), { type: "application/pdf" });
       const transfer = new DataTransfer();
       transfer.items.add(file);
       input.files = transfer.files;
