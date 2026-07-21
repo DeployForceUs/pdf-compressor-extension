@@ -83,14 +83,44 @@ await writeFile(runtimePath, runtime, {
 
 let popup = await readFile(popupPath, "utf8");
 
+const visualStyle = `<style data-ai-lab-download-visuals>
+.hero__icon {
+  color: #ffffff !important;
+  background: #ff1744 !important;
+  border-color: #ff5b75 !important;
+  box-shadow: 0 0 0 1px rgba(255, 23, 68, 0.34), 0 10px 26px rgba(255, 23, 68, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.34) !important;
+  opacity: 1 !important;
+}
+.hero__icon svg,
+.hero__icon svg * {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+button[data-ai-action^="download"] {
+  color: #041204 !important;
+  background: linear-gradient(135deg, #c6ff00 0%, #39ff14 48%, #00f56a 100%) !important;
+  border-color: #caff3d !important;
+  box-shadow: 0 0 0 1px rgba(198, 255, 0, 0.46), 0 0 24px rgba(57, 255, 20, 0.44), 0 12px 30px rgba(0, 245, 106, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.64) !important;
+  font-weight: 900 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.34) !important;
+}
+button[data-ai-action^="download"]:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.16);
+}
+</style>`;
+
+if (!popup.includes("data-ai-lab-download-visuals")) {
+  popup = popup.replace("</head>", `${visualStyle}</head>`);
+}
+
 if (!popup.includes("data-ai-lab-contest-access")) {
   popup = popup.replace(
     "</body>",
     `<script data-ai-lab-contest-access src="./${runtimeName}"></script></body>`
   );
-
-  await writeFile(popupPath, popup, "utf8");
 }
 
-console.log("AI Lab contest access and Office host permission embedded");
+await writeFile(popupPath, popup, "utf8");
+
+console.log("AI Lab contest access, download visuals, and Office host permission embedded");
 await import("./verify-ai-lab-build.mjs");
