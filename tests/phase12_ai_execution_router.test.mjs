@@ -54,3 +54,16 @@ test("ExecutionRouter closes the local lifecycle when the start response already
   assert.match(source, /status: "complete"/);
   assert.match(source, /resetActive\(\)/);
 });
+
+test("ExecutionRouter turns the completed action into an explicit download", () => {
+  assert.match(source, /button\.dataset\.aiAction = "download"/);
+  assert.match(source, /Download processed PDF/);
+  assert.match(source, /downloadProcessedPdf\(button\)/);
+  assert.match(source, /indexedDB\.open\(RESULT_DB_NAME, RESULT_DB_VERSION\)/);
+  assert.match(source, /compression-results/);
+  assert.match(source, /compressed-pdf/);
+  assert.match(source, /URL\.createObjectURL\(blob\)/);
+  assert.match(source, /anchor\.download = downloadName\(record\)/);
+  assert.match(source, /status: "downloaded"/);
+  assert.doesNotMatch(source, /renderComplete[^]*anchor\.click\(\)/);
+});
