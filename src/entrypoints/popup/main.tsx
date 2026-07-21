@@ -1236,7 +1236,7 @@ function Popup() {
 
     const { bytes, fileName, fileSize, mimeType } = validation.file;
     const pageCount = await readPdfPageCount(bytes);
-    const byteArray = Array.from(new Uint8Array(bytes));
+    const byteArray = new Uint8Array(bytes);
     const recordId = SELECTED_PDF_RECORD_ID;
 
     try {

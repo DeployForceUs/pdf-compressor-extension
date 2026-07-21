@@ -63,7 +63,7 @@ export type PdfRecord = {
   type: string | null;
   lastModified: number;
   pageCount?: number | null;
-  data: number[];
+  data: Uint8Array | number[];
   createdAt?: number;
   updatedAt?: number;
 };
