@@ -11,19 +11,16 @@ function insertOnce(source, anchor, insertion, label) {
 }
 
 function upgradePlannerProps(source) {
-  const oldMarkup = `  pdfReady={Boolean(pdf.selected)}
-  officeAvailable={Boolean(officeHealth)}
-/>`;
-  const newMarkup = `  pdfReady={Boolean(pdf.selected)}
-  officeAvailable={Boolean(officeHealth)}
-  plannerBaseUrl={officeUrl}
-  plannerAccessToken={officeToken}
-/>`;
-  if (source.includes(newMarkup)) return source;
-  if (!source.includes(oldMarkup)) {
-    throw new Error("Cannot apply Planner gateway props: existing Planner card anchor not found");
-  }
-  return source.replace(oldMarkup, newMarkup);
+  if (source.includes("plannerBaseUrl={officeUrl}") && source.includes("plannerAccessToken={officeToken}")) return source;
+
+  const marker = "officeAvailable={Boolean(officeHealth)}";
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) throw new Error("Cannot apply Planner gateway props: existing Planner card anchor not found");
+
+  const lineStart = source.lastIndexOf("\n", markerIndex) + 1;
+  const indent = source.slice(lineStart, markerIndex);
+  const insertAt = markerIndex + marker.length;
+  return `${source.slice(0, insertAt)}\n${indent}plannerBaseUrl={officeUrl}\n${indent}plannerAccessToken={officeToken}${source.slice(insertAt)}`;
 }
 
 export function patchPopupSource(source) {
@@ -38,9 +35,7 @@ export function patchPopupSource(source) {
 
   const officePattern = /^(\s*)<article className=\{officeHealth \? "office-card office-card--ready" : "office-card"\}>/m;
   const match = next.match(officePattern);
-  if (!match) {
-    throw new Error("Cannot apply Planner card placement: anchor not found");
-  }
+  if (!match) throw new Error("Cannot apply Planner card placement: anchor not found");
 
   const indent = match[1] ?? "";
   const plannerMarkup = `${indent}<SmartPlannerPreparationCard\n${indent}  key={pdf.recordId ?? "no-pdf"}\n${indent}  pdfReady={Boolean(pdf.selected)}\n${indent}  officeAvailable={Boolean(officeHealth)}\n${indent}  plannerBaseUrl={officeUrl}\n${indent}  plannerAccessToken={officeToken}\n${indent}/>\n\n`;
