@@ -100,7 +100,9 @@ test("forces a healthy Office Engine for a large predominantly scanned PDF", asy
   assert.equal(result.plan.engine, "office");
   assert.equal(result.plan.quality, 65);
   assert.equal(result.plan.dpi, 144);
+  assert.match(result.plan.explanation, /^Use Office Engine processing/);
   assert.match(result.plan.explanation, /Office Engine is required/);
+  assert.doesNotMatch(result.plan.explanation, /Use local processing|local preset/i);
 });
 
 test("does not force Office when the controlled server is unavailable", async () => {
