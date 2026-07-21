@@ -20,18 +20,20 @@ import { readLocalRuntimeCapability, type LocalRuntimeCapability } from "../../l
 import { createOfficeEngineClient } from "../../lib/office/office-engine-client";
 import "../../styles/smart-planner-card.css";
 
+type ProfileSummary = {
+  pageCount: number;
+  imageObjectCount: number;
+  scannedPercent: number;
+  textPercent: number;
+  vectorPercent: number;
+};
+
 type PlannerUiState =
   | { status: "idle" }
+  | { status: "profiling" }
+  | ({ status: "profiled" } & ProfileSummary)
   | { status: "analyzing" }
-  | {
-      status: "ready";
-      pageCount: number;
-      imageObjectCount: number;
-      scannedPercent: number;
-      textPercent: number;
-      vectorPercent: number;
-      plan: ProcessingPlan;
-    }
+  | ({ status: "ready"; plan: ProcessingPlan } & ProfileSummary)
   | { status: "blocked"; message: string }
   | { status: "error"; message: string };
 
@@ -62,12 +64,25 @@ function gigabytes(value: number) {
   return value.toFixed(1);
 }
 
+function profileSummary(response: SmartPlannerPrepareResponse): ProfileSummary | null {
+  if (!response.ok || response.preparation.status === "blocked") return null;
+  const profile = response.preparation.request.documentProfile;
+  return {
+    pageCount: profile.pageCount,
+    imageObjectCount: profile.imageObjectCount,
+    scannedPercent: profile.scannedPageRatio,
+    textPercent: profile.textPageRatio,
+    vectorPercent: profile.vectorPageRatio,
+  };
+}
+
 export function SmartPlannerPreparationCard({
   pdfReady,
   officeAvailable,
   plannerBaseUrl,
   plannerAccessToken,
 }: Props) {
+  const isAiLab = import.meta.env.MODE === "ai-lab";
   const [state, setState] = useState<PlannerUiState>({ status: "idle" });
   const [localCapability, setLocalCapability] = useState<LocalCapabilityState>({ status: "loading" });
   const [benchmark, setBenchmark] = useState<BenchmarkState>({ status: "loading" });
@@ -96,6 +111,16 @@ export function SmartPlannerPreparationCard({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isAiLab || pdfReady || state.status === "idle") return;
+    setState({ status: "idle" });
+  }, [isAiLab, pdfReady, state.status]);
+
+  useEffect(() => {
+    if (!isAiLab || !pdfReady || state.status !== "idle") return;
+    void analyzeLocally();
+  }, [isAiLab, pdfReady, state.status]);
+
   async function benchmarkLocalRuntime() {
     if (benchmark.status === "running") return;
     setBenchmark({ status: "running" });
@@ -105,6 +130,53 @@ export function SmartPlannerPreparationCard({
       setBenchmark({ status: "ready", result });
     } catch {
       setBenchmark({ status: "error" });
+    }
+  }
+
+  async function prepareDocumentProfile(officeIsAvailable: boolean, officeCpuCount = 0, officeMemoryGb = 0, maxFileSizeMb = 1024) {
+    return browser.runtime.sendMessage({
+      type: SMART_PLANNER_BACKGROUND_PREPARE,
+      requestId: crypto.randomUUID(),
+      userGoal: {
+        deliveryTarget: "email_20mb",
+        qualityIntent: "print",
+        speedPreference: "balanced",
+        splitAllowed: true,
+      },
+      engineCapabilities: {
+        localAvailable: true,
+        officeAvailable: officeIsAvailable,
+        officeCpuCount,
+        officeMemoryGb,
+        allowedPresets: ["balanced"],
+        maxFileSizeMb,
+      },
+    }) as Promise<SmartPlannerPrepareResponse>;
+  }
+
+  async function analyzeLocally() {
+    if (!pdfReady || state.status === "profiling") return;
+    setState({ status: "profiling" });
+
+    try {
+      const response = await prepareDocumentProfile(false);
+      if (!response.ok) {
+        setState({ status: "error", message: response.message });
+        return;
+      }
+
+      const summary = profileSummary(response);
+      if (!summary) {
+        setState({ status: "blocked", message: "Document analysis is incomplete." });
+        return;
+      }
+
+      setState({ status: "profiled", ...summary });
+    } catch (error) {
+      setState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Local document analysis failed",
+      });
     }
   }
 
@@ -136,24 +208,12 @@ export function SmartPlannerPreparationCard({
         maxFileSizeMb = health.limits.maxFileSizeMb;
       }
 
-      const response = await browser.runtime.sendMessage({
-        type: SMART_PLANNER_BACKGROUND_PREPARE,
-        requestId: crypto.randomUUID(),
-        userGoal: {
-          deliveryTarget: "email_20mb",
-          qualityIntent: "print",
-          speedPreference: "balanced",
-          splitAllowed: true,
-        },
-        engineCapabilities: {
-          localAvailable: true,
-          officeAvailable: liveOfficeAvailable,
-          officeCpuCount,
-          officeMemoryGb,
-          allowedPresets: ["balanced"],
-          maxFileSizeMb,
-        },
-      }) as SmartPlannerPrepareResponse;
+      const response = await prepareDocumentProfile(
+        liveOfficeAvailable,
+        officeCpuCount,
+        officeMemoryGb,
+        maxFileSizeMb,
+      );
 
       if (!response.ok) {
         setState({ status: "error", message: response.message });
@@ -191,16 +251,13 @@ export function SmartPlannerPreparationCard({
         return;
       }
 
-      const profile = request.documentProfile;
-      setState({
-        status: "ready",
-        pageCount: profile.pageCount,
-        imageObjectCount: profile.imageObjectCount,
-        scannedPercent: profile.scannedPageRatio,
-        textPercent: profile.textPageRatio,
-        vectorPercent: profile.vectorPageRatio,
-        plan: recommendation.plan,
-      });
+      const summary = profileSummary(response);
+      if (!summary) {
+        setState({ status: "blocked", message: "Document analysis is incomplete." });
+        return;
+      }
+
+      setState({ status: "ready", ...summary, plan: recommendation.plan });
     } catch (error) {
       setState({
         status: "error",
@@ -209,7 +266,8 @@ export function SmartPlannerPreparationCard({
     }
   }
 
-  const busy = state.status === "analyzing";
+  const busy = state.status === "analyzing" || state.status === "profiling";
+  const analysisReady = state.status === "profiled" || state.status === "ready";
 
   return (
     <article className="planner-card" aria-labelledby="planner-card-title">
@@ -219,16 +277,22 @@ export function SmartPlannerPreparationCard({
           <h2 id="planner-card-title">Analyze this document</h2>
         </div>
         <span className="status-badge">
-          {state.status === "ready" ? "AI recommendation ready" : busy ? "Analyzing…" : "Not analyzed"}
+          {state.status === "ready"
+            ? "AI recommendation ready"
+            : analysisReady
+              ? "Local analysis complete"
+              : busy
+                ? "Analyzing locally…"
+                : "Not analyzed"}
         </span>
       </div>
 
       <p className="planner-card__disclosure">
-        Analysis stays on this device. Only content-blind structural metrics are sent to the Planner. No filename, text, image, preview, or PDF content is sent.
+        Analysis stays on this device. Only content-blind structural metrics are prepared for the Planner. No filename, text, image, preview, or PDF content is sent.
       </p>
 
       {localCapability.status === "ready" ? (
-        <div className="planner-card__result" aria-label="Local runtime capability">
+        <div className="planner-card__result planner-card__capability" aria-label="Local runtime capability">
           <strong>Local runtime detected</strong>
           <span>{localCapability.capability.cpuModel}</span>
           <span>
@@ -258,34 +322,49 @@ export function SmartPlannerPreparationCard({
         <p className="planner-card__note">Reading local hardware capability…</p>
       )}
 
-      <button
-        type="button"
-        className="primary"
-        onClick={() => void analyze()}
-        disabled={!pdfReady || busy}
-      >
-        {busy ? "Analyzing and planning…" : state.status === "ready" ? "Analyze again" : "Analyze document"}
-      </button>
+      {!isAiLab ? (
+        <button
+          type="button"
+          className="primary"
+          onClick={() => void analyze()}
+          disabled={!pdfReady || busy}
+        >
+          {busy ? "Analyzing and planning…" : state.status === "ready" ? "Analyze again" : "Analyze document"}
+        </button>
+      ) : null}
 
       {!pdfReady ? <p className="planner-card__note">Choose a PDF first.</p> : null}
 
-      {state.status === "ready" ? (
-        <div className="planner-card__result" role="status" aria-live="polite">
-          <span>{state.pageCount} pages analyzed</span>
-          <span>{state.imageObjectCount} image objects detected</span>
+      {state.status === "profiling" ? (
+        <div className="planner-card__analysis-progress" role="status" aria-live="polite">
+          <span className="planner-card__spinner" aria-hidden="true" />
+          <strong>Analyzing document locally</strong>
+          <span>Reading privacy-safe structural signals only.</span>
+        </div>
+      ) : null}
+
+      {analysisReady ? (
+        <div className="planner-card__result planner-card__analysis-result" role="status" aria-live="polite">
+          <strong>Local analysis complete</strong>
+          <span>{state.pageCount} pages · {state.imageObjectCount} image objects</span>
           <div className="planner-card__metrics">
             <span>Scanned {percent(state.scannedPercent)}</span>
             <span>Text {percent(state.textPercent)}</span>
             <span>Vector {percent(state.vectorPercent)}</span>
           </div>
-          <strong>{state.plan.engine === "office" ? "Office Engine" : "Local Engine"} · {state.plan.preset}</strong>
-          <span>Quality {state.plan.quality} · {state.plan.dpi} DPI</span>
-          <span>
-            Split {state.plan.split.enabled ? `into approximately ${state.plan.split.targetPartSizeMb} MB parts` : "not recommended"}
-          </span>
-          <p>{state.plan.explanation}</p>
-          <small>Page type reflects the main content of each page. Images may also appear on text pages.</small>
-          <small>AI recommendation preview only. Nothing will run until you explicitly confirm it.</small>
+          {state.status === "ready" ? (
+            <>
+              <strong>{state.plan.engine === "office" ? "Office Engine" : "Local Engine"} · {state.plan.preset}</strong>
+              <span>Quality {state.plan.quality} · {state.plan.dpi} DPI</span>
+              <span>
+                Split {state.plan.split.enabled ? `into approximately ${state.plan.split.targetPartSizeMb} MB parts` : "not recommended"}
+              </span>
+              <p>{state.plan.explanation}</p>
+              <small>AI recommendation preview only. Nothing will run until you explicitly confirm it.</small>
+            </>
+          ) : (
+            <small>No document content left this device. Goal definition comes next.</small>
+          )}
         </div>
       ) : null}
 
