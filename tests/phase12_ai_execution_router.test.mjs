@@ -65,5 +65,10 @@ test("ExecutionRouter turns the completed action into an explicit download", () 
   assert.match(source, /URL\.createObjectURL\(blob\)/);
   assert.match(source, /anchor\.download = downloadName\(record\)/);
   assert.match(source, /status: "downloaded"/);
-  assert.doesNotMatch(source, /renderComplete[^]*anchor\.click\(\)/);
+
+  const renderCompleteStart = source.indexOf("  function renderComplete(result) {");
+  const lifecycleErrorStart = source.indexOf("  function renderLifecycleError", renderCompleteStart);
+  assert.ok(renderCompleteStart >= 0 && lifecycleErrorStart > renderCompleteStart);
+  const renderCompleteBody = source.slice(renderCompleteStart, lifecycleErrorStart);
+  assert.doesNotMatch(renderCompleteBody, /anchor\.click\(\)/);
 });
