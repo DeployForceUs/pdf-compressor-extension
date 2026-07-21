@@ -61,6 +61,9 @@ export function createOfficeEngineServer({
     let routeName = "invalid_url";
 
     response.setHeader("x-request-id", requestId);
+    response.setHeader("access-control-allow-origin", "*");
+    response.setHeader("access-control-allow-methods", "GET, HEAD, POST, OPTIONS");
+    response.setHeader("access-control-allow-headers", "content-type");
     response.once("finish", () => {
       logger({
         event: "http_request",
@@ -76,6 +79,13 @@ export function createOfficeEngineServer({
       const url = new URL(request.url ?? "/", "http://office-engine.invalid");
       const route = classifyRoute(url.pathname);
       routeName = route.name;
+
+      if (request.method === "OPTIONS") {
+        statusCode = 204;
+        response.writeHead(statusCode);
+        response.end();
+        return;
+      }
 
       if (route.name === "health") {
         if (request.method !== "GET" && request.method !== "HEAD") {
