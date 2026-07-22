@@ -14,6 +14,11 @@ export interface CompressionResultEvent {
   readonly metadataBytes: number;
 }
 
+export interface CoordinatorCapabilities {
+  readonly canDownloadPdf: boolean;
+  readonly canPrepareSplit: boolean;
+}
+
 export interface CoordinatorSnapshot {
   readonly executionId: string | null;
   readonly owner: "ai-execution-coordinator";
@@ -22,6 +27,8 @@ export interface CoordinatorSnapshot {
   readonly compressedRecordId: string | null;
   readonly metadataBytes: number | null;
   readonly actualBytes: number | null;
+  readonly targetBytes: number | null;
+  readonly capabilities: CoordinatorCapabilities;
   readonly lastTransition: string;
   readonly timestamp: number;
 }
@@ -60,6 +67,11 @@ export class AiExecutionCoordinator {
         "compressedRecordId" in state ? state.compressedRecordId : null,
       metadataBytes: "metadataBytes" in state ? state.metadataBytes : null,
       actualBytes: "actualBytes" in state ? state.actualBytes : null,
+      targetBytes: state.status === "idle" ? null : state.contract.targetBytes,
+      capabilities: Object.freeze({
+        canDownloadPdf: state.status === "completed_pdf",
+        canPrepareSplit: state.status === "splitting",
+      }),
       lastTransition: this.#lastTransition,
       timestamp: this.#now(),
     });
@@ -138,6 +150,18 @@ export class AiExecutionCoordinator {
 
     this.#transition({ type: "COMPRESSED_RESULT_VERIFIED", actualBytes: persisted.byteLength });
     return true;
+  }
+
+  evaluateCompressedResultSize(): "complete_pdf" | "prepare_split" {
+    if (this.#state.status !== "validating_compressed_result") {
+      throw new Error(`size_gate_invalid_state:${this.#state.status}`);
+    }
+
+    const decision = this.#state.actualBytes <= this.#state.contract.targetBytes
+      ? "complete_pdf"
+      : "prepare_split";
+    this.#transition({ type: "SIZE_GATE_EVALUATED", decision });
+    return decision;
   }
 
   #transition(event: Parameters<typeof transitionExecution>[1]): void {
