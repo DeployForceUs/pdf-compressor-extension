@@ -9,6 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const staticScripts = [
   "scripts/mark-ai-lab-build.mjs",
   "scripts/apply-ai-lab-palette.mjs",
+  "scripts/fix-ai-lab-analysis-card-clipping.mjs",
   "scripts/force-ai-lab-english.mjs",
   "scripts/reset-ai-lab-selected-pdf.mjs",
   "scripts/add-ai-lab-pdf-link.mjs",
