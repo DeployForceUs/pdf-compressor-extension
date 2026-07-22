@@ -8,7 +8,7 @@ export type ExecutionEvent =
   | { readonly type: "COMPRESSION_STARTED" }
   | { readonly type: "COMPRESSION_RESULT_RECEIVED"; readonly compressedRecordId: string; readonly metadataBytes: number }
   | { readonly type: "COMPRESSED_RESULT_VERIFIED"; readonly actualBytes: number }
-  | { readonly type: "SPLIT_STARTED" }
+  | { readonly type: "SIZE_GATE_EVALUATED"; readonly decision: "complete_pdf" | "prepare_split" }
   | { readonly type: "SPLIT_COMPLETED"; readonly artifactIds: readonly string[] }
   | { readonly type: "SPLIT_PARTS_VALIDATED"; readonly artifactIds: readonly string[] }
   | { readonly type: "ZIP_CREATION_STARTED" }
