@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-import metadata from "../src/lib/ai-runtime/build-metadata.mjs";
+import { AI_RUNTIME_BUILD } from "../src/lib/ai-runtime/build-metadata.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -37,7 +37,7 @@ const legacyExecutionScripts = [
   "scripts/apply-ai-lab-target-workflow-contract-runtime.mjs",
 ];
 
-const implementation = metadata.implementation;
+const implementation = AI_RUNTIME_BUILD.implementation;
 if (implementation !== "legacy-patched" && implementation !== "source-runtime") {
   throw new Error(`Unknown AI runtime implementation: ${String(implementation)}`);
 }
