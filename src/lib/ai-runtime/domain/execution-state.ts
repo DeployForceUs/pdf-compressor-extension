@@ -107,7 +107,17 @@ export function transitionExecution(state: ExecutionState, event: ExecutionEvent
       });
 
     case "validating_compressed_result":
-      if (event.type !== "SPLIT_STARTED") return invalid(state, event);
+      if (event.type !== "SIZE_GATE_EVALUATED") return invalid(state, event);
+      if (event.decision === "complete_pdf") {
+        if (state.actualBytes > state.contract.targetBytes) throw new Error("size_gate_pdf_above_target");
+        return Object.freeze({
+          status: "completed_pdf",
+          ...context(state),
+          compressedRecordId: state.compressedRecordId,
+          actualBytes: state.actualBytes,
+        });
+      }
+      if (state.actualBytes <= state.contract.targetBytes) throw new Error("size_gate_split_not_required");
       return Object.freeze({
         status: "splitting",
         ...context(state),
