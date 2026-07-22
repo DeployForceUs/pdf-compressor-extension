@@ -29,3 +29,30 @@ export interface SplitStartRequest {
 export interface SplitPort {
   start(request: SplitStartRequest): Promise<void>;
 }
+
+export interface PersistedSplitPart {
+  readonly recordId: string;
+  readonly byteLength: number;
+  readonly bytes: Uint8Array;
+}
+
+export interface SplitPartStore {
+  read(recordId: string): Promise<PersistedSplitPart | null>;
+}
+
+export interface ZipCreateRequest {
+  readonly executionId: string;
+  readonly compressedRecordId: string;
+  readonly artifactIds: readonly string[];
+  readonly outputMode: "single-zip";
+}
+
+export interface PersistedZipArtifact {
+  readonly recordId: string;
+  readonly artifactIds: readonly string[];
+  readonly byteLength: number;
+}
+
+export interface ZipPort {
+  createAndPersist(request: ZipCreateRequest): Promise<PersistedZipArtifact>;
+}
