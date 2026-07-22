@@ -1,6 +1,6 @@
 {
   "implementation": "source-runtime",
-  "phase": 2,
+  "phase": 3,
   "status": "accepted",
-  "label": "AI Lab source runtime Phase 2 coordinator handoff accepted"
+  "label": "AI Lab source runtime Phase 3 deterministic size gate accepted"
 }
