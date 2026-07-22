@@ -1,6 +1,6 @@
 {
   "implementation": "source-runtime",
   "phase": 7,
-  "status": "accepted",
-  "label": "AI Lab source runtime Phase 7 state-driven React UI accepted"
+  "status": "reopened",
+  "label": "AI Lab source runtime Phase 7 Chrome integration reopened"
 }
