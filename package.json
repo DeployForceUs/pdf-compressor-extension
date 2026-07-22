@@ -18,6 +18,7 @@
     "test:ai-runtime-split": "node scripts/run-ai-runtime-split-tests.mjs",
     "test:ai-runtime-zip": "node scripts/run-ai-runtime-zip-tests.mjs",
     "test:ai-runtime-network": "node scripts/run-ai-runtime-network-tests.mjs",
+    "test:ai-runtime-react-ui": "node scripts/run-ai-runtime-react-ui-tests.mjs",
     "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
     "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
