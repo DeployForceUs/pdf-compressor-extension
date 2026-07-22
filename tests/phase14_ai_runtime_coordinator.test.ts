@@ -68,7 +68,7 @@ test("rejects substitution of the original selected PDF", async () => {
   assert.equal(coordinator.state.status, "failed");
 });
 
-test("claims persisted compressed bytes and stops before the phase 3 size decision", async () => {
+test("claims persisted compressed bytes and exposes no terminal capability before size decision", async () => {
   const { coordinator } = harness([{ recordId: "compressed-pdf", sourceRecordId: "selected-pdf", byteLength: 8 * 1024 * 1024 }]);
   await coordinator.startCompression();
   assert.equal(await coordinator.handleCompressionResult({
@@ -87,6 +87,11 @@ test("claims persisted compressed bytes and stops before the phase 3 size decisi
     compressedRecordId: "compressed-pdf",
     metadataBytes: 8 * 1024 * 1024,
     actualBytes: 8 * 1024 * 1024,
+    targetBytes: 10 * 1024 * 1024,
+    capabilities: {
+      canDownloadPdf: false,
+      canPrepareSplit: false,
+    },
     lastTransition: "COMPRESSED_RESULT_VERIFIED",
     timestamp: 1234,
   });
