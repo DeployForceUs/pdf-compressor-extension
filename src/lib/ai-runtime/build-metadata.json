@@ -1,6 +1,6 @@
 {
   "implementation": "source-runtime",
-  "phase": 1,
+  "phase": 2,
   "status": "accepted",
-  "label": "AI Lab source runtime Phase 1 domain contracts accepted"
+  "label": "AI Lab source runtime Phase 2 coordinator handoff accepted"
 }
