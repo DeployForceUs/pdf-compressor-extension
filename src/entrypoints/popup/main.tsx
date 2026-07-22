@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { SmartPlannerPreparationCard } from "./SmartPlannerPreparationCard";
-import { AiRuntimePopupHost } from "./AiRuntimePopupHost";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { initI18n } from "../../lib/i18n/config";
 import { EXTENSION_BUILD } from "../../lib/build-info";
@@ -1892,8 +1891,6 @@ function Popup() {
               plannerAccessToken={officeToken}
 
             />
-
-            <AiRuntimePopupHost />
 
 
             <article className={officeHealth ? "office-card office-card--ready" : "office-card"}>
