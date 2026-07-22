@@ -90,6 +90,7 @@ test("claims persisted compressed bytes and exposes no terminal capability befor
     targetBytes: 10 * 1024 * 1024,
     capabilities: {
       canDownloadPdf: false,
+      canDownloadZip: false,
       canPrepareSplit: false,
     },
     lastTransition: "COMPRESSED_RESULT_VERIFIED",
