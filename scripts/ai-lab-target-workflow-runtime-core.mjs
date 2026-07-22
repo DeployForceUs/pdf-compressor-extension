@@ -3,12 +3,6 @@ import {
   decideTargetWorkflowCompletion,
 } from "./ai-lab-target-workflow-contract.mjs";
 
-function byteLengthOf(record) {
-  const data = record?.data;
-  const byteLength = data?.byteLength ?? data?.length;
-  return Number.isFinite(byteLength) && byteLength >= 0 ? byteLength : null;
-}
-
 export function claimCompressedResultHandoff({ resultMetadata, persistedRecord }) {
   if (!resultMetadata || typeof resultMetadata !== "object") {
     throw new Error("compressed_result_metadata_missing");
@@ -23,8 +17,9 @@ export function claimCompressedResultHandoff({ resultMetadata, persistedRecord }
     throw new Error("compressed_result_record_mismatch");
   }
 
-  const byteLength = byteLengthOf(persistedRecord);
-  if (byteLength === null) {
+  const data = persistedRecord.data;
+  const byteLength = data?.byteLength ?? data?.length;
+  if (!Number.isFinite(byteLength) || byteLength < 0) {
     throw new Error("compressed_result_bytes_reference_missing");
   }
 
