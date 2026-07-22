@@ -1,11 +1,17 @@
-import { executionFailure } from "./domain/execution-errors.js";
+import { executionFailure, type ExecutionErrorCode } from "./domain/execution-errors.js";
 import {
   INITIAL_EXECUTION_STATE,
   transitionExecution,
   type ExecutionState,
 } from "./domain/execution-state.js";
 import type { TargetContract } from "./domain/target-contract.js";
-import type { CompressedResultStore, CompressionPort, SplitPort } from "./ports.js";
+import type {
+  CompressedResultStore,
+  CompressionPort,
+  SplitPartStore,
+  SplitPort,
+  ZipPort,
+} from "./ports.js";
 
 export interface CompressionResultEvent {
   readonly executionId: string;
@@ -22,6 +28,7 @@ export interface SplitResultEvent {
 
 export interface CoordinatorCapabilities {
   readonly canDownloadPdf: boolean;
+  readonly canDownloadZip: boolean;
   readonly canPrepareSplit: boolean;
 }
 
@@ -43,7 +50,19 @@ interface CoordinatorPorts {
   readonly compression: CompressionPort;
   readonly compressedResults: CompressedResultStore;
   readonly split?: SplitPort;
+  readonly splitParts?: SplitPartStore;
+  readonly zip?: ZipPort;
   readonly now?: () => number;
+}
+
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d] as const;
+
+function hasPdfSignature(bytes: Uint8Array): boolean {
+  return PDF_SIGNATURE.every((value, index) => bytes[index] === value);
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export class AiExecutionCoordinator {
@@ -51,14 +70,19 @@ export class AiExecutionCoordinator {
   readonly #compression: CompressionPort;
   readonly #compressedResults: CompressedResultStore;
   readonly #split: SplitPort | null;
+  readonly #splitParts: SplitPartStore | null;
+  readonly #zip: ZipPort | null;
   readonly #now: () => number;
   #lastTransition = "initialized";
   #splitDispatchedExecutionId: string | null = null;
+  #zipDispatchedExecutionId: string | null = null;
 
   constructor(ports: CoordinatorPorts) {
     this.#compression = ports.compression;
     this.#compressedResults = ports.compressedResults;
     this.#split = ports.split ?? null;
+    this.#splitParts = ports.splitParts ?? null;
+    this.#zip = ports.zip ?? null;
     this.#now = ports.now ?? Date.now;
   }
 
@@ -80,6 +104,7 @@ export class AiExecutionCoordinator {
       targetBytes: state.status === "idle" ? null : state.contract.targetBytes,
       capabilities: Object.freeze({
         canDownloadPdf: state.status === "completed_pdf",
+        canDownloadZip: state.status === "completed_zip",
         canPrepareSplit:
           state.status === "splitting" &&
           this.#splitDispatchedExecutionId !== state.executionId,
@@ -95,6 +120,7 @@ export class AiExecutionCoordinator {
     readonly contract: TargetContract;
   }): void {
     this.#splitDispatchedExecutionId = null;
+    this.#zipDispatchedExecutionId = null;
     this.#transition({
       type: "CONTRACT_CONFIRMED",
       executionId: input.executionId,
@@ -216,6 +242,84 @@ export class AiExecutionCoordinator {
     return true;
   }
 
+  async validateSplitParts(): Promise<boolean> {
+    if (this.#state.status !== "validating_split_parts") {
+      throw new Error(`split_validation_invalid_state:${this.#state.status}`);
+    }
+    if (!this.#splitParts) throw new Error("split_part_store_missing");
+
+    const state = this.#state;
+    for (const artifactId of state.artifactIds) {
+      const part = await this.#splitParts.read(artifactId);
+      if (this.#state.status !== "validating_split_parts" || this.#state.executionId !== state.executionId) {
+        return false;
+      }
+      if (
+        !part ||
+        part.recordId !== artifactId ||
+        !Number.isSafeInteger(part.byteLength) ||
+        part.byteLength <= 0 ||
+        part.byteLength !== part.bytes.byteLength ||
+        !hasPdfSignature(part.bytes)
+      ) {
+        this.#fail("split_part_invalid", `Split part failed validation: ${artifactId}`);
+        return false;
+      }
+      if (part.byteLength > state.contract.targetBytes) {
+        this.#fail("split_part_oversized", `Split part exceeds target and requires further division: ${artifactId}`);
+        return false;
+      }
+    }
+
+    this.#transition({ type: "SPLIT_PARTS_VALIDATED", artifactIds: state.artifactIds });
+    return true;
+  }
+
+  async createZip(): Promise<boolean> {
+    if (this.#state.status !== "creating_zip") {
+      throw new Error(`zip_creation_invalid_state:${this.#state.status}`);
+    }
+    if (!this.#zip) throw new Error("zip_port_missing");
+    if (this.#zipDispatchedExecutionId === this.#state.executionId) {
+      throw new Error(`zip_already_dispatched:${this.#state.executionId}`);
+    }
+
+    const state = this.#state;
+    this.#zipDispatchedExecutionId = state.executionId;
+    this.#transition({ type: "ZIP_CREATION_STARTED" });
+
+    try {
+      const persisted = await this.#zip.createAndPersist({
+        executionId: state.executionId,
+        compressedRecordId: state.compressedRecordId,
+        artifactIds: state.artifactIds,
+        outputMode: state.contract.outputMode,
+      });
+
+      if (this.#state.status !== "creating_zip" || this.#state.executionId !== state.executionId) {
+        return false;
+      }
+      if (
+        !persisted.recordId.trim() ||
+        !Number.isSafeInteger(persisted.byteLength) ||
+        persisted.byteLength <= 0 ||
+        !sameIds(persisted.artifactIds, state.artifactIds)
+      ) {
+        this.#fail("zip_creation_failed", "Persisted ZIP does not match the fully validated split artifacts");
+        return false;
+      }
+
+      this.#transition({ type: "ZIP_CREATED", zipRecordId: persisted.recordId });
+      return true;
+    } catch (error) {
+      if (this.#state.status === "creating_zip" && this.#state.executionId === state.executionId) {
+        const message = error instanceof Error ? error.message : "ZIP creation failed";
+        this.#fail("zip_creation_failed", message);
+      }
+      return false;
+    }
+  }
+
   cancel(): void {
     if (this.#state.status === "idle") throw new Error("cancel_invalid_state:idle");
     this.#transition({ type: "CANCEL_REQUESTED" });
@@ -227,7 +331,7 @@ export class AiExecutionCoordinator {
     this.#lastTransition = event.type;
   }
 
-  #fail(code: "compressed_result_missing" | "compressed_result_mismatch", message: string): void {
+  #fail(code: ExecutionErrorCode, message: string): void {
     this.#transition({ type: "FAILED", failure: executionFailure(code, message) });
   }
 }
