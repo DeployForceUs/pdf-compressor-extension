@@ -98,14 +98,6 @@ export function transitionExecution(state: ExecutionState, event: ExecutionEvent
       if (event.type !== "COMPRESSED_RESULT_VERIFIED") return invalid(state, event);
       if (!Number.isSafeInteger(event.actualBytes) || event.actualBytes <= 0) throw new Error("compressed_result_bytes_invalid");
       if (event.actualBytes !== state.metadataBytes) throw new Error("compressed_result_size_mismatch");
-      if (event.actualBytes <= state.contract.targetBytes) {
-        return Object.freeze({
-          status: "completed_pdf",
-          ...context(state),
-          compressedRecordId: state.compressedRecordId,
-          actualBytes: event.actualBytes,
-        });
-      }
       return Object.freeze({
         status: "validating_compressed_result",
         ...context(state),
