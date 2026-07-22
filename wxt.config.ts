@@ -1,4 +1,5 @@
 import { defineConfig } from "wxt";
+import { AI_RUNTIME_BUILD } from "./src/lib/build-info";
 
 const AI_LAB_MODE = "ai-lab";
 
@@ -22,6 +23,12 @@ export default defineConfig({
         manifest.short_name = "PDF AI Lab";
         manifest.description =
           "Experimental privacy-first AI orchestration build for PDF processing.";
+        manifest.version_name = AI_RUNTIME_BUILD.label;
+      }
+    },
+    "build:done": (wxt: any) => {
+      if (wxt.config.mode === AI_LAB_MODE) {
+        process.stdout.write(`${AI_RUNTIME_BUILD.label}\n`);
       }
     },
   },
