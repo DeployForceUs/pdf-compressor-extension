@@ -67,7 +67,7 @@ test("routes an explicitly oversized result through split validation before ZIP 
   });
   state = transitionExecution(state, { type: "COMPRESSED_RESULT_VERIFIED", actualBytes: 12 * 1024 * 1024 });
   assert.equal(state.status, "validating_compressed_result");
-  state = transitionExecution(state, { type: "SPLIT_STARTED" });
+  state = transitionExecution(state, { type: "SIZE_GATE_EVALUATED", decision: "prepare_split" });
   state = transitionExecution(state, { type: "SPLIT_COMPLETED", artifactIds: ["part-1", "part-2"] });
   assert.equal(state.status, "validating_split_parts");
   state = transitionExecution(state, { type: "SPLIT_PARTS_VALIDATED", artifactIds: ["part-1", "part-2"] });
