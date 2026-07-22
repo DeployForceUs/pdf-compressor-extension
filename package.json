@@ -14,6 +14,7 @@
     "test:target-workflow": "node --test tests/phase12_ai_target_workflow_contract.test.mjs tests/phase12_ai_target_workflow_runtime_core.test.mjs",
     "test:ai-runtime-domain": "node scripts/run-ai-runtime-domain-tests.mjs",
     "test:ai-runtime-coordinator": "node scripts/run-ai-runtime-coordinator-tests.mjs",
+    "test:ai-runtime-size-gate": "node scripts/run-ai-runtime-size-gate-tests.mjs",
     "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
     "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
