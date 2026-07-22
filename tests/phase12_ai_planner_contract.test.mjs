@@ -63,6 +63,45 @@ test("accepts a valid strict PlannerResponse", () => {
   assert.deepEqual(validatePlannerResponse(validResponse, request), validResponse);
 });
 
+test("accepts a local preset when Office Engine exposes no presets", () => {
+  const localRequest = {
+    ...request,
+    officeCapabilities: {
+      ...request.officeCapabilities,
+      availability: "unavailable",
+      presets: [],
+    },
+  };
+  const localResponse = {
+    ...validResponse,
+    recommendedRoute: "local",
+    recommendedPreset: "balanced",
+    currentLocalAssessment: "recommended",
+    currentOfficeAssessment: "unavailable",
+    estimatedRuntime: {
+      ...validResponse.estimatedRuntime,
+      officeCurrent: null,
+    },
+  };
+
+  assert.equal(validatePlannerResponse(localResponse, localRequest).recommendedPreset, "balanced");
+});
+
+test("rejects an unavailable preset for an Office Engine route", () => {
+  const limitedRequest = {
+    ...request,
+    officeCapabilities: {
+      ...request.officeCapabilities,
+      presets: ["safe"],
+    },
+  };
+
+  assert.throws(
+    () => validatePlannerResponse(validResponse, limitedRequest),
+    /recommendedPreset_not_available/,
+  );
+});
+
 test("rejects office route when Office Engine is unavailable", () => {
   const unavailableRequest = {
     ...request,
