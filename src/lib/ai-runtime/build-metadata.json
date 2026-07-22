@@ -1,6 +1,6 @@
 {
   "implementation": "source-runtime",
-  "phase": 3,
+  "phase": 4,
   "status": "accepted",
-  "label": "AI Lab source runtime Phase 3 deterministic size gate accepted"
+  "label": "AI Lab source runtime Phase 4 compressed artifact split accepted"
 }
