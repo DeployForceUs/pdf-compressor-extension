@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1",
+  "phase": 8,
+  "status": "open",
+  "build": {
+    "commitSha": "",
+    "marker": "AI Lab source runtime Phase 7 state-driven React UI accepted",
+    "implementation": "source-runtime"
+  },
+  "cases": [
+    { "id": 1, "name": "PDF terminal success", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 2, "name": "ZIP terminal success", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 3, "name": "Compression record mismatch", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 4, "name": "Oversized generated part", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 5, "name": "Planner unavailable", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 6, "name": "Cancellation during compression", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 7, "name": "Cancellation during split", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 8, "name": "Popup close and reopen", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" },
+    { "id": 9, "name": "Repeated execution after reset", "status": "pending", "stateTrace": [], "artifactRecordIds": [], "targetBytes": null, "actualBytes": null, "screenshot": "", "artifactValidation": "" }
+  ]
+}
