@@ -1,6 +1,3 @@
-export const AI_RUNTIME_BUILD = Object.freeze({
-  implementation: "source-runtime",
-  phase: 1,
-  status: "accepted",
-  label: "AI Lab source runtime Phase 1 domain contracts accepted",
-});
+import metadata from "./build-metadata.json" with { type: "json" };
+
+export const AI_RUNTIME_BUILD = Object.freeze(metadata);
