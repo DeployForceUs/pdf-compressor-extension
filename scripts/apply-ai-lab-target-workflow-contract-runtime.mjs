@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { AI_RUNTIME_BUILD } from "../src/lib/ai-runtime/build-metadata.mjs";
 import {
   TARGET_WORKFLOW_SCHEMA_VERSION,
   assertTargetWorkflowPlan,
@@ -128,3 +129,4 @@ if (existingRevision.test(router)) {
 
 await writeFile(routerPath, router, "utf8");
 process.stdout.write("AI Lab structured target workflow contract runtime C8 applied\n");
+process.stdout.write(`${AI_RUNTIME_BUILD.label}\n`);
