@@ -8,7 +8,7 @@ const PRESENTER_PATH = path.join(OUTPUT_DIR, "ai-lab-recommendation-presenter.js
 const ROUTER_PATH = path.join(OUTPUT_DIR, "ai-lab-execution-router.js");
 const MANIFEST_PATH = path.join(OUTPUT_DIR, "manifest.json");
 const CONTEST_ACCESS_PATH = path.join(OUTPUT_DIR, "ai-lab-contest-access.js");
-const CONTRACT_PATH = path.resolve("scripts/ai-lab-target-workflow-contract.mjs");
+const CONTRACT_PATH = path.resolve("src/lib/ai/target-workflow-contract.mjs");
 
 const REVISION = "H14-CONTRACT-C7";
 
