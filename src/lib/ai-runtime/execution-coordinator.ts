@@ -5,13 +5,19 @@ import {
   type ExecutionState,
 } from "./domain/execution-state.js";
 import type { TargetContract } from "./domain/target-contract.js";
-import type { CompressedResultStore, CompressionPort } from "./ports.js";
+import type { CompressedResultStore, CompressionPort, SplitPort } from "./ports.js";
 
 export interface CompressionResultEvent {
   readonly executionId: string;
   readonly sourceRecordId: string;
   readonly compressedRecordId: string;
   readonly metadataBytes: number;
+}
+
+export interface SplitResultEvent {
+  readonly executionId: string;
+  readonly compressedRecordId: string;
+  readonly artifactIds: readonly string[];
 }
 
 export interface CoordinatorCapabilities {
@@ -36,6 +42,7 @@ export interface CoordinatorSnapshot {
 interface CoordinatorPorts {
   readonly compression: CompressionPort;
   readonly compressedResults: CompressedResultStore;
+  readonly split?: SplitPort;
   readonly now?: () => number;
 }
 
@@ -43,12 +50,15 @@ export class AiExecutionCoordinator {
   #state: ExecutionState = INITIAL_EXECUTION_STATE;
   readonly #compression: CompressionPort;
   readonly #compressedResults: CompressedResultStore;
+  readonly #split: SplitPort | null;
   readonly #now: () => number;
   #lastTransition = "initialized";
+  #splitDispatchedExecutionId: string | null = null;
 
   constructor(ports: CoordinatorPorts) {
     this.#compression = ports.compression;
     this.#compressedResults = ports.compressedResults;
+    this.#split = ports.split ?? null;
     this.#now = ports.now ?? Date.now;
   }
 
@@ -70,7 +80,9 @@ export class AiExecutionCoordinator {
       targetBytes: state.status === "idle" ? null : state.contract.targetBytes,
       capabilities: Object.freeze({
         canDownloadPdf: state.status === "completed_pdf",
-        canPrepareSplit: state.status === "splitting",
+        canPrepareSplit:
+          state.status === "splitting" &&
+          this.#splitDispatchedExecutionId !== state.executionId,
       }),
       lastTransition: this.#lastTransition,
       timestamp: this.#now(),
@@ -82,6 +94,7 @@ export class AiExecutionCoordinator {
     readonly sourceRecordId: string;
     readonly contract: TargetContract;
   }): void {
+    this.#splitDispatchedExecutionId = null;
     this.#transition({
       type: "CONTRACT_CONFIRMED",
       executionId: input.executionId,
@@ -162,6 +175,51 @@ export class AiExecutionCoordinator {
       : "prepare_split";
     this.#transition({ type: "SIZE_GATE_EVALUATED", decision });
     return decision;
+  }
+
+  async startSplit(): Promise<void> {
+    if (this.#state.status !== "splitting") {
+      throw new Error(`split_start_invalid_state:${this.#state.status}`);
+    }
+    if (!this.#split) throw new Error("split_port_missing");
+    if (this.#splitDispatchedExecutionId === this.#state.executionId) {
+      throw new Error(`split_already_dispatched:${this.#state.executionId}`);
+    }
+    if (this.#state.compressedRecordId === this.#state.sourceRecordId) {
+      this.#fail("compressed_result_mismatch", "Original selected PDF cannot be used as split input");
+      throw new Error("split_input_original_source_forbidden");
+    }
+
+    const state = this.#state;
+    this.#splitDispatchedExecutionId = state.executionId;
+    try {
+      await this.#split.start({
+        executionId: state.executionId,
+        compressedRecordId: state.compressedRecordId,
+        targetBytes: state.contract.targetBytes,
+        outputMode: state.contract.outputMode,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Split dispatch failed";
+      this.#transition({ type: "FAILED", failure: executionFailure("split_failed", message) });
+      throw error;
+    }
+  }
+
+  handleSplitResult(event: SplitResultEvent): boolean {
+    if (this.#state.status !== "splitting") return false;
+    if (this.#splitDispatchedExecutionId !== this.#state.executionId) return false;
+    if (event.executionId !== this.#state.executionId) return false;
+    if (event.compressedRecordId !== this.#state.compressedRecordId) return false;
+
+    this.#transition({ type: "SPLIT_COMPLETED", artifactIds: event.artifactIds });
+    return true;
+  }
+
+  cancel(): void {
+    if (this.#state.status === "idle") throw new Error("cancel_invalid_state:idle");
+    this.#transition({ type: "CANCEL_REQUESTED" });
+    this.#transition({ type: "CANCELLED" });
   }
 
   #transition(event: Parameters<typeof transitionExecution>[1]): void {
