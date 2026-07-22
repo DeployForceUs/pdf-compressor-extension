@@ -43,7 +43,7 @@ test("never completes directly from compressing", () => {
   );
 });
 
-test("completes as PDF only after claiming and verifying persisted compressed bytes", () => {
+test("enters compressed-result validation only after claiming persisted bytes", () => {
   let state = toCompressing();
   state = transitionExecution(state, {
     type: "COMPRESSION_RESULT_RECEIVED",
@@ -52,12 +52,13 @@ test("completes as PDF only after claiming and verifying persisted compressed by
   });
   assert.equal(state.status, "claiming_compressed_result");
   state = transitionExecution(state, { type: "COMPRESSED_RESULT_VERIFIED", actualBytes: 8 * 1024 * 1024 });
-  assert.equal(state.status, "completed_pdf");
-  if (state.status !== "completed_pdf") throw new Error("unexpected state");
+  assert.equal(state.status, "validating_compressed_result");
+  if (state.status !== "validating_compressed_result") throw new Error("unexpected state");
   assert.equal(state.compressedRecordId, "compressed-pdf");
+  assert.equal(state.actualBytes, 8 * 1024 * 1024);
 });
 
-test("routes oversized compressed result through split validation before ZIP completion", () => {
+test("routes an explicitly oversized result through split validation before ZIP completion", () => {
   let state = toCompressing();
   state = transitionExecution(state, {
     type: "COMPRESSION_RESULT_RECEIVED",
