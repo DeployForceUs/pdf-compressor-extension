@@ -19,7 +19,13 @@ export function AiRuntimeExecutionPanel({
   const view = executionViewModel(snapshot);
 
   return (
-    <section className="ai-runtime-execution" data-runtime-state={view.status} aria-live="polite">
+    <section className="ai-runtime-execution" data-runtime-owner={snapshot.owner} data-runtime-state={view.status} aria-live="polite">
+      <div className="planner-card__result">
+        <strong>Source runtime active</strong>
+        <span>Owner: {snapshot.owner}</span>
+        <span>State: {view.status}</span>
+      </div>
+
       {view.showProgress ? <p role="status">Processing status: {view.status}</p> : null}
 
       {view.primaryAction === "prepare_split" ? (
