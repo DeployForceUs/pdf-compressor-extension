@@ -151,11 +151,13 @@ export function validatePlannerResponse(response, request) {
   if (!ALLOWED_CONFIDENCE.has(response.confidence)) throw new Error("confidence_invalid");
   if (typeof response.explanation !== "string" || response.explanation.trim().length === 0) throw new Error("explanation_invalid");
 
-  if (response.recommendedRoute === "office_current" && request.officeCapabilities.availability !== "ready") {
-    throw new Error("office_route_unavailable");
-  }
-  if (!request.officeCapabilities.presets.includes(response.recommendedPreset)) {
-    throw new Error("recommendedPreset_not_available");
+  if (response.recommendedRoute === "office_current") {
+    if (request.officeCapabilities.availability !== "ready") {
+      throw new Error("office_route_unavailable");
+    }
+    if (!request.officeCapabilities.presets.includes(response.recommendedPreset)) {
+      throw new Error("recommendedPreset_not_available");
+    }
   }
 
   assertCapacityProfile(response.idealConfiguration, "idealConfiguration");
