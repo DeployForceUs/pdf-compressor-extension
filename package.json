@@ -15,6 +15,7 @@
     "test:ai-runtime-domain": "node scripts/run-ai-runtime-domain-tests.mjs",
     "test:ai-runtime-coordinator": "node scripts/run-ai-runtime-coordinator-tests.mjs",
     "test:ai-runtime-size-gate": "node scripts/run-ai-runtime-size-gate-tests.mjs",
+    "test:ai-runtime-split": "node scripts/run-ai-runtime-split-tests.mjs",
     "engine:benchmark": "node scripts/benchmark-ghostscript-balanced.mjs",
     "engine:fixture": "node scripts/generate-synthetic-scanned-fixture.mjs",
     "check": "tsc --noEmit",
