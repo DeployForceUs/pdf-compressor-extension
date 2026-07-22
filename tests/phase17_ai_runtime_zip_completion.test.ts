@@ -5,6 +5,7 @@ import { createTargetContract } from "../src/lib/ai-runtime/domain/target-contra
 import { AiExecutionCoordinator } from "../src/lib/ai-runtime/execution-coordinator.js";
 import type {
   PersistedSplitPart,
+  PersistedZipArtifact,
   SplitPartStore,
   SplitPort,
   ZipCreateRequest,
@@ -27,7 +28,10 @@ function part(recordId: string, bytes = pdfBytes()): PersistedSplitPart {
   return { recordId, byteLength: bytes.byteLength, bytes };
 }
 
-async function harness(parts: readonly PersistedSplitPart[]) {
+async function harness(
+  parts: readonly PersistedSplitPart[],
+  persistZip?: (request: ZipCreateRequest) => Promise<PersistedZipArtifact>,
+) {
   const zipRequests: ZipCreateRequest[] = [];
   const split: SplitPort = { async start() {} };
   const splitParts: SplitPartStore = {
@@ -38,6 +42,7 @@ async function harness(parts: readonly PersistedSplitPart[]) {
   const zip: ZipPort = {
     async createAndPersist(request) {
       zipRequests.push(request);
+      if (persistZip) return persistZip(request);
       return {
         recordId: "zip-record",
         artifactIds: request.artifactIds,
@@ -137,18 +142,29 @@ test("completes as ZIP only after validated artifacts are persisted", async () =
 });
 
 test("mismatched persisted ZIP never becomes downloadable", async () => {
-  const { coordinator } = await harness([part("part-1"), part("part-2")]);
+  const { coordinator } = await harness(
+    [part("part-1"), part("part-2")],
+    async () => ({
+      recordId: "zip-record",
+      artifactIds: ["part-2", "part-1"],
+      byteLength: 256,
+    }),
+  );
   assert.equal(await coordinator.validateSplitParts(), true);
+  assert.equal(await coordinator.createZip(), false);
+  assert.equal(coordinator.state.status, "failed");
+  if (coordinator.state.status !== "failed") throw new Error("unexpected state");
+  assert.equal(coordinator.state.failure.code, "zip_creation_failed");
+  assert.equal(coordinator.snapshot().capabilities.canDownloadZip, false);
+});
 
-  const badCoordinator = coordinator as AiExecutionCoordinator;
-  Object.defineProperty(badCoordinator, "unused", { value: true });
-  const failing = new AiExecutionCoordinator({
-    compression: { async start() {} },
-    compressedResults: { async read() { return null; } },
-  });
-  assert.equal(failing.snapshot().capabilities.canDownloadZip, false);
-
-  coordinator.cancel();
-  assert.equal(coordinator.state.status, "cancelled");
+test("ZIP persistence failure prevents terminal success", async () => {
+  const { coordinator } = await harness(
+    [part("part-1"), part("part-2")],
+    async () => { throw new Error("persistence unavailable"); },
+  );
+  assert.equal(await coordinator.validateSplitParts(), true);
+  assert.equal(await coordinator.createZip(), false);
+  assert.equal(coordinator.state.status, "failed");
   assert.equal(coordinator.snapshot().capabilities.canDownloadZip, false);
 });
