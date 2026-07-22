@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   assertTargetWorkflowPlan,
+  createTargetContractOwner,
   decideTargetWorkflowCompletion,
-} from "../scripts/ai-lab-target-workflow-contract.mjs";
+} from "../src/lib/ai/target-workflow-contract.mjs";
 
 const plan = {
   processingPlan: {
@@ -16,6 +17,36 @@ const plan = {
     },
   },
 };
+
+test("Email 10 MB creates the canonical immutable contract", () => {
+  const contract = assertTargetWorkflowPlan(plan);
+
+  assert.deepEqual(contract, {
+    schemaVersion: "1",
+    targetPartSizeMb: 10,
+    targetBytes: 10 * 1024 * 1024,
+    splitEnabled: true,
+    strategy: "by-max-size",
+    outputMode: "single-zip",
+  });
+  assert.equal(Object.isFrozen(contract), true);
+  assert.throws(() => {
+    contract.targetPartSizeMb = 20;
+  }, TypeError);
+});
+
+test("confirmed contract survives transient reset and clears only at terminal boundary", () => {
+  const owner = createTargetContractOwner();
+  const confirmed = owner.confirm(plan);
+
+  assert.strictEqual(owner.getActive(), confirmed);
+  assert.strictEqual(owner.resetTransientState(), confirmed);
+  assert.strictEqual(owner.getActive(), confirmed);
+  assert.throws(() => owner.confirm(plan), /target_workflow_contract_already_confirmed/);
+
+  owner.clearAfterTerminal();
+  assert.equal(owner.getActive(), null);
+});
 
 test("157 MB Office result must split for a 10 MB contract", () => {
   const contract = assertTargetWorkflowPlan(plan);
