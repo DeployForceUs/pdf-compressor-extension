@@ -1,6 +1,6 @@
 {
-  "implementation": "source-runtime",
+  "implementation": "legacy-patched",
   "phase": 7,
-  "status": "reopened",
-  "label": "AI Lab source runtime Phase 7 Chrome integration reopened"
+  "status": "paused",
+  "label": "AI Lab accepted legacy interface restored; source runtime integration paused"
 }
