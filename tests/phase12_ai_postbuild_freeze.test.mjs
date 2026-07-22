@@ -8,6 +8,7 @@ const FROZEN_EXECUTION_SCRIPTS = new Set([
   "scripts/apply-ai-lab-link-immediate-analysis.mjs",
   "scripts/apply-ai-lab-recommendation-presenter.mjs",
   "scripts/apply-ai-lab-execution-router.mjs",
+  "scripts/style-ai-lab-download-action.mjs",
   "scripts/apply-ai-lab-license-recovery.mjs",
   "scripts/apply-ai-lab-office-connection-fallback.mjs",
   "scripts/apply-ai-lab-target-size-workflow.mjs",
