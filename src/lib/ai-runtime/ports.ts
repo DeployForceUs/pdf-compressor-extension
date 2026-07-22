@@ -18,3 +18,14 @@ export interface PersistedCompressedResult {
 export interface CompressedResultStore {
   read(recordId: string): Promise<PersistedCompressedResult | null>;
 }
+
+export interface SplitStartRequest {
+  readonly executionId: string;
+  readonly compressedRecordId: string;
+  readonly targetBytes: number;
+  readonly outputMode: "single-zip";
+}
+
+export interface SplitPort {
+  start(request: SplitStartRequest): Promise<void>;
+}
