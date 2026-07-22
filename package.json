@@ -10,6 +10,7 @@
     "build": "wxt build",
     "build:ai": "wxt build --mode ai-lab",
     "postbuild:ai": "node scripts/run-ai-lab-postbuild.mjs",
+    "migrate:ai-runtime-popup": "node scripts/migrate-ai-runtime-popup-host.mjs",
     "verify:ai": "node scripts/verify-ai-lab-build.mjs",
     "verify:ai-runtime-chrome-evidence": "node scripts/verify-ai-runtime-chrome-evidence.mjs",
     "test:target-workflow": "node --test tests/phase12_ai_target_workflow_contract.test.mjs tests/phase12_ai_target_workflow_runtime_core.test.mjs",
